@@ -516,7 +516,7 @@ async function enrichIpIntelQueue(ips) {
 
 function buildHistory() {
   const realHistory = buildHistoryFromTimestampedSnapshots();
-  if (realHistory.length >= 2) {
+  if (realHistory.length >= 1) {
     state.history = realHistory;
     return;
   }
@@ -562,7 +562,7 @@ function socketKey(socket) {
 
 function buildHistoryFromTimestampedSnapshots() {
   const blocks = timestampBlocks();
-  if (blocks.length < 2) return [];
+  if (!blocks.length) return [];
   const selected = state.sockets.find(s => s.id === state.selectedId) || state.sockets[0];
   if (!selected) return [];
   const key = socketKey(selected);
@@ -1491,6 +1491,7 @@ function renderChartsPage() {
   const metricOptions = alphabeticalMetrics(metrics);
   const selected = state.sockets.find(s => s.id === state.selectedId);
   const layout = state.prefs.chartLayout;
+  const realTimeline = hasRealTimestampHistory();
   const orderedMetrics = orderedChartMetrics();
   const activeCorrelation = EXPERT_CORRELATIONS.find(item => item.x === state.correlation.x && item.y === state.correlation.y);
   return html`
@@ -1514,18 +1515,18 @@ function renderChartsPage() {
             <span>Chart style ${renderChartInfo("Chart style", "Controls how the selected time series is rendered. Line is best for trends, area for volume/pressure, bars for discrete bursts, points for sparse data, and XY for correlation-like visual inspection.", "For bandwidth, line or area usually reads best. For drops, retransmission, or backoff, bars and points make spikes easier to see.")}</span>
             <select id="styleSelect">${["line", "area", "bars", "points", "xy"].map(m => `<option value="${m}" ${state.prefs.graphStyle === m ? "selected" : ""}>${m}</option>`).join("")}</select>
           </label>
-          <label class="chart-field">
+          ${!realTimeline ? `<label class="chart-field">
             <span>Synthetic window ${renderChartInfo("Synthetic window", "Number of generated points used only when the imported data has no timestamped snapshots. It keeps charts usable for a single ss capture, but it is a projection, not measured history.", "For real time evolution, collect repeated ss snapshots with timestamps. Increase this only when exploring a single capture visually; it does not create real bandwidth history.")}</span>
             <input id="windowInput" type="number" min="6" max="240" value="${state.prefs.graphWindow}"/>
-          </label>
+          </label>` : ""}
           <label class="chart-field">
             <span>Reference threshold ${renderChartInfo("Reference threshold", "A quick visual reference value for the focused chart. The expert warning and critical thresholds are managed separately in Threshold configuration.", "Use this for temporary investigation marks, for example expected RTT, target bandwidth, or an SLA value. Permanent risk coloring still comes from configured thresholds.")}</span>
             <input id="thresholdInput" type="number" min="0" value="${state.prefs.graphThreshold}"/>
           </label>
-          <label class="chart-field">
+          ${!realTimeline ? `<label class="chart-field">
             <span>Synthetic interval ${renderChartInfo("Synthetic interval", "Expected interval, in seconds, used only when Ultimate Network Expert has to synthesize a local timeline from a single non-timestamped capture. Timestamped imports always use every captured timestamp at its real time.", "Leave this at 1 second for synthetic previews. It does not downsample real collections; real chart resolution comes from the timestamps in the imported data.")}</span>
             <input id="samplingInput" type="number" min="0.001" max="3600" step="0.001" value="${state.prefs.sampling}"/>
-          </label>
+          </label>` : ""}
         </div>
         <div class="chart-toolbar">
           <div class="chart-tool-group">
@@ -3152,7 +3153,7 @@ function chartPointRadius(pointCount, style) {
 }
 
 function hasRealTimestampHistory() {
-  return state.history.filter(row => row?.epochMs).length >= 2;
+  return state.history.some(row => row?.epochMs);
 }
 
 function chartResolutionLabel() {
@@ -3397,6 +3398,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const barWidth = Math.max(4, Math.min(18, (w - pad.l - pad.r) / Math.max(8, data.length) * 0.55));
   const pointRadius = chartPointRadius(data.length, style);
   const showPoints = style === "points" || style === "xy" || data.length <= 1500;
+  const singlePointLine = data.length === 1 ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(values[0] || 0)}" y2="${y(values[0] || 0)}" stroke="${stroke}" stroke-width="3" opacity=".85"/>` : "";
   const bars = values.map((v, i) => `<rect x="${x(data[i], i) - barWidth / 2}" y="${y(v)}" width="${barWidth}" height="${h - pad.b - y(v)}" fill="${thresholdColor(metric, v)}" opacity=".86"/>`).join("");
   const points = showPoints ? values.map((v, i) => `<circle cx="${x(data[i], i)}" cy="${y(v)}" r="${pointRadius.toFixed(2)}" fill="${thresholdColor(metric, v)}"><title>${metricLabel(metric)}=${formatMetricValue(metric, v)} at ${timeLabel(data[i]?.t || 0, data[i]?.epochMs)}</title></circle>`).join("") : "";
   const xTicks = [0, .25, .5, .75, 1].map(f => {
@@ -3428,9 +3430,9 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(metric)} ${metricUnit(metric) ? `(${metricUnit(metric)})` : ""}</text>
-    ${style === "area" ? `<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
+    ${style === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
     ${style === "bars" ? bars : ""}
-    ${style === "line" ? `<path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
+    ${style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
     ${style === "points" || style === "xy" ? points : ""}
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
