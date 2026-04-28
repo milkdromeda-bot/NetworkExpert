@@ -1560,7 +1560,10 @@ function renderChartsPage() {
     <section class="chart-grid cols-${layout.columns} density-${layout.density}">
       ${orderedMetrics.map((m, index) => `<div class="panel chart-card" data-chart-card="${m}">
         <div class="panel-head">
-          <div class="panel-title">${escapeHtml(metricLabel(m))}</div>
+          <div class="panel-title chart-title-wrap">
+            <span>${escapeHtml(metricLabel(m))}</span>
+            ${renderChartMetricTooltip(m)}
+          </div>
           <div class="col-tools">
             <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
             ${index > 0 ? `<button class="mini" data-move-chart="${m}" data-dir="-1" title="Move chart left/up">${icons.up}</button>` : ""}
@@ -1633,6 +1636,102 @@ function renderDashboardStudio() {
 
 function renderChartInfo(title, summary, detail) {
   return `<span class="field-info" tabindex="0" aria-label="${escapeHtml(title)} help"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip"><span class="tooltip-kicker">Chart intelligence</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(summary)}</p><p>${escapeHtml(detail)}</p></span></span>`;
+}
+
+function metricSource(metric) {
+  return {
+    rtt: "ss -i field rtt:<avg>/<var>",
+    rttvar: "ss -i field rtt:<avg>/<var>, second value",
+    rto: "ss -i field rto",
+    sendQ: "ss table column Send-Q",
+    recvQ: "ss table column Recv-Q",
+    cwnd: "ss -i field cwnd",
+    ato: "ss -i field ato",
+    "skmem.r": "ss -m skmem r",
+    "skmem.t": "ss -m skmem t",
+    "skmem.d": "ss -m skmem d",
+    pacing_rate: "ss -i field pacing_rate",
+    delivery_rate: "ss -i field delivery_rate",
+    tx_bps: "derived from bytes_acked deltas, fallback delivery/pacing rate",
+    rx_bps: "derived from bytes_received deltas",
+    bytes_acked: "ss -i field bytes_acked",
+    bytes_received: "ss -i field bytes_received",
+    segs_out: "ss -i field segs_out",
+    segs_in: "ss -i field segs_in",
+    backoff: "ss -i field backoff",
+    retrans: "ss timer:(..., ..., retrans)"
+  }[metric] || "parsed ss metric";
+}
+
+function metricInterpretation(metric) {
+  return {
+    rtt: "Latency baseline for this TCP flow. Rising RTT shows path queueing, distance, congestion, overloaded peers, or virtualization jitter.",
+    rttvar: "Jitter around RTT. High variance makes RTO and tail latency unstable even when average RTT looks acceptable.",
+    rto: "TCP retransmission timeout. Elevated RTO is a stronger recovery/loss signal than RTT alone.",
+    sendQ: "Bytes waiting locally to be sent or acknowledged. Growth often points to slow peer consumption, congestion, or TCP backoff.",
+    recvQ: "Bytes waiting locally for the application to read. Growth points to local process or scheduler read latency.",
+    cwnd: "Congestion window in segments. Low cwnd limits throughput even when the app wants to send.",
+    ato: "Delayed ACK timeout. High values can add latency to small or request/response workloads.",
+    "skmem.r": "Kernel receive memory currently allocated to this socket. High values show receive-side pressure or burst absorption.",
+    "skmem.t": "Kernel transmit memory currently allocated to this socket. High values show outbound buffering or drain pressure.",
+    "skmem.d": "Socket memory drops. Any increase is loss/pressure evidence, especially if it grows over time.",
+    pacing_rate: "Kernel TCP pacing allowance. Collapse after a healthy value suggests congestion-control backoff or app-limited behavior.",
+    delivery_rate: "Kernel estimate of delivered bandwidth. Compare with pacing and queues to separate path limit from application limit.",
+    tx_bps: "Estimated transmit throughput from acknowledged bytes between snapshots. Best for seeing forward progress.",
+    rx_bps: "Estimated receive throughput from received bytes between snapshots. Best for spotting receive-side stalls.",
+    bytes_acked: "Cumulative acknowledged outbound bytes. Use slope/delta over time rather than the absolute value.",
+    bytes_received: "Cumulative inbound bytes. Use slope/delta over time rather than the absolute value.",
+    segs_out: "Cumulative outbound TCP segments. Useful for tiny-write or packet-efficiency patterns.",
+    segs_in: "Cumulative inbound TCP segments. Useful with bytes_received to spot small packets or burst patterns.",
+    backoff: "TCP retransmission backoff exponent. Non-zero values mean recovery is becoming increasingly expensive.",
+    retrans: "Active retransmission timer count from ss timer data. Correlate with RTO and Send-Q."
+  }[metric] || "Metric parsed from the current socket timeline.";
+}
+
+function metricCorrelations(metric) {
+  return {
+    rtt: ["RTO", "RTT variance", "Send-Q", "delivery_rate"],
+    rttvar: ["RTO", "RTT", "backoff", "retrans"],
+    rto: ["RTT variance", "backoff", "retrans", "Send-Q"],
+    sendQ: ["TX bandwidth", "RTO", "cwnd", "skmem.t"],
+    recvQ: ["RX bandwidth", "skmem.r", "process owner", "socket drops"],
+    cwnd: ["pacing_rate", "Send-Q", "RTO", "delivery_rate"],
+    ato: ["RTT", "RX/TX bandwidth", "request latency"],
+    "skmem.r": ["Recv-Q", "socket drops", "RX bandwidth", "process owner"],
+    "skmem.t": ["Send-Q", "pacing_rate", "delivery_rate", "RTO"],
+    "skmem.d": ["Recv-Q", "skmem.r", "RX bandwidth", "burst timing"],
+    pacing_rate: ["delivery_rate", "cwnd", "Send-Q", "RTO"],
+    delivery_rate: ["pacing_rate", "TX bandwidth", "Send-Q", "cwnd"],
+    tx_bps: ["Send-Q", "delivery_rate", "pacing_rate", "bytes_acked"],
+    rx_bps: ["Recv-Q", "bytes_received", "skmem.r", "drops"],
+    bytes_acked: ["TX bandwidth", "segs_out", "delivery_rate"],
+    bytes_received: ["RX bandwidth", "segs_in", "Recv-Q"],
+    segs_out: ["bytes_acked", "MSS", "retrans"],
+    segs_in: ["bytes_received", "Recv-Q", "skmem.r"],
+    backoff: ["RTO", "retrans", "Send-Q", "delivery_rate"],
+    retrans: ["RTO", "backoff", "RTT variance", "Send-Q"]
+  }[metric] || ["RTT", "queues", "process", "peer"];
+}
+
+function renderChartMetricTooltip(metric) {
+  const t = thresholdFor(metric);
+  const color = metricColor(metric);
+  const unit = metricUnit(metric) || "raw value";
+  const hasThresholds = Number.isFinite(t.warn) || Number.isFinite(t.danger);
+  return `<span class="chart-info" tabindex="0" aria-label="${escapeHtml(metricLabel(metric))} metric guide" style="--metric-color:${color}">
+    <i class="ri-information-line"></i>
+    <span class="chart-tooltip" role="tooltip">
+      <span class="tooltip-kicker">Chart metric intelligence</span>
+      <strong>${escapeHtml(metricLabel(metric))}</strong>
+      <small>${escapeHtml(metricSource(metric))} - unit: ${escapeHtml(unit)}</small>
+      <p>${escapeHtml(metricInterpretation(metric))}</p>
+      ${hasThresholds ? renderThresholdSummary({ metric, threshold: t }) : `<span class="tooltip-none">No universal warning threshold is applied for this metric.</span>`}
+      <div class="chart-tooltip-correlate">
+        <b>Correlate with</b>
+        <span>${metricCorrelations(metric).map(item => `<em>${escapeHtml(item)}</em>`).join("")}</span>
+      </div>
+    </span>
+  </span>`;
 }
 
 function renderActiveTab() {
