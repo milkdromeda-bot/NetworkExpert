@@ -51,6 +51,7 @@ const EXPERT_DEFAULT_THRESHOLDS = {
   "skmem.r": { comfort: 131072, warn: 262144, danger: 524288, unit: "bytes", rationale: "Receive socket memory near large buffer levels can indicate local consumer lag or burst absorption pressure." },
   "skmem.t": { comfort: 131072, warn: 262144, danger: 524288, unit: "bytes", rationale: "Transmit socket memory pressure is a strong sign of peer slowness, congestion, or send buffering buildup." },
   "skmem.d": { comfort: 0, warn: 1, danger: 10, unit: "drops", rationale: "Any socket memory drop is worth attention; repeated drops are a high-confidence loss symptom." },
+  "skmem.d_rate": { comfort: 0, warn: 0.1, danger: 1, unit: "drops/s", rationale: "Drop cadence is stronger than a static counter: one drop every 10 seconds is worth watching; one drop per second is usually an active pressure symptom." },
   pacing_rate: { comfort: 1000000, warn: 250000, danger: 64000, unit: "bps", inverse: true, rationale: "Very low pacing rate after a previously healthy flow can reveal congestion-control backoff or app-limited stalls." },
   delivery_rate: { comfort: 1000000, warn: 250000, danger: 64000, unit: "bps", inverse: true, rationale: "Low delivery rate with queued data can reveal throughput collapse after loss, pacing, or peer-side slowness." },
   tx_bps: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bps", rationale: "Estimated transmit bandwidth from bytes_acked deltas between timestamped snapshots." },
@@ -535,7 +536,7 @@ function buildHistory() {
 }
 
 function chartMetricList() {
-  return ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"];
+  return ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"];
 }
 
 function alphabeticalMetrics(metrics = chartMetricList()) {
@@ -574,6 +575,7 @@ function buildHistoryFromTimestampedSnapshots() {
     return {
       t: Math.max(0, Math.round((block.epochMs - start) / 1000)),
       epochMs: block.epochMs,
+      socketPresent: Boolean(exact),
       rtt: metricValue(exact, "rtt"),
       rttvar: metricValue(exact, "rttvar"),
       rto: metricValue(exact, "rto"),
@@ -656,17 +658,83 @@ function addBandwidthDerivatives(rows) {
     const elapsed = prev ? Math.max(0.001, (row.epochMs - prev.epochMs) / 1000) : 0;
     const txBytes = prev ? Math.max(0, (row.bytes_acked || 0) - (prev.bytes_acked || 0)) : 0;
     const rxBytes = prev ? Math.max(0, (row.bytes_received || 0) - (prev.bytes_received || 0)) : 0;
+    const sameObservedSocket = prev && row.socketPresent !== false && prev.socketPresent !== false;
+    const dropDelta = sameObservedSocket ? Math.max(0, (row["skmem.d"] || 0) - (prev["skmem.d"] || 0)) : 0;
     return {
       ...row,
       tx_bps: elapsed ? (txBytes * 8) / elapsed : 0,
-      rx_bps: elapsed ? (rxBytes * 8) / elapsed : 0
+      rx_bps: elapsed ? (rxBytes * 8) / elapsed : 0,
+      "skmem.d_rate": elapsed ? dropDelta / elapsed : 0
     };
   });
+}
+
+function hasTimestampedRawData() {
+  return timestampBlocks().length >= 2;
+}
+
+function dropRateSummary(rows = state.history) {
+  if (!hasTimestampedRawData() || rows.length < 2) return null;
+  let totalDropDelta = 0;
+  let peakDropRate = 0;
+  let intervals = 0;
+  let firstGrowth = null;
+  let lastGrowth = null;
+  for (let i = 1; i < rows.length; i += 1) {
+    const prev = rows[i - 1];
+    const row = rows[i];
+    if (row.socketPresent === false || prev.socketPresent === false) continue;
+    const elapsed = Math.max(0.001, ((row.epochMs || 0) - (prev.epochMs || 0)) / 1000);
+    if (!Number.isFinite(elapsed) || elapsed <= 0) continue;
+    const dropDelta = Math.max(0, Number(row["skmem.d"] || 0) - Number(prev["skmem.d"] || 0));
+    if (!dropDelta) continue;
+    const rate = dropDelta / elapsed;
+    totalDropDelta += dropDelta;
+    peakDropRate = Math.max(peakDropRate, rate);
+    intervals += 1;
+    firstGrowth ??= prev.epochMs;
+    lastGrowth = row.epochMs;
+  }
+  if (!totalDropDelta) return null;
+  const observedSeconds = Math.max(0.001, ((rows[rows.length - 1].epochMs || 0) - (rows[0].epochMs || 0)) / 1000);
+  const avgDropRate = totalDropDelta / observedSeconds;
+  return {
+    totalDropDelta,
+    observedSeconds,
+    avgDropRate,
+    peakDropRate,
+    cadenceSeconds: avgDropRate ? 1 / avgDropRate : Number.POSITIVE_INFINITY,
+    intervals,
+    firstGrowth,
+    lastGrowth
+  };
+}
+
+function dropRateSeverity(summary) {
+  if (!summary) return "low";
+  if (summary.avgDropRate >= 1 || summary.peakDropRate >= 5 || summary.totalDropDelta >= 100) return "critical";
+  if (summary.avgDropRate >= 0.1 || summary.peakDropRate >= 1 || summary.totalDropDelta >= 10) return "high";
+  return "medium";
+}
+
+function formatDurationCompact(seconds) {
+  const value = Number(seconds || 0);
+  if (!Number.isFinite(value)) return "unknown duration";
+  if (value < 1) return `${formatNumber(value * 1000)} ms`;
+  if (value < 60) return `${formatNumber(value)} s`;
+  if (value < 3600) return `${formatNumber(value / 60)} min`;
+  return `${formatNumber(value / 3600)} h`;
+}
+
+function formatDropCadence(summary) {
+  if (!summary?.avgDropRate) return "no increasing drop cadence";
+  return `1 drop every ${formatDurationCompact(summary.cadenceSeconds)}`;
 }
 
 function addCollectionAnomalies() {
   const hasTimestamp = state.raw.split(/\r?\n/).some(line => parseTimestampLine(line.trim()) != null);
   const huge = state.sockets.length >= 5000;
+  const dropRate = dropRateSummary();
   if (!hasTimestamp && state.raw.trim()) {
     state.anomalies.push({
       socketId: state.selectedId,
@@ -674,6 +742,15 @@ function addCollectionAnomalies() {
       title: "Collection has no timestamp",
       detail: "Add date --iso-8601=ns or EPOCH_MS before each snapshot to build a real timeline.",
       metric: "collection"
+    });
+  }
+  if (dropRate) {
+    state.anomalies.unshift({
+      socketId: state.selectedId,
+      severity: dropRateSeverity(dropRate),
+      title: "Socket drops are increasing",
+      detail: `skmem.d increased by ${formatMetricValue("skmem.d", dropRate.totalDropDelta)} over ${formatDurationCompact(dropRate.observedSeconds)} (${formatDropCadence(dropRate)}, peak ${formatMetricValue("skmem.d_rate", dropRate.peakDropRate)}).`,
+      metric: "skmem.d_rate"
     });
   }
   if (huge) {
@@ -779,6 +856,7 @@ function buildAdvisorFindings() {
   const txPressure = socketsWhere(socket => socket.details.skmem.tb && ((socket.details.skmem.t || 0) + (socket.details.skmem.w || 0)) / socket.details.skmem.tb > 0.75);
   const rxPressure = socketsWhere(socket => socket.details.skmem.rb && (socket.details.skmem.r || 0) / socket.details.skmem.rb > 0.75);
   const drops = socketsWhere(socket => metricValue(socket, "skmem.d") > 0);
+  const dropRate = dropRateSummary();
   const loss = socketsWhere(socket => metricValue(socket, "rto") >= thresholdFor("rto").warn || (socket.details.values.backoff || 0) > 0 || (socket.details.timer?.retrans || 0) > 0);
   const lowCwnd = socketsWhere(socket => socket.state === "ESTAB" && metricValue(socket, "cwnd") > 0 && metricValue(socket, "cwnd") <= thresholdFor("cwnd").warn);
   const missingProcess = socketsWhere(socket => ["ESTAB", "LISTEN"].includes(socket.state) && !socket.details.process);
@@ -841,7 +919,7 @@ function buildAdvisorFindings() {
     }));
   }
 
-  if (drops.length) {
+  if (drops.length && !dropRate) {
     findings.push(makeFinding({
       id: "socket-drops",
       severity: drops.some(socket => metricValue(socket, "skmem.d") >= thresholdFor("skmem.d").danger) ? "critical" : "high",
@@ -853,6 +931,21 @@ function buildAdvisorFindings() {
       next: ["Chart skmem.d over time", "Correlate with Recv-Q and skmem.r", "Check NIC and softnet drops"],
       mitigate: ["Reduce burst rate or add backpressure", "Fix CPU/softirq pressure", "Increase buffers only with memory guardrails", "Investigate packet drops before blaming the application protocol"],
       commands: [envCommand("ss -tinpm"), envCommand("ip -s link show", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("sysctl net.core.rmem_max net.ipv4.tcp_rmem")]
+    }));
+  }
+
+  if (dropRate) {
+    findings.push(makeFinding({
+      id: "socket-drop-cadence",
+      severity: dropRateSeverity(dropRate),
+      title: "Socket drop cadence is active",
+      pattern: `skmem.d increased by ${formatMetricValue("skmem.d", dropRate.totalDropDelta)} over ${formatDurationCompact(dropRate.observedSeconds)} (${formatDropCadence(dropRate)}).`,
+      sockets: selected ? [selected] : state.sockets.slice(0, 1),
+      confidence: "High",
+      why: `A static drop counter can be old evidence; an increasing counter is current pressure. Average cadence is ${formatMetricValue("skmem.d_rate", dropRate.avgDropRate)} and the worst interval reached ${formatMetricValue("skmem.d_rate", dropRate.peakDropRate)}.`,
+      next: ["Enable the Socket drop rate chart", "Look for bursts aligned with RX bandwidth or Recv-Q", "Compare this cadence with incident timestamps"],
+      mitigate: ["If cadence is bursty, reduce producer burst size or add backpressure", "If cadence is steady, investigate CPU/softirq and receive buffer pressure", "Validate host NIC/qdisc/softnet drops before tuning socket buffers"],
+      commands: [envCommand("ss -tinpm"), envCommand("watch -n 1 'ss -tinpm | grep -A1 skmem'"), envCommand("ip -s link show", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true })]
     }));
   }
 
@@ -1173,7 +1266,7 @@ function buildTimelineEvents() {
   const events = [];
   const rows = state.history || [];
   const selected = state.sockets.find(socket => socket.id === state.selectedId) || state.sockets[0];
-  const metrics = ["rto", "rtt", "sendQ", "recvQ", "skmem.d", "cwnd", "tx_bps", "rx_bps"];
+  const metrics = ["rto", "rtt", "sendQ", "recvQ", "skmem.d", "skmem.d_rate", "cwnd", "tx_bps", "rx_bps"];
   for (const row of rows) {
     for (const metric of metrics) {
       const value = Number(row[metric] || 0);
@@ -1652,6 +1745,7 @@ function metricSource(metric) {
     "skmem.r": "ss -m skmem r",
     "skmem.t": "ss -m skmem t",
     "skmem.d": "ss -m skmem d",
+    "skmem.d_rate": "derived from skmem d deltas / elapsed time",
     pacing_rate: "ss -i field pacing_rate",
     delivery_rate: "ss -i field delivery_rate",
     tx_bps: "derived from bytes_acked deltas, fallback delivery/pacing rate",
@@ -1677,6 +1771,7 @@ function metricInterpretation(metric) {
     "skmem.r": "Kernel receive memory currently allocated to this socket. High values show receive-side pressure or burst absorption.",
     "skmem.t": "Kernel transmit memory currently allocated to this socket. High values show outbound buffering or drain pressure.",
     "skmem.d": "Socket memory drops. Any increase is loss/pressure evidence, especially if it grows over time.",
+    "skmem.d_rate": "Rate at which socket memory drops are increasing. This separates old static counters from current loss/pressure.",
     pacing_rate: "Kernel TCP pacing allowance. Collapse after a healthy value suggests congestion-control backoff or app-limited behavior.",
     delivery_rate: "Kernel estimate of delivered bandwidth. Compare with pacing and queues to separate path limit from application limit.",
     tx_bps: "Estimated transmit throughput from acknowledged bytes between snapshots. Best for seeing forward progress.",
@@ -1702,6 +1797,7 @@ function metricCorrelations(metric) {
     "skmem.r": ["Recv-Q", "socket drops", "RX bandwidth", "process owner"],
     "skmem.t": ["Send-Q", "pacing_rate", "delivery_rate", "RTO"],
     "skmem.d": ["Recv-Q", "skmem.r", "RX bandwidth", "burst timing"],
+    "skmem.d_rate": ["Socket drops", "Recv-Q", "skmem.r", "RX bandwidth bursts"],
     pacing_rate: ["delivery_rate", "cwnd", "Send-Q", "RTO"],
     delivery_rate: ["pacing_rate", "TX bandwidth", "Send-Q", "cwnd"],
     tx_bps: ["Send-Q", "delivery_rate", "pacing_rate", "bytes_acked"],
@@ -2978,6 +3074,7 @@ function metricUnit(metric) {
 function metricFractionDigits(metric, value) {
   const numeric = Math.abs(Number(value || 0));
   if (["pacing_rate", "delivery_rate", "tx_bps", "rx_bps", "sendQ", "recvQ", "skmem.r", "skmem.t", "skmem.d", "bytes_acked", "bytes_received", "segs_out", "segs_in", "cwnd", "backoff", "retrans"].includes(metric)) return 0;
+  if (metric === "skmem.d_rate") return numeric > 0 && numeric < 1 ? 3 : 2;
   if (["rtt", "rto", "ato", "rttvar"].includes(metric)) return numeric > 0 && numeric < 10 ? 3 : Number.isInteger(Number(value)) ? 0 : 3;
   return Number.isInteger(Number(value)) ? 0 : 2;
 }
@@ -3029,6 +3126,7 @@ function metricLabel(metric) {
     "skmem.r": "Socket memory receive",
     "skmem.t": "Socket memory transmit",
     "skmem.d": "Socket drops",
+    "skmem.d_rate": "Socket drop rate",
     pacing_rate: "Pacing rate",
     delivery_rate: "Delivery rate",
     tx_bps: "TX bandwidth",
@@ -3054,6 +3152,7 @@ function metricColor(metric) {
     "skmem.r": "#7dd3fc",
     "skmem.t": "#f472b6",
     "skmem.d": "#ff5c77",
+    "skmem.d_rate": "#ff2e63",
     pacing_rate: "#a3e635",
     delivery_rate: "#67e8f9",
     tx_bps: "#22d3ee",
