@@ -276,6 +276,7 @@ let state = {
   modal: null,
   statsMetric: null,
   helpColumn: null,
+  openMenuPos: null,
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
   correlation: { x: "rtt", y: "sendQ" },
@@ -1866,9 +1867,12 @@ function renderSocketTable() {
 }
 
 function renderRowActions(socket) {
+  const pos = state.openMenuId === socket.id && state.openMenuPos
+    ? `style="left:${state.openMenuPos.left}px;top:${state.openMenuPos.top}px"`
+    : "";
   return `<div class="row-actions">
     <button class="icon mini-menu" data-action-menu="${escapeHtml(socket.id)}" title="Socket actions"><i class="ri-menu-3-line"></i></button>
-    <div class="row-menu ${state.openMenuId === socket.id ? "open" : ""}">
+    <div class="row-menu ${state.openMenuId === socket.id ? "open" : ""}" ${pos}>
       <button data-row-action="chart" data-socket-id="${escapeHtml(socket.id)}"><i class="ri-line-chart-line"></i> Go to Chart pane</button>
       <button data-row-action="details" data-socket-id="${escapeHtml(socket.id)}"><i class="ri-search-eye-line"></i> Open details</button>
       <button data-row-action="filter-src" data-socket-id="${escapeHtml(socket.id)}"><i class="ri-filter-3-line"></i> Filter source IP</button>
@@ -3326,6 +3330,7 @@ function resetAllState() {
   state.drawer = null;
   state.modal = null;
   state.statsMetric = null;
+  state.openMenuPos = null;
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
   state.correlation = { x: "rtt", y: "sendQ" };
@@ -3943,7 +3948,20 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-action-menu]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
-    state.openMenuId = state.openMenuId === event.currentTarget.dataset.actionMenu ? null : event.currentTarget.dataset.actionMenu;
+    const id = event.currentTarget.dataset.actionMenu;
+    if (state.openMenuId === id) {
+      state.openMenuId = null;
+      state.openMenuPos = null;
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const menuWidth = 250;
+      const menuHeight = 188;
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - menuWidth - 8);
+      const preferBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+      const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
+      state.openMenuId = id;
+      state.openMenuPos = { left: Math.round(left), top: Math.round(top) };
+    }
     render();
   }));
   document.querySelectorAll("[data-row-action]").forEach(btn => btn.addEventListener("click", async event => {
@@ -3953,6 +3971,7 @@ function bindEvents() {
     const action = event.currentTarget.dataset.rowAction;
     state.selectedId = socket.id;
     state.openMenuId = null;
+    state.openMenuPos = null;
     if (action === "chart") {
       state.view = "charts";
       toast("Chart context selected", `${socket.local} -> ${socket.peer}`);

@@ -940,17 +940,18 @@ th:focus-within .column-tooltip,
   min-height: 34px;
 }
 .row-menu {
-  position: absolute;
-  z-index: 8;
-  left: 0;
-  top: 34px;
+  position: fixed;
+  z-index: 80;
   display: none;
-  min-width: 220px;
+  min-width: 240px;
+  max-width: min(280px, calc(100vw - 16px));
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #080d14;
   box-shadow: var(--shadow);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
 }
 .row-menu.open {
   display: grid;
