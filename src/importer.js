@@ -63,6 +63,7 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
   let buffer = "";
   let readBytes = 0;
   let preview = "";
+  let fullRaw = "";
   let batch = [];
   let chunks = 0;
   const maxSockets = 250000;
@@ -73,6 +74,7 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
     readBytes += value.byteLength || 0;
     chunks += 1;
     const text = decoder.decode(value, { stream: true });
+    fullRaw += text;
     if (preview.length < 240000) preview += text.slice(0, 240000 - preview.length);
     buffer += text;
     const lines = buffer.split(/\r?\n/);
@@ -107,9 +109,16 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
     }
   }
 
+  const finalText = decoder.decode();
+  if (finalText) {
+    fullRaw += finalText;
+    if (preview.length < 240000) preview += finalText.slice(0, 240000 - preview.length);
+    buffer += finalText;
+  }
+
   if (buffer) batch.push(buffer);
   if (batch.length) appendParsedLines(sockets, batch, maxSockets, activePreFilter);
-  return { raw: preview, sockets, sourceName: label };
+  return { raw: fullRaw, sockets, sourceName: label };
 }
 
 function appendParsedLines(target, lines, maxSockets, preFilter) {
