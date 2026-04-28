@@ -274,6 +274,7 @@ let state = {
   prefsTab: "display",
   drawer: null,
   modal: null,
+  statsMetric: null,
   helpColumn: null,
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
@@ -325,6 +326,7 @@ const icons = {
   save: `<i class="ri-image-line"></i>`,
   threshold: `<i class="ri-speed-up-fill"></i>`,
   layout: `<i class="ri-dashboard-3-line"></i>`,
+  stats: `<i class="ri-bar-chart-box-line"></i>`,
   pin: `<i class="ri-pushpin-2-line"></i>`,
   unpin: `<i class="ri-pushpin-2-fill"></i>`,
   hide: `<i class="ri-eye-off-line"></i>`,
@@ -1497,6 +1499,7 @@ function renderChartsPage() {
       <div class="panel-head">
         <div class="panel-title">Socket charts ${selected ? escapeHtml(selected.local) : ""}</div>
         <div class="toolbar">
+          <button class="icon" data-chart-stats="${state.prefs.graphMetric}" title="Metric statistics">${icons.stats}</button>
           <button data-action="layoutPrefs">${icons.layout} Layout</button>
           <button class="icon" data-action="details" title="Details">${icons.activity}</button>
         </div>
@@ -1559,6 +1562,7 @@ function renderChartsPage() {
         <div class="panel-head">
           <div class="panel-title">${escapeHtml(metricLabel(m))}</div>
           <div class="col-tools">
+            <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
             ${index > 0 ? `<button class="mini" data-move-chart="${m}" data-dir="-1" title="Move chart left/up">${icons.up}</button>` : ""}
             ${index < orderedMetrics.length - 1 ? `<button class="mini" data-move-chart="${m}" data-dir="1" title="Move chart right/down">${icons.down}</button>` : ""}
           </div>
@@ -2624,12 +2628,14 @@ function renderModal() {
       : state.modal === "layout" ? "Chart layout preferences"
         : state.modal === "preImport" ? "Pre-import filters"
           : state.modal === "columnHelp" ? "Column guide"
+            : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
             : "ss field documentation";
   const modalBody = state.modal === "columns" ? renderColumnChooser()
     : state.modal === "thresholds" ? renderThresholdConfig()
       : state.modal === "layout" ? renderLayoutPrefs()
         : state.modal === "preImport" ? renderPreImportFilters()
           : state.modal === "columnHelp" ? renderColumnHelpDetail()
+            : state.modal === "chartStats" ? renderChartStatsModal()
             : renderFields();
   return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
     <section class="modal ${state.modal || ""}">
@@ -2653,6 +2659,45 @@ function renderColumnHelpDetail() {
       <strong>Current thresholds</strong>
       ${renderThresholdSummary(help)}
       ${help.metric ? `<p class="hint">${escapeHtml(EXPERT_DEFAULT_THRESHOLDS[help.metric]?.rationale || "")}</p>` : `<p class="hint">This column is contextual and has no numeric comfort/warning/danger range.</p>`}
+    </article>
+  </div>`;
+}
+
+function renderChartStatsModal() {
+  const metric = state.statsMetric || state.prefs.graphMetric;
+  const stats = chartStats(metric);
+  if (!stats.count) return `<div class="empty">No visible numeric data for ${escapeHtml(metricLabel(metric))}.</div>`;
+  const rows = [
+    ["Min", stats.min],
+    ["Median", stats.p50],
+    ["P90", stats.p90],
+    ["P99", stats.p99],
+    ["P99.9", stats.p999],
+    ["P99.99", stats.p9999],
+    ["Max", stats.max]
+  ];
+  return `<div class="chart-stats-layout">
+    <article class="stats-summary-card">
+      <div>
+        <span class="tooltip-kicker">${escapeHtml(metricLabel(metric))}</span>
+        <strong>${formatNumber(stats.count)} visible sample(s)</strong>
+        <p class="hint">Computed on the current chart window with real captured values, before any visual rendering reduction.</p>
+      </div>
+      <div class="stats-window">
+        <span>${escapeHtml(timeLabel(stats.first?.t || 0, stats.first?.epochMs))}</span>
+        <i class="ri-arrow-right-line"></i>
+        <span>${escapeHtml(timeLabel(stats.last?.t || 0, stats.last?.epochMs))}</span>
+      </div>
+    </article>
+    <article class="stats-table-card">
+      <strong>Percentile table</strong>
+      <table class="stats-table">
+        <tbody>${rows.map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${formatMetricValue(metric, value)}</td></tr>`).join("")}</tbody>
+      </table>
+    </article>
+    <article class="stats-dist-card">
+      <strong>Percentile distribution</strong>
+      ${renderPercentileDistribution(metric, stats)}
     </article>
   </div>`;
 }
@@ -2933,6 +2978,71 @@ function thresholdColor(metric, value) {
   return sev === "danger" ? "#ff5c77" : sev === "warn" ? "#ff9f43" : metricColor(metric);
 }
 
+function percentile(sortedValues, p) {
+  if (!sortedValues.length) return 0;
+  if (sortedValues.length === 1) return sortedValues[0];
+  const rank = (p / 100) * (sortedValues.length - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  const weight = rank - lo;
+  return sortedValues[lo] + (sortedValues[hi] - sortedValues[lo]) * weight;
+}
+
+function chartStats(metric) {
+  const rows = visibleHistory();
+  const values = rows
+    .map(row => Number(row?.[metric]))
+    .filter(value => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  if (!values.length) return { count: 0, metric };
+  return {
+    metric,
+    count: values.length,
+    first: rows[0],
+    last: rows[rows.length - 1],
+    min: values[0],
+    p50: percentile(values, 50),
+    p90: percentile(values, 90),
+    p99: percentile(values, 99),
+    p999: percentile(values, 99.9),
+    p9999: percentile(values, 99.99),
+    max: values[values.length - 1],
+    curve: [0, 10, 25, 50, 75, 90, 95, 99, 99.9, 99.99, 100].map(p => ({ p, value: percentile(values, p) }))
+  };
+}
+
+function renderPercentileDistribution(metric, stats) {
+  const w = 520;
+  const h = 260;
+  const pad = { l: 76, r: 24, t: 28, b: 52 };
+  const values = stats.curve || [];
+  const max = Math.max(...values.map(point => point.value), 1);
+  const min = Math.min(...values.map(point => point.value), 0);
+  const span = Math.max(1, max - min);
+  const x = p => pad.l + (Math.max(0, Math.min(100, p)) / 100) * (w - pad.l - pad.r);
+  const y = value => h - pad.b - ((value - min) / span) * (h - pad.t - pad.b);
+  const path = values.map((point, index) => `${index ? "L" : "M"}${x(point.p).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ");
+  const markers = [
+    ["P50", 50, stats.p50],
+    ["P90", 90, stats.p90],
+    ["P99", 99, stats.p99],
+    ["P99.9", 99.9, stats.p999],
+    ["P99.99", 99.99, stats.p9999]
+  ];
+  const yTicks = [0, .25, .5, .75, 1].map(f => min + f * span);
+  return `<svg class="percentile-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(metricLabel(metric))} percentile distribution">
+    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
+    ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, value)}</text>`).join("")}
+    ${[0, 50, 90, 99, 100].map(p => `<line x1="${x(p)}" x2="${x(p)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(p)}" y="${h - 20}" text-anchor="middle" fill="#8c9aab" font-size="11">${p === 100 ? "Max" : `P${p}`}</text>`).join("")}
+    <path d="${path}" fill="none" stroke="${metricColor(metric)}" stroke-width="3"/>
+    ${markers.map(([label, p, value]) => `<circle cx="${x(p)}" cy="${y(value)}" r="4" fill="${thresholdColor(metric, value)}"><title>${label}: ${formatMetricValue(metric, value)}</title></circle>`).join("")}
+    <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
+    <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
+    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${escapeHtml(metricLabel(metric))} percentile curve</text>
+    <text x="${w / 2}" y="${h - 5}" text-anchor="middle" fill="#c4d0de" font-size="12">Percentile rank</text>
+  </svg>`;
+}
+
 function chartPointRadius(pointCount, style) {
   const base = { XS: 1, S: 2, M: 3.2, L: 4.6 }[state.prefs.chartPointSize || "S"] || 2;
   if (base <= 1) return 1;
@@ -3108,6 +3218,7 @@ function resetAllState() {
   state.activeTab = "sockets";
   state.drawer = null;
   state.modal = null;
+  state.statsMetric = null;
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
   state.correlation = { x: "rtt", y: "sendQ" };
@@ -3951,6 +4062,12 @@ function bindEvents() {
     state.chartMetrics = event.currentTarget.checked
       ? [...new Set([...state.chartMetrics, metric])]
       : state.chartMetrics.filter(item => item !== metric);
+    render();
+  }));
+  document.querySelectorAll("[data-chart-stats]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    state.statsMetric = event.currentTarget.dataset.chartStats;
+    state.modal = "chartStats";
     render();
   }));
   document.querySelector("#corrPreset")?.addEventListener("change", e => {

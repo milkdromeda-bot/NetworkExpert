@@ -2157,6 +2157,73 @@ th:focus-within .column-tooltip,
   color: var(--muted);
   font-size: 12px;
 }
+.chart-stats-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, .8fr) minmax(260px, .9fr) minmax(420px, 1.4fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.stats-summary-card,
+.stats-table-card,
+.stats-dist-card {
+  border: 1px solid rgba(63, 81, 102, .78);
+  background: linear-gradient(180deg, rgba(14, 23, 35, .95), rgba(7, 12, 19, .95));
+  border-radius: 8px;
+  padding: 14px;
+}
+.stats-summary-card {
+  display: grid;
+  align-content: space-between;
+  gap: 18px;
+}
+.stats-summary-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 22px;
+}
+.stats-window {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--soft);
+  font-size: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(38, 50, 65, .9);
+}
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+.stats-table tr {
+  border-bottom: 1px solid rgba(38, 50, 65, .8);
+}
+.stats-table tr:last-child {
+  border-bottom: 0;
+}
+.stats-table th,
+.stats-table td {
+  padding: 10px 0;
+  text-align: left;
+  font-size: 13px;
+}
+.stats-table th {
+  color: var(--muted);
+  font-weight: 800;
+}
+.stats-table td {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.percentile-chart {
+  width: 100%;
+  min-height: 260px;
+  margin-top: 8px;
+  border: 1px solid rgba(38, 50, 65, .9);
+  border-radius: 8px;
+  background: #050910;
+}
 .threshold-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(220px, 1fr));
@@ -2443,6 +2510,12 @@ th:focus-within .column-tooltip,
   min-height: 0;
   overflow: hidden;
 }
+.modal.chartStats {
+  width: min(1280px, calc(100vw - 30px));
+}
+.modal.chartStats .body {
+  overflow: auto;
+}
 #toastStack {
   position: fixed;
   right: 18px;
@@ -2502,6 +2575,7 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .ingest-grid { grid-template-columns: 1fr; }
   .chart-grid { grid-template-columns: 1fr; }
   .threshold-grid { grid-template-columns: repeat(2, minmax(240px, 1fr)); }
+  .chart-stats-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
   body { overflow: auto; }
@@ -2545,6 +2619,7 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .column-help-detail { grid-template-columns: 1fr; }
   .threshold-grid { grid-template-columns: 1fr; }
   .layout-config { grid-template-columns: 1fr; }
+  .chart-stats-layout { grid-template-columns: 1fr; }
   .field-directory { grid-template-columns: 1fr; }
   .ingest-hero { align-items: stretch; flex-direction: column; }
   .hero-actions { justify-content: stretch; }
