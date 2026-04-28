@@ -2470,6 +2470,7 @@ function renderDrawer() {
 
 function renderPrefs() {
   const tab = state.prefsTab || "display";
+  const realTimeline = hasRealTimestampHistory();
   const localeChoices = [
     ["auto", `Browser default (${resolvedNumberLocale()})`],
     ["en-US", "English - United States"],
@@ -2509,12 +2510,18 @@ function renderPrefs() {
       </article>` : ""}
       ${tab === "charts" ? `<article class="field-card">
         <strong>Chart defaults</strong>
-        <p class="hint">Synthetic points are used only when the imported file has no timestamped timeline. Timestamped files keep their real time range.</p>
+        <p class="hint">Timestamped captures always use their real timestamps. Synthetic settings are only a fallback for a single non-timestamped ss snapshot.</p>
         <label>Chart timezone<select id="prefChartTimeZone">${renderTimeZoneOptions()}</select></label>
         <label>Point size<select id="prefChartPointSize">
           ${["XS", "S", "M", "L"].map(size => `<option value="${size}" ${state.prefs.chartPointSize === size ? "selected" : ""}>${size}${size === "XS" ? " - 1 px" : ""}</option>`).join("")}
         </select></label>
-        <div class="range-row"><label>Default synthetic points</label><input id="prefWindow" type="number" min="6" max="240" value="${state.prefs.graphWindow}"/></div>
+        <div class="synthetic-pref ${realTimeline ? "disabled" : ""}">
+          <div>
+            <strong>Fallback for data without timestamps</strong>
+            <p class="hint">${realTimeline ? "Current workspace has real timestamps, so this fallback is not used." : "Used only to draw a visual preview when the pasted ss data has no timestamped samples."}</p>
+          </div>
+          <div class="range-row"><label>Preview points</label><input id="prefWindow" type="number" min="6" max="240" value="${state.prefs.graphWindow}" ${realTimeline ? "disabled" : ""}/></div>
+        </div>
         <button data-action="thresholds">${icons.threshold} Configure thresholds</button>
         <button data-action="layoutPrefs">${icons.layout} Configure chart layout</button>
       </article>` : ""}
