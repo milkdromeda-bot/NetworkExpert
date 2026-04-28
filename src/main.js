@@ -431,6 +431,7 @@ function recompute() {
   state.bandwidthIndex = buildSocketBandwidthIndex();
   state.anomalies = analyzeAll(state.sockets);
   state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
+  setZoom(0, 1);
   buildHistory();
   addCollectionAnomalies();
   runAdvisorAnalysis();
@@ -478,6 +479,7 @@ function recomputeFromSockets() {
   state.bandwidthIndex = buildSocketBandwidthIndex();
   state.anomalies = analyzeAll(state.sockets);
   state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
+  setZoom(0, 1);
   buildHistory();
   addCollectionAnomalies();
   runAdvisorAnalysis();
@@ -1542,8 +1544,8 @@ function renderChartsPage() {
           </div>
         </div>
         <div class="time-range">
-          <label class="chart-field"><span>Start time ${renderChartInfo("Start time", "Left boundary of the visible time window. It updates when you drag-zoom a chart and can also be edited manually for precise inspection.", "Use it to isolate an incident window, then compare several metrics under the same synchronized zoom.")}</span><input id="startTimeInput" type="datetime-local" value="${zoomDateTimeValue("start")}"/></label>
-          <label class="chart-field"><span>End time ${renderChartInfo("End time", "Right boundary of the visible time window. Together with Start time, it controls the synchronized zoom range for all charts.", "Narrow this around spikes in RTO, Send-Q, drops, TX/RX bandwidth collapse, or backoff to avoid averaging away short incidents.")}</span><input id="endTimeInput" type="datetime-local" value="${zoomDateTimeValue("end")}"/></label>
+          <label class="chart-field"><span>Start time ${renderChartInfo("Start time", "Left boundary of the visible time window. It updates when you drag-zoom a chart and can also be edited manually for precise inspection.", "Use it to isolate an incident window, then compare several metrics under the same synchronized zoom.")}</span><input id="startTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("start")}"/></label>
+          <label class="chart-field"><span>End time ${renderChartInfo("End time", "Right boundary of the visible time window. Together with Start time, it controls the synchronized zoom range for all charts.", "Narrow this around spikes in RTO, Send-Q, drops, TX/RX bandwidth collapse, or backoff to avoid averaging away short incidents.")}</span><input id="endTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("end")}"/></label>
         </div>
         ${layout.mainChart ? `<svg id="chart" class="chart hero-chart ${layout.density}" role="img" aria-label="Main timeline chart"></svg>` : ""}
         ${layout.showLegend ? `<div class="chart-legend" id="mainChartLegend">${chartResolutionLabel()} - Shared zoom: ${layout.sharedZoom ? "on" : "off"} - Crosshair: ${layout.showCrosshair ? "on" : "off"} - Thresholds: ${layout.showThresholds ? "on" : "off"}</div>` : ""}
@@ -2974,6 +2976,20 @@ function renderableHistory(rows, metric, style, width) {
   };
 }
 
+function chartRowTime(row) {
+  return row?.epochMs ?? (row?.t || 0) * 1000;
+}
+
+function nearestChartRow(rows, pct) {
+  if (!rows.length) return {};
+  const first = chartRowTime(rows[0]);
+  const last = chartRowTime(rows[rows.length - 1]);
+  const target = first + Math.max(0, Math.min(1, pct)) * Math.max(1, last - first);
+  return rows.reduce((best, row) => (
+    Math.abs(chartRowTime(row) - target) < Math.abs(chartRowTime(best) - target) ? row : best
+  ), rows[0]);
+}
+
 function preserveExtremesDownsample(rows, metric, budget) {
   if (rows.length <= budget || budget < 8) return rows;
   const middleBudget = Math.max(2, budget - 2);
@@ -3017,11 +3033,12 @@ function dateTimePartsInZone(epochMs) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false
   }).formatToParts(new Date(epochMs));
   const value = type => parts.find(part => part.type === type)?.value || "00";
   const hour = value("hour") === "24" ? "00" : value("hour");
-  return `${value("year")}-${value("month")}-${value("day")}T${hour}:${value("minute")}`;
+  return `${value("year")}-${value("month")}-${value("day")}T${hour}:${value("minute")}:${value("second")}`;
 }
 
 function timeZoneOffsetMs(timeZone, epochMs) {
@@ -3041,10 +3058,10 @@ function timeZoneOffsetMs(timeZone, epochMs) {
 }
 
 function zonedDateTimeToEpoch(value) {
-  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!match) return NaN;
-  const [, year, month, day, hour, minute] = match.map(Number);
-  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  const [, year, month, day, hour, minute, second = 0] = match.map(value => Number(value || 0));
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, second);
   const zone = resolvedTimeZone();
   const firstPass = utcGuess - timeZoneOffsetMs(zone, utcGuess);
   return utcGuess - timeZoneOffsetMs(zone, firstPass);
@@ -3157,12 +3174,11 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const tickWidth = Math.min(150, Math.max(48, longestTick.length * 6.4));
   const pad = { l: Math.min(Math.max(76, tickWidth + 54), Math.max(110, w * 0.28)), r: 26, t: 34, b: 58 };
   const axisLabelX = Math.max(14, pad.l - tickWidth - 34);
-  const firstTime = data[0]?.epochMs ?? (data[0]?.t || 0) * 1000;
-  const lastTime = data[data.length - 1]?.epochMs ?? (data[data.length - 1]?.t || 0) * 1000;
-  const rowTime = row => row?.epochMs ?? (row?.t || 0) * 1000;
+  const firstTime = chartRowTime(data[0]);
+  const lastTime = chartRowTime(data[data.length - 1]);
   const x = (row, i) => {
     const timeSpan = Math.max(1, lastTime - firstTime);
-    if (data.length > 1 && timeSpan > 1) return pad.l + ((rowTime(row) - firstTime) / timeSpan) * (w - pad.l - pad.r);
+    if (data.length > 1 && timeSpan > 1) return pad.l + ((chartRowTime(row) - firstTime) / timeSpan) * (w - pad.l - pad.r);
     return pad.l + (i / Math.max(1, data.length - 1)) * (w - pad.l - pad.r);
   };
   const y = v => h - pad.b - ((v - min) / span) * (h - pad.t - pad.b);
@@ -3175,7 +3191,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const points = showPoints ? values.map((v, i) => `<circle cx="${x(data[i], i)}" cy="${y(v)}" r="${pointRadius.toFixed(2)}" fill="${thresholdColor(metric, v)}"><title>${metricLabel(metric)}=${formatMetricValue(metric, v)} at ${timeLabel(data[i]?.t || 0, data[i]?.epochMs)}</title></circle>`).join("") : "";
   const xTicks = [0, .25, .5, .75, 1].map(f => {
     const targetTime = firstTime + f * Math.max(1, lastTime - firstTime);
-    const row = data.reduce((best, item) => Math.abs(rowTime(item) - targetTime) < Math.abs(rowTime(best) - targetTime) ? item : best, data[0] || {});
+    const row = data.reduce((best, item) => Math.abs(chartRowTime(item) - targetTime) < Math.abs(chartRowTime(best) - targetTime) ? item : best, data[0] || {});
     return { x: pad.l + f * (w - pad.l - pad.r), label: timeLabel(row?.t || 0, row?.epochMs) };
   });
   const showWarnLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.warn);
@@ -3191,6 +3207,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   svg.dataset.plotRight = String(w - pad.r);
   svg.dataset.plotTop = String(pad.t);
   svg.dataset.plotBottom = String(h - pad.b);
+  svg.dataset.renderStyle = style;
   svg.innerHTML = `
     <defs><linearGradient id="areaFill-${metric.replace(/\W/g, "")}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${stroke}" stop-opacity=".48"/><stop offset="1" stop-color="${stroke}" stop-opacity="0"/></linearGradient></defs>
     <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
@@ -3276,10 +3293,10 @@ function attachChartInteractions(svg) {
     const lx = layer();
     if (!lx) return;
     const pct = (x - b.left) / Math.max(1, b.right - b.left);
-    const currentZoom = state.chartZoom.start + pct * (state.chartZoom.end - state.chartZoom.start);
-    const idx = Math.round(currentZoom * Math.max(0, state.history.length - 1));
-    const row = state.history[idx] || {};
     const metric = svg.dataset.metric || state.prefs.graphMetric;
+    const renderStyle = svg.dataset.renderStyle || state.prefs.graphStyle;
+    const rows = renderableHistory(visibleHistory(), metric, renderStyle, svg.clientWidth || 640).rows;
+    const row = nearestChartRow(rows, pct);
     const value = row[metric] || 0;
     const selection = dragX == null ? "" : `<rect x="${Math.min(startX, dragX)}" y="${b.top}" width="${Math.abs(dragX - startX)}" height="${b.bottom - b.top}" fill="#5db7ff" opacity=".18" stroke="#5db7ff" stroke-dasharray="5 4"/>`;
     lx.innerHTML = `
