@@ -1,0 +1,21 @@
+{
+  "name": "network-expert",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Advanced interface for analyzing ss/iproute2 output on Ubuntu.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "check": "node --check server.js && node --check src/main.js"
+  },
+  "keywords": [
+    "ss",
+    "iproute2",
+    "network",
+    "tcp",
+    "socket",
+    "ubuntu"
+  ],
+  "license": "MIT"
+}
