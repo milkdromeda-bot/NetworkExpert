@@ -135,6 +135,6 @@ export const prefsDefault = {
     showCrosshair: true,
     showThresholds: true,
     stickyToolbar: true,
-    panelOrder: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"]
+    panelOrder: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"]
   }
 };

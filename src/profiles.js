@@ -3,7 +3,7 @@ export const DASHBOARD_PRESETS = {
     name: "NOC overview",
     description: "Dense operations view for queues, rates, drops, and recovery signals.",
     metrics: ["tx_bps", "rx_bps", "sendQ", "recvQ", "rtt", "rto", "skmem.d", "delivery_rate"],
-    layout: { columns: 4, density: "compact", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
+    layout: { columns: 3, density: "compact", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
   },
   latency: {
     name: "Latency diagnosis",
@@ -14,7 +14,7 @@ export const DASHBOARD_PRESETS = {
   drops: {
     name: "Drops and buffers",
     description: "Socket memory pressure, drops, queues, and receive/transmit buffer health.",
-    metrics: ["skmem.d", "skmem.r", "skmem.t", "recvQ", "sendQ", "rx_bps", "tx_bps", "rto"],
+    metrics: ["skmem.d", "skmem.d_rate", "skmem.r", "skmem.t", "recvQ", "sendQ", "rx_bps", "tx_bps", "rto"],
     layout: { columns: 3, density: "standard", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
   },
   throughput: {

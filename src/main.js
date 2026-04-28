@@ -329,6 +329,7 @@ const icons = {
   threshold: `<i class="ri-speed-up-fill"></i>`,
   layout: `<i class="ri-dashboard-3-line"></i>`,
   stats: `<i class="ri-bar-chart-box-line"></i>`,
+  incidentCloud: `<span class="incident-cloud-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="incident-triangle" d="M16 3.5 29 26.5H3L16 3.5Z"/><path class="incident-cloud" d="M11.2 20.8h8.7a3.4 3.4 0 0 0 .6-6.8 5.3 5.3 0 0 0-10.1-1.5 4.2 4.2 0 0 0 .8 8.3Zm1.5-3.3 2.2-2.2h-1.8l3.6-3.6-.9 2.8h2.1l-5.2 3Z"/></svg></span>`,
   pin: `<i class="ri-pushpin-2-line"></i>`,
   unpin: `<i class="ri-pushpin-2-fill"></i>`,
   hide: `<i class="ri-eye-off-line"></i>`,
@@ -352,6 +353,7 @@ function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("networkExpertPrefs") || "{}");
     const prefs = { ...prefsDefault, ...saved, chartLayout: { ...prefsDefault.chartLayout, ...(saved.chartLayout || {}) } };
+    prefs.chartLayout.columns = clampChartColumns(prefs.chartLayout.columns);
     if (saved.sampling == null || (saved.sampling === 5 && saved.chartResolutionDefault !== "max")) prefs.sampling = 1;
     prefs.chartResolutionDefault = "max";
     return prefs;
@@ -361,6 +363,7 @@ function loadPrefs() {
 }
 
 function savePrefs() {
+  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
   localStorage.setItem("networkExpertPrefs", JSON.stringify(state.prefs));
 }
 
@@ -541,6 +544,10 @@ function chartMetricList() {
 
 function alphabeticalMetrics(metrics = chartMetricList()) {
   return [...metrics].sort((a, b) => metricLabel(a).localeCompare(metricLabel(b), undefined, { sensitivity: "base" }));
+}
+
+function clampChartColumns(columns) {
+  return Math.min(3, Math.max(1, Number(columns) || 2));
 }
 
 const EXPERT_CORRELATIONS = [
@@ -1061,16 +1068,19 @@ function applyTableLayout(profile) {
 }
 
 function dashboardSnapshot(name) {
+  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
   return createDashboardSnapshot(state, name);
 }
 
 function applyDashboardProfile(profile) {
   applySavedDashboardProfile(state, profile, chartMetricList);
+  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
   savePrefs();
 }
 
 function applyDashboardPreset(presetId) {
   applyDashboardPresetProfile(state, presetId, chartMetricList);
+  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
   savePrefs();
 }
 
@@ -1451,7 +1461,7 @@ function render() {
             ].map(([key, label]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}">${label}</button>`).join("")}
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
-          <span class="status-pill anomaly-status ${anomalyStatusClass()}">${formatNumber(state.anomalies.length)} anomalies</span>
+          <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentCloud : ""}${formatNumber(state.anomalies.length)} anomalies</span>
           <button class="danger" data-action="resetAll">${icons.x} Reset all</button>
         </div>
       </header>
@@ -1585,6 +1595,7 @@ function renderChartsPage() {
   const metricOptions = alphabeticalMetrics(metrics);
   const selected = state.sockets.find(s => s.id === state.selectedId);
   const layout = state.prefs.chartLayout;
+  const columns = clampChartColumns(layout.columns);
   const realTimeline = hasRealTimestampHistory();
   const orderedMetrics = orderedChartMetrics();
   const activeCorrelation = EXPERT_CORRELATIONS.find(item => item.x === state.correlation.x && item.y === state.correlation.y);
@@ -1652,7 +1663,7 @@ function renderChartsPage() {
         </div>
       </div>
     </section>
-    <section class="chart-grid cols-${layout.columns} density-${layout.density}">
+    <section class="chart-grid cols-${columns} density-${layout.density}">
       ${orderedMetrics.map((m, index) => `<div class="panel chart-card" data-chart-card="${m}">
         <div class="panel-head">
           <div class="panel-title chart-title-wrap">
@@ -2939,7 +2950,7 @@ function renderLayoutPrefs() {
   return `<div class="layout-config">
     <article class="field-card">
       <strong>Grid layout</strong>
-      <label>Charts per row<select id="layoutColumns">${[1, 2, 3, 4].map(v => `<option value="${v}" ${l.columns === v ? "selected" : ""}>${v} columns</option>`).join("")}</select></label>
+      <label>Charts per row<select id="layoutColumns">${[1, 2, 3].map(v => `<option value="${v}" ${clampChartColumns(l.columns) === v ? "selected" : ""}>${v} columns</option>`).join("")}</select></label>
       <label>Panel density<select id="layoutDensity">${["compact", "standard", "tall"].map(v => `<option value="${v}" ${l.density === v ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       <label>Preset<select id="layoutPreset">
         <option value="">Choose preset</option>
@@ -3088,8 +3099,28 @@ function formatMetricNumber(metric, value) {
   }).format(Number(value || 0));
 }
 
+function formatBitsPerSecond(value) {
+  const numeric = Number(value || 0);
+  const sign = numeric < 0 ? -1 : 1;
+  let scaled = Math.abs(numeric);
+  const units = ["bps", "kbps", "Mbps", "Gbps", "Tbps"];
+  let unitIndex = 0;
+  while (scaled >= 1000 && unitIndex < units.length - 1) {
+    scaled /= 1000;
+    unitIndex += 1;
+  }
+  const digits = unitIndex === 0 ? 0 : scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  const formatted = new Intl.NumberFormat(resolvedNumberLocale(), {
+    useGrouping: state?.prefs?.numberGrouping !== false,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits
+  }).format(sign * scaled);
+  return `${formatted} ${units[unitIndex]}`;
+}
+
 function formatMetricValue(metric, value) {
   const unit = metricUnit(metric);
+  if (unit === "bps") return formatBitsPerSecond(value);
   return `${formatMetricNumber(metric, value)}${unit ? ` ${unit}` : ""}`;
 }
 
@@ -3512,7 +3543,8 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const singlePointLine = data.length === 1 ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(values[0] || 0)}" y2="${y(values[0] || 0)}" stroke="${stroke}" stroke-width="3" opacity=".85"/>` : "";
   const bars = values.map((v, i) => `<rect x="${x(data[i], i) - barWidth / 2}" y="${y(v)}" width="${barWidth}" height="${h - pad.b - y(v)}" fill="${thresholdColor(metric, v)}" opacity=".86"/>`).join("");
   const points = showPoints ? values.map((v, i) => `<circle cx="${x(data[i], i)}" cy="${y(v)}" r="${pointRadius.toFixed(2)}" fill="${thresholdColor(metric, v)}"><title>${metricLabel(metric)}=${formatMetricValue(metric, v)} at ${timeLabel(data[i]?.t || 0, data[i]?.epochMs)}</title></circle>`).join("") : "";
-  const xTicks = [0, .25, .5, .75, 1].map(f => {
+  const xTickFractions = w < 520 ? [0, .5, 1] : [0, .25, .5, .75, 1];
+  const xTicks = xTickFractions.map(f => {
     const targetTime = firstTime + f * Math.max(1, lastTime - firstTime);
     const row = data.reduce((best, item) => Math.abs(chartRowTime(item) - targetTime) < Math.abs(chartRowTime(best) - targetTime) ? item : best, data[0] || {});
     return { x: pad.l + f * (w - pad.l - pad.r), label: timeLabel(row?.t || 0, row?.epochMs) };
@@ -3939,7 +3971,7 @@ function bindEvents() {
     }
     if (action === "saveLayout") {
       const l = state.prefs.chartLayout;
-      l.columns = Number(document.querySelector("#layoutColumns")?.value || l.columns);
+      l.columns = clampChartColumns(document.querySelector("#layoutColumns")?.value || l.columns);
       l.density = document.querySelector("#layoutDensity")?.value || l.density;
       l.mainChart = Boolean(document.querySelector("#layoutMainChart")?.checked);
       l.sharedZoom = Boolean(document.querySelector("#layoutSharedZoom")?.checked);

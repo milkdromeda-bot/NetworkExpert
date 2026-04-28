@@ -421,6 +421,27 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   font-size: 12px;
   white-space: nowrap;
 }
+.incident-cloud-icon {
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #323840, #24282f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .11), 0 6px 14px rgba(0, 0, 0, .32);
+}
+.incident-cloud-icon svg {
+  width: 21px;
+  height: 21px;
+  display: block;
+}
+.incident-triangle {
+  fill: #ffd21f;
+}
+.incident-cloud {
+  fill: #26303a;
+}
 .anomaly-status.solid {
   border-color: rgba(255, 92, 119, .85);
   background: #4b1420;
@@ -2166,7 +2187,6 @@ th:focus-within .column-tooltip,
 .chart-grid.cols-1 { grid-template-columns: 1fr; }
 .chart-grid.cols-2 { grid-template-columns: repeat(2, minmax(280px, 1fr)); }
 .chart-grid.cols-3 { grid-template-columns: repeat(3, minmax(240px, 1fr)); }
-.chart-grid.cols-4 { grid-template-columns: repeat(4, minmax(220px, 1fr)); }
 .small-chart.compact { height: 170px; }
 .small-chart.standard { height: 220px; }
 .small-chart.tall { height: 320px; }
