@@ -114,7 +114,7 @@ export const prefsDefault = {
   graphStyle: "line",
   graphWindow: 30,
   graphThreshold: 80,
-  sampling: 5,
+  sampling: 1,
   colorBlind: false,
   numberLocale: "auto",
   numberGrouping: true,

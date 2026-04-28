@@ -347,7 +347,10 @@ const icons = {
 function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("networkExpertPrefs") || "{}");
-    return { ...prefsDefault, ...saved, chartLayout: { ...prefsDefault.chartLayout, ...(saved.chartLayout || {}) } };
+    const prefs = { ...prefsDefault, ...saved, chartLayout: { ...prefsDefault.chartLayout, ...(saved.chartLayout || {}) } };
+    if (saved.sampling == null || (saved.sampling === 5 && saved.chartResolutionDefault !== "max")) prefs.sampling = 1;
+    prefs.chartResolutionDefault = "max";
+    return prefs;
   } catch {
     return { ...prefsDefault };
   }
@@ -1515,7 +1518,7 @@ function renderChartsPage() {
             <input id="thresholdInput" type="number" min="0" value="${state.prefs.graphThreshold}"/>
           </label>
           <label class="chart-field">
-            <span>Sample step ${renderChartInfo("Sample step", "Expected interval, in seconds, between samples when Ultimate Network Expert has to synthesize a local timeline. Timestamped imports use their real timestamps instead.", "Match this to your collection cadence: 1 for every second, 0.1 for 100 ms collections if supported by the file timestamps, or larger values for long low-overhead monitoring.")}</span>
+            <span>Synthetic interval ${renderChartInfo("Synthetic interval", "Expected interval, in seconds, used only when Ultimate Network Expert has to synthesize a local timeline from a single non-timestamped capture. Timestamped imports always use every captured timestamp at its real time.", "Leave this at 1 second for synthetic previews. It does not downsample real collections; real chart resolution comes from the timestamps in the imported data.")}</span>
             <input id="samplingInput" type="number" min="0.001" max="3600" step="0.001" value="${state.prefs.sampling}"/>
           </label>
         </div>
@@ -1543,7 +1546,7 @@ function renderChartsPage() {
           <label class="chart-field"><span>End time ${renderChartInfo("End time", "Right boundary of the visible time window. Together with Start time, it controls the synchronized zoom range for all charts.", "Narrow this around spikes in RTO, Send-Q, drops, TX/RX bandwidth collapse, or backoff to avoid averaging away short incidents.")}</span><input id="endTimeInput" type="datetime-local" value="${zoomDateTimeValue("end")}"/></label>
         </div>
         ${layout.mainChart ? `<svg id="chart" class="chart hero-chart ${layout.density}" role="img" aria-label="Main timeline chart"></svg>` : ""}
-        ${layout.showLegend ? `<div class="chart-legend" id="mainChartLegend">Shared zoom: ${layout.sharedZoom ? "on" : "off"} - Crosshair: ${layout.showCrosshair ? "on" : "off"} - Thresholds: ${layout.showThresholds ? "on" : "off"}</div>` : ""}
+        ${layout.showLegend ? `<div class="chart-legend" id="mainChartLegend">${chartResolutionLabel()} - Shared zoom: ${layout.sharedZoom ? "on" : "off"} - Crosshair: ${layout.showCrosshair ? "on" : "off"} - Thresholds: ${layout.showThresholds ? "on" : "off"}</div>` : ""}
         <div class="metric-picks">
           ${metricOptions.map(m => `<label class="check inline"><input type="checkbox" data-chart-metric="${m}" ${state.chartMetrics.includes(m) ? "checked" : ""}/> ${escapeHtml(metricLabel(m))}</label>`).join("")}
         </div>
@@ -2937,12 +2940,59 @@ function chartPointRadius(pointCount, style) {
   return Math.max(1, Math.min(base * styleFactor, base * densityFactor * styleFactor));
 }
 
+function hasRealTimestampHistory() {
+  return state.history.filter(row => row?.epochMs).length >= 2;
+}
+
+function chartResolutionLabel() {
+  const visible = visibleHistory().length;
+  const mode = hasRealTimestampHistory() ? "real timestamps" : "synthetic timeline";
+  return `${formatNumber(visible)} visible point(s), ${mode}`;
+}
+
 function visibleHistory() {
   const rows = state.history.length ? state.history : [];
   if (rows.length <= 2) return rows;
   const start = Math.floor(state.chartZoom.start * (rows.length - 1));
   const end = Math.max(start + 1, Math.ceil(state.chartZoom.end * (rows.length - 1)));
   return rows.slice(start, end + 1);
+}
+
+function chartPointBudget(style, width) {
+  const pxBudget = Math.max(1200, Math.round((width || 640) * 8));
+  const styleBudget = style === "bars" ? 5000 : style === "points" || style === "xy" ? 8000 : 16000;
+  return Math.min(styleBudget, pxBudget);
+}
+
+function renderableHistory(rows, metric, style, width) {
+  const budget = chartPointBudget(style, width);
+  if (rows.length <= budget) return { rows, total: rows.length, reduced: false };
+  return {
+    rows: preserveExtremesDownsample(rows, metric, budget),
+    total: rows.length,
+    reduced: true
+  };
+}
+
+function preserveExtremesDownsample(rows, metric, budget) {
+  if (rows.length <= budget || budget < 8) return rows;
+  const middleBudget = Math.max(2, budget - 2);
+  const bucketCount = Math.max(1, Math.floor(middleBudget / 2));
+  const bucketSize = Math.max(1, Math.ceil((rows.length - 2) / bucketCount));
+  const picked = new Map([[0, rows[0]], [rows.length - 1, rows[rows.length - 1]]]);
+  for (let start = 1; start < rows.length - 1; start += bucketSize) {
+    const end = Math.min(rows.length - 1, start + bucketSize);
+    let minIndex = start;
+    let maxIndex = start;
+    for (let i = start + 1; i < end; i += 1) {
+      const value = rows[i][metric] || 0;
+      if (value < (rows[minIndex][metric] || 0)) minIndex = i;
+      if (value > (rows[maxIndex][metric] || 0)) maxIndex = i;
+    }
+    picked.set(minIndex, rows[minIndex]);
+    picked.set(maxIndex, rows[maxIndex]);
+  }
+  return [...picked.entries()].sort((a, b) => a[0] - b[0]).slice(0, budget).map(([, row]) => row);
 }
 
 function timeLabel(seconds, epochMs = null) {
@@ -3093,7 +3143,9 @@ function drawChart() {
 function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshold = false) {
   const w = svg.clientWidth || 640;
   const h = svg.clientHeight || 300;
-  const data = visibleHistory();
+  const visibleData = visibleHistory();
+  const renderData = renderableHistory(visibleData, metric, style, w);
+  const data = renderData.rows;
   const values = data.map(d => d[metric] || 0);
   const t = thresholdFor(metric);
   const finiteThresholds = [t.warn, t.danger].filter(Number.isFinite);
@@ -3105,17 +3157,26 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const tickWidth = Math.min(150, Math.max(48, longestTick.length * 6.4));
   const pad = { l: Math.min(Math.max(76, tickWidth + 54), Math.max(110, w * 0.28)), r: 26, t: 34, b: 58 };
   const axisLabelX = Math.max(14, pad.l - tickWidth - 34);
-  const x = i => pad.l + (i / Math.max(1, data.length - 1)) * (w - pad.l - pad.r);
+  const firstTime = data[0]?.epochMs ?? (data[0]?.t || 0) * 1000;
+  const lastTime = data[data.length - 1]?.epochMs ?? (data[data.length - 1]?.t || 0) * 1000;
+  const rowTime = row => row?.epochMs ?? (row?.t || 0) * 1000;
+  const x = (row, i) => {
+    const timeSpan = Math.max(1, lastTime - firstTime);
+    if (data.length > 1 && timeSpan > 1) return pad.l + ((rowTime(row) - firstTime) / timeSpan) * (w - pad.l - pad.r);
+    return pad.l + (i / Math.max(1, data.length - 1)) * (w - pad.l - pad.r);
+  };
   const y = v => h - pad.b - ((v - min) / span) * (h - pad.t - pad.b);
-  const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const base = `${x(values.length - 1)},${h - pad.b} L${pad.l},${h - pad.b} Z`;
+  const line = values.map((v, i) => `${i ? "L" : "M"}${x(data[i], i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const base = `${x(data[values.length - 1], values.length - 1)},${h - pad.b} L${pad.l},${h - pad.b} Z`;
   const barWidth = Math.max(4, Math.min(18, (w - pad.l - pad.r) / Math.max(8, data.length) * 0.55));
   const pointRadius = chartPointRadius(data.length, style);
-  const bars = values.map((v, i) => `<rect x="${x(i) - barWidth / 2}" y="${y(v)}" width="${barWidth}" height="${h - pad.b - y(v)}" fill="${thresholdColor(metric, v)}" opacity=".86"/>`).join("");
-  const points = values.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="${pointRadius.toFixed(2)}" fill="${thresholdColor(metric, v)}"><title>${metricLabel(metric)}=${formatMetricValue(metric, v)} at ${timeLabel(data[i]?.t || 0, data[i]?.epochMs)}</title></circle>`).join("");
+  const showPoints = style === "points" || style === "xy" || data.length <= 1500;
+  const bars = values.map((v, i) => `<rect x="${x(data[i], i) - barWidth / 2}" y="${y(v)}" width="${barWidth}" height="${h - pad.b - y(v)}" fill="${thresholdColor(metric, v)}" opacity=".86"/>`).join("");
+  const points = showPoints ? values.map((v, i) => `<circle cx="${x(data[i], i)}" cy="${y(v)}" r="${pointRadius.toFixed(2)}" fill="${thresholdColor(metric, v)}"><title>${metricLabel(metric)}=${formatMetricValue(metric, v)} at ${timeLabel(data[i]?.t || 0, data[i]?.epochMs)}</title></circle>`).join("") : "";
   const xTicks = [0, .25, .5, .75, 1].map(f => {
-    const idx = Math.min(data.length - 1, Math.round(f * Math.max(0, data.length - 1)));
-    return { x: x(idx), label: timeLabel(data[idx]?.t || 0, data[idx]?.epochMs) };
+    const targetTime = firstTime + f * Math.max(1, lastTime - firstTime);
+    const row = data.reduce((best, item) => Math.abs(rowTime(item) - targetTime) < Math.abs(rowTime(best) - targetTime) ? item : best, data[0] || {});
+    return { x: pad.l + f * (w - pad.l - pad.r), label: timeLabel(row?.t || 0, row?.epochMs) };
   });
   const showWarnLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.warn);
   const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger);
@@ -3137,7 +3198,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${tick.label}</text>`).join("")}
     ${showWarnLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${warnY}" y2="${warnY}" stroke="#ff9f43" stroke-dasharray="7 6"/><text x="${w - pad.r - 6}" y="${warnY - 6}" text-anchor="end" fill="#ff9f43" font-size="11">warn ${formatMetricValue(metric, t.warn)}</text>` : ""}
     ${showDangerLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${dangerY}" y2="${dangerY}" stroke="#ff5c77" stroke-dasharray="4 4"/><text x="${w - pad.r - 6}" y="${dangerY - 6}" text-anchor="end" fill="#ff5c77" font-size="11">danger ${formatMetricValue(metric, t.danger)}</text>` : ""}
-    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}</text>
+    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(metric)} ${metricUnit(metric) ? `(${metricUnit(metric)})` : ""}</text>
     ${style === "area" ? `<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
@@ -3163,7 +3224,7 @@ function drawCorrelation() {
   if (!svg) return;
   const w = svg.clientWidth || 640;
   const h = svg.clientHeight || 300;
-  const rows = visibleHistory();
+  const rows = renderableHistory(visibleHistory(), state.correlation.y, "xy", w).rows;
   const xs = rows.map(d => d[state.correlation.x] || 0);
   const ys = rows.map(d => d[state.correlation.y] || 0);
   const maxX = Math.max(...xs, 1);
