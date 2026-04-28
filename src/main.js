@@ -2965,8 +2965,8 @@ function metricUnit(metric) {
 
 function metricFractionDigits(metric, value) {
   const numeric = Math.abs(Number(value || 0));
-  if (["rtt", "rto", "ato"].includes(metric)) return numeric > 0 && numeric < 10 ? 3 : Number.isInteger(Number(value)) ? 0 : 3;
-  if (["pacing_rate", "delivery_rate", "tx_bps", "rx_bps"].includes(metric)) return Number.isInteger(Number(value)) ? 0 : 2;
+  if (["pacing_rate", "delivery_rate", "tx_bps", "rx_bps", "sendQ", "recvQ", "skmem.r", "skmem.t", "skmem.d", "bytes_acked", "bytes_received", "segs_out", "segs_in", "cwnd", "backoff", "retrans"].includes(metric)) return 0;
+  if (["rtt", "rto", "ato", "rttvar"].includes(metric)) return numeric > 0 && numeric < 10 ? 3 : Number.isInteger(Number(value)) ? 0 : 3;
   return Number.isInteger(Number(value)) ? 0 : 2;
 }
 
