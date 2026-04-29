@@ -2663,6 +2663,28 @@ th:focus-within .column-tooltip,
   display: grid;
   gap: 10px;
 }
+.preimport-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  gap: 8px;
+}
+.preimport-presets button {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  text-align: left;
+  min-height: 58px;
+}
+.preimport-presets button span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.preimport-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+}
 .pref-grid label {
   display: grid;
   gap: 6px;
@@ -2767,4 +2789,6 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .topbar { flex-wrap: wrap; min-height: 86px; }
   .chart-toolbar { flex-wrap: wrap; }
   .chart-timezone-group { margin-left: 0; min-width: 100%; grid-template-columns: 1fr; }
+  .preimport-presets,
+  .preimport-grid { grid-template-columns: 1fr; }
 }

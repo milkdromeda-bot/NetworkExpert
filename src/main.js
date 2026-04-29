@@ -259,7 +259,7 @@ let state = {
   bandwidthIndex: {},
   anomalyAlertSince: null,
   lastAnomalyCount: 0,
-  preImportFilters: { enabled: false, srcIp: "", dstIp: "", srcPort: "", dstPort: "" },
+  preImportFilters: { enabled: false, protocol: "", state: "", srcIp: "", dstIp: "", anyPort: "", srcPort: "", dstPort: "" },
   filterHistory: loadFilterHistory(),
   tableProfiles: loadTableProfiles(),
   dashboardProfiles: loadDashboardProfiles(),
@@ -542,6 +542,18 @@ function chartMetricList() {
   return ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"];
 }
 
+const PRE_IMPORT_PRESETS = [
+  { id: "tcp", label: "TCP", description: "Keep tcp and tcp6 sockets.", filters: { protocol: "tcp" } },
+  { id: "udp", label: "UDP", description: "Keep udp and udp6 sockets.", filters: { protocol: "udp" } },
+  { id: "estab", label: "Established", description: "Live established conversations only.", filters: { state: "ESTAB" } },
+  { id: "listen", label: "Listening", description: "Service/listener inventory.", filters: { state: "LISTEN" } },
+  { id: "web", label: "Web 80/443", description: "HTTP and TLS traffic on either side.", filters: { anyPort: "80,443" } },
+  { id: "dns", label: "DNS 53", description: "Resolver traffic, TCP or UDP.", filters: { anyPort: "53" } },
+  { id: "ssh", label: "SSH 22", description: "Remote administration traffic.", filters: { anyPort: "22" } },
+  { id: "print", label: "Print 9100", description: "JetDirect/raw printing flows.", filters: { anyPort: "9100" } },
+  { id: "db", label: "DB common", description: "PostgreSQL, MySQL, Redis, MongoDB.", filters: { anyPort: "5432,3306,6379,27017" } }
+];
+
 function alphabeticalMetrics(metrics = chartMetricList()) {
   return [...metrics].sort((a, b) => metricLabel(a).localeCompare(metricLabel(b), undefined, { sensitivity: "base" }));
 }
@@ -792,6 +804,19 @@ function endpointSamples(sockets, side = "peer", limit = 4) {
 
 function processSamples(sockets, limit = 4) {
   return [...new Set(sockets.map(socket => socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "").filter(Boolean))].slice(0, limit);
+}
+
+function emptyPreImportFilters() {
+  return { enabled: false, protocol: "", state: "", srcIp: "", dstIp: "", anyPort: "", srcPort: "", dstPort: "" };
+}
+
+function normalizePreImportFilters(filters = state.preImportFilters) {
+  return { ...emptyPreImportFilters(), ...filters };
+}
+
+function hasPreImportFilterValue(filters) {
+  const f = normalizePreImportFilters(filters);
+  return [f.protocol, f.state, f.srcIp, f.dstIp, f.anyPort, f.srcPort, f.dstPort].some(Boolean);
 }
 
 function isLxcProfile() {
@@ -2922,15 +2947,32 @@ function renderChartStatsModal() {
 
 function renderPreImportFilters() {
   const h = state.filterHistory;
+  const f = normalizePreImportFilters();
   return `<div class="pref-grid">
     <article class="field-card">
       <strong>Optional import-time filters</strong>
-      <p class="hint">Leave all fields empty to parse and analyze the entire file. Enable filters only when you want to keep matching source/destination IPs or ports before parsing a very large file.</p>
-      <label class="check"><input id="preImportEnabled" type="checkbox" ${state.preImportFilters.enabled ? "checked" : ""}/> Enable pre-import filtering</label>
-      <input id="preSrcIp" list="histSrcIp" placeholder="source IP contains" value="${escapeHtml(state.preImportFilters.srcIp)}" />
-      <input id="preDstIp" list="histDstIp" placeholder="destination IP contains" value="${escapeHtml(state.preImportFilters.dstIp)}" />
-      <input id="preSrcPort" list="histSrcPort" placeholder="source port equals" value="${escapeHtml(state.preImportFilters.srcPort)}" />
-      <input id="preDstPort" list="histDstPort" placeholder="destination port equals" value="${escapeHtml(state.preImportFilters.dstPort)}" />
+      <p class="hint">For very large captures, enable a preset or field filter here. Matching happens while the file is read, before the heavy final analysis keeps the raw timeline.</p>
+      <div class="preimport-presets">
+        ${PRE_IMPORT_PRESETS.map(preset => `<button type="button" data-preimport-preset="${preset.id}"><strong>${escapeHtml(preset.label)}</strong><span>${escapeHtml(preset.description)}</span></button>`).join("")}
+      </div>
+      <label class="check"><input id="preImportEnabled" type="checkbox" ${f.enabled ? "checked" : ""}/> Enable pre-import filtering</label>
+      <div class="preimport-grid">
+        <label>Protocol<select id="preProtocol">
+          <option value="">tcp + udp + other</option>
+          <option value="tcp" ${f.protocol === "tcp" ? "selected" : ""}>tcp / tcp6</option>
+          <option value="udp" ${f.protocol === "udp" ? "selected" : ""}>udp / udp6</option>
+        </select></label>
+        <label>State<select id="preState">
+          <option value="">all states</option>
+          ${["ESTAB", "LISTEN", "UNCONN", "SYN-SENT", "SYN-RECV", "TIME-WAIT", "CLOSE-WAIT", "FIN-WAIT-1", "FIN-WAIT-2"].map(value => `<option value="${value}" ${f.state === value ? "selected" : ""}>${value}</option>`).join("")}
+        </select></label>
+        <input id="preAnyPort" list="histAnyPort" placeholder="any port equals, comma separated" value="${escapeHtml(f.anyPort)}" />
+        <input id="preSrcIp" list="histSrcIp" placeholder="source IP contains" value="${escapeHtml(f.srcIp)}" />
+        <input id="preDstIp" list="histDstIp" placeholder="destination IP contains" value="${escapeHtml(f.dstIp)}" />
+        <input id="preSrcPort" list="histSrcPort" placeholder="source port equals" value="${escapeHtml(f.srcPort)}" />
+        <input id="preDstPort" list="histDstPort" placeholder="destination port equals" value="${escapeHtml(f.dstPort)}" />
+      </div>
+      ${renderDatalist("histAnyPort", [...h.map(x => x.anyPort), ...h.map(x => x.srcPort), ...h.map(x => x.dstPort)])}
       ${renderDatalist("histSrcIp", h.map(x => x.srcIp))}
       ${renderDatalist("histDstIp", h.map(x => x.dstIp))}
       ${renderDatalist("histSrcPort", h.map(x => x.srcPort))}
@@ -3779,11 +3821,20 @@ async function importFile(file) {
 }
 
 function rememberFilterHistory(filters) {
-  if (!filters.enabled || ![filters.srcIp, filters.dstIp, filters.srcPort, filters.dstPort].some(Boolean)) return;
+  if (!filters.enabled || !hasPreImportFilterValue(filters)) return;
+  const normalized = normalizePreImportFilters(filters);
   state.filterHistory = [
-    { srcIp: filters.srcIp, dstIp: filters.dstIp, srcPort: filters.srcPort, dstPort: filters.dstPort, at: Date.now() },
+    { ...normalized, at: Date.now() },
     ...state.filterHistory
-  ].filter((item, index, all) => index === all.findIndex(other => other.srcIp === item.srcIp && other.dstIp === item.dstIp && other.srcPort === item.srcPort && other.dstPort === item.dstPort)).slice(0, 40);
+  ].filter((item, index, all) => index === all.findIndex(other =>
+    other.protocol === item.protocol &&
+    other.state === item.state &&
+    other.srcIp === item.srcIp &&
+    other.dstIp === item.dstIp &&
+    other.anyPort === item.anyPort &&
+    other.srcPort === item.srcPort &&
+    other.dstPort === item.dstPort
+  )).slice(0, 40);
   saveFilterHistory();
 }
 
@@ -3897,13 +3948,16 @@ function bindEvents() {
     if (action === "startImportWithFilters") {
       const nextFilters = {
         enabled: Boolean(document.querySelector("#preImportEnabled")?.checked),
+        protocol: document.querySelector("#preProtocol")?.value || "",
+        state: document.querySelector("#preState")?.value || "",
         srcIp: document.querySelector("#preSrcIp")?.value.trim() || "",
         dstIp: document.querySelector("#preDstIp")?.value.trim() || "",
+        anyPort: document.querySelector("#preAnyPort")?.value.trim() || "",
         srcPort: document.querySelector("#preSrcPort")?.value.trim() || "",
         dstPort: document.querySelector("#preDstPort")?.value.trim() || ""
       };
-      const hasFilterValue = [nextFilters.srcIp, nextFilters.dstIp, nextFilters.srcPort, nextFilters.dstPort].some(Boolean);
-      nextFilters.enabled = nextFilters.enabled && hasFilterValue;
+      const hasFilterValue = hasPreImportFilterValue(nextFilters);
+      nextFilters.enabled = hasFilterValue;
       state.preImportFilters = nextFilters;
       if (!hasFilterValue) toast("Importing everything", "No pre-import filter was entered, so the full file will be parsed.");
       const file = state.pendingFile;
@@ -3916,13 +3970,7 @@ function bindEvents() {
       });
     }
     if (action === "startImportAll") {
-      state.preImportFilters = {
-        enabled: false,
-        srcIp: "",
-        dstIp: "",
-        srcPort: "",
-        dstPort: ""
-      };
+      state.preImportFilters = emptyPreImportFilters();
       const file = state.pendingFile;
       state.pendingFile = null;
       state.modal = null;
@@ -4068,6 +4116,17 @@ function bindEvents() {
     state.modal = "preImport";
     render();
   });
+  document.querySelectorAll("[data-preimport-preset]").forEach(btn => btn.addEventListener("click", event => {
+    const preset = PRE_IMPORT_PRESETS.find(item => item.id === event.currentTarget.dataset.preimportPreset);
+    if (!preset) return;
+    state.preImportFilters = {
+      ...emptyPreImportFilters(),
+      ...preset.filters,
+      enabled: true
+    };
+    toast("Pre-import preset applied", `${preset.label}: filters will run while reading the file.`);
+    render();
+  }));
 
   document.querySelectorAll("[data-tab]").forEach(tab => tab.addEventListener("click", event => {
     state.activeTab = event.currentTarget.dataset.tab;

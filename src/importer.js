@@ -1,5 +1,5 @@
 import { applyRisks } from "./analysis.js";
-import { parseSs } from "./parser.js";
+import { parseSs, parseTimestampLine } from "./parser.js";
 
 export async function importSocketFile(file, { formatNumber, onProgress, preFilter = null }) {
   const lower = file.name.toLowerCase();
@@ -56,17 +56,23 @@ async function importGzipFile(file, context) {
 }
 
 async function importTextStream(stream, totalBytes, label, { formatNumber, onProgress, preFilter = null }) {
-  const activePreFilter = preFilter;
+  const activePreFilter = preFilter?.enabled ? preFilter : null;
   const decoder = new TextDecoder();
   const reader = stream.getReader();
   const sockets = [];
+  const filterContext = { pendingTimestamp: "" };
   let buffer = "";
   let readBytes = 0;
   let preview = "";
-  let fullRaw = "";
+  let keptRaw = "";
   let batch = [];
   let chunks = 0;
   const maxSockets = 250000;
+  const appendKeptRaw = text => {
+    if (!text) return;
+    keptRaw += text;
+    if (preview.length < 240000) preview += text.slice(0, 240000 - preview.length);
+  };
 
   while (true) {
     const { value, done } = await reader.read();
@@ -74,22 +80,22 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
     readBytes += value.byteLength || 0;
     chunks += 1;
     const text = decoder.decode(value, { stream: true });
-    fullRaw += text;
-    if (preview.length < 240000) preview += text.slice(0, 240000 - preview.length);
+    if (!activePreFilter) appendKeptRaw(text);
     buffer += text;
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || "";
     batch.push(...lines);
 
     if (batch.length >= 1200) {
-      appendParsedLines(sockets, batch.splice(0), maxSockets, activePreFilter);
+      const filteredRaw = appendParsedLines(sockets, batch.splice(0), maxSockets, activePreFilter, filterContext);
+      if (activePreFilter) appendKeptRaw(filteredRaw);
       const shouldRender = chunks % 6 === 0;
       onProgress({
         raw: preview,
         sockets: [...sockets],
         status: {
           title: "Streaming parse",
-          detail: `${label}: ${formatNumber(sockets.length)} sockets parsed, ${formatNumber(readBytes)} bytes read.`,
+          detail: `${label}: ${formatNumber(sockets.length)} sockets kept, ${formatNumber(readBytes)} bytes read${activePreFilter ? " with pre-import filters" : ""}.`,
           progress: totalBytes ? Math.min(99, Math.round((readBytes / totalBytes) * 100)) : Math.min(99, chunks)
         }
       }, { render: shouldRender });
@@ -111,28 +117,63 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
 
   const finalText = decoder.decode();
   if (finalText) {
-    fullRaw += finalText;
-    if (preview.length < 240000) preview += finalText.slice(0, 240000 - preview.length);
+    if (!activePreFilter) appendKeptRaw(finalText);
     buffer += finalText;
   }
 
   if (buffer) batch.push(buffer);
-  if (batch.length) appendParsedLines(sockets, batch, maxSockets, activePreFilter);
-  return { raw: fullRaw, sockets, sourceName: label };
+  if (batch.length) {
+    const filteredRaw = appendParsedLines(sockets, batch, maxSockets, activePreFilter, filterContext);
+    if (activePreFilter) appendKeptRaw(filteredRaw);
+  }
+  return { raw: keptRaw, sockets, sourceName: label };
 }
 
-function appendParsedLines(target, lines, maxSockets, preFilter) {
+function appendParsedLines(target, lines, maxSockets, preFilter, context = {}) {
+  if (preFilter) return appendPreFilteredLines(target, lines, maxSockets, preFilter, context);
   const parsed = applyRisks(parseSs(lines.join("\n")));
-  const filtered = preFilter ? parsed.filter(socket => socketMatchesPreFilter(socket, preFilter)) : parsed;
   const remaining = Math.max(0, maxSockets - target.length);
-  target.push(...filtered.slice(0, remaining));
+  target.push(...parsed.slice(0, remaining));
+  return "";
+}
+
+function appendPreFilteredLines(target, lines, maxSockets, preFilter, context) {
+  const kept = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (parseTimestampLine(trimmed) != null) {
+      context.pendingTimestamp = line;
+      continue;
+    }
+    if (/^(State|Netid)\b/i.test(trimmed) || /^Socket\s+/.test(trimmed) || /^Command to be executed:/i.test(trimmed)) continue;
+    const parsed = applyRisks(parseSs(line));
+    const filtered = parsed.filter(socket => socketMatchesPreFilter(socket, preFilter));
+    if (!filtered.length) continue;
+    const remaining = Math.max(0, maxSockets - target.length);
+    if (remaining <= 0) break;
+    if (context.pendingTimestamp) {
+      kept.push(context.pendingTimestamp);
+      context.pendingTimestamp = "";
+    }
+    kept.push(line);
+    target.push(...filtered.slice(0, remaining));
+  }
+  return kept.length ? `${kept.join("\n")}\n` : "";
 }
 
 function socketMatchesPreFilter(socket, f) {
   if (!f?.enabled) return true;
+  if (f.protocol && !String(socket.family || "").toLowerCase().startsWith(String(f.protocol).toLowerCase())) return false;
+  if (f.state && String(socket.state || "").toUpperCase() !== String(f.state).toUpperCase()) return false;
   if (f.srcIp && !socket.localAddress.host.toLowerCase().includes(f.srcIp.toLowerCase())) return false;
   if (f.dstIp && !socket.peerAddress.host.toLowerCase().includes(f.dstIp.toLowerCase())) return false;
+  if (f.anyPort && !portList(f.anyPort).includes(String(socket.localAddress.port || "")) && !portList(f.anyPort).includes(String(socket.peerAddress.port || ""))) return false;
   if (f.srcPort && String(socket.localAddress.port || "") !== String(f.srcPort)) return false;
   if (f.dstPort && String(socket.peerAddress.port || "") !== String(f.dstPort)) return false;
   return true;
+}
+
+function portList(value) {
+  return String(value || "").split(/[,\s]+/).map(item => item.trim()).filter(Boolean);
 }
