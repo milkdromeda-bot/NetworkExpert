@@ -523,6 +523,21 @@ function stableSocketId(socket) {
   return `socket-${(hash >>> 0).toString(36)}`;
 }
 
+function aggregateParsedSocketsByKey(sockets) {
+  const byKey = new Map();
+  for (const socket of sockets) {
+    const key = socketKey(socket);
+    const previous = byKey.get(key);
+    byKey.set(key, {
+      ...socket,
+      firstSeenMs: previous?.firstSeenMs,
+      lastSeenMs: previous?.lastSeenMs,
+      snapshotCount: (previous?.snapshotCount || 0) + 1
+    });
+  }
+  return [...byKey.values()];
+}
+
 function recomputeFromSockets() {
   state.sockets = withStableSocketIds(state.sockets);
   state.bandwidthIndex = buildSocketBandwidthIndex();
@@ -4008,12 +4023,14 @@ async function importFile(file) {
     preFilter: state.preImportFilters.enabled ? { ...state.preImportFilters } : null,
     onProgress(update, options = {}) {
       state.raw = update.raw;
-      state.sockets = update.sockets;
       state.importStatus = update.status;
       if (options.render !== false) {
         resetDerivedCaches({ raw: true });
+        state.sockets = hasTimestampedRawData() ? aggregateParsedSocketsByKey(update.sockets) : update.sockets;
         recomputeFromSockets();
         render();
+      } else {
+        state.sockets = update.sockets;
       }
     }
   });
@@ -4026,7 +4043,11 @@ async function importFile(file) {
   state.view = "analysis";
   state.activeTab = "advisor";
   resetDerivedCaches({ raw: true });
-  recomputeFromSockets();
+  if (hasTimestampedRawData()) {
+    recompute();
+  } else {
+    recomputeFromSockets();
+  }
   toast("Import complete", `${formatNumber(state.sockets.length)} sockets parsed from ${file.name}.`);
   render();
 }
