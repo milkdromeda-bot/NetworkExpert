@@ -1,5 +1,5 @@
 import { FIELD_DOCS, SAMPLE, SS_OPTIONS, generateTenMinuteSample, prefsDefault } from "./data.js";
-import { metricValue, parseSs, parseTimestampLine } from "./parser.js";
+import { metricValue, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { importSocketFile } from "./importer.js?v=20260425-2";
 import { socketMatchesAdvancedQuery } from "./search.js";
@@ -7,6 +7,7 @@ import { defaultAlertRules, evaluateAlertRules as evaluateAlertRuleEvents, loadA
 import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTemplateProfile, applyDashboardPreset as applyDashboardPresetProfile, applyDashboardProfile as applySavedDashboardProfile, dashboardSnapshot as createDashboardSnapshot } from "./profiles.js";
 import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot } from "./compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -488,54 +489,7 @@ function recompute() {
 }
 
 function parseAnalysisSockets() {
-  const snapshots = parsedTimestampSnapshots();
-  if (snapshots.length < 2) return withStableSocketIds(parseSs(state.raw));
-
-  const byKey = new Map();
-  for (const block of snapshots) {
-    for (const socket of block.sockets) {
-      const key = socketKey(socket);
-      const previous = byKey.get(key);
-      byKey.set(key, {
-        ...socket,
-        firstSeenMs: previous?.firstSeenMs ?? block.epochMs,
-        lastSeenMs: block.epochMs,
-        snapshotCount: (previous?.snapshotCount || 0) + 1
-      });
-    }
-  }
-  return withStableSocketIds([...byKey.values()]);
-}
-
-function withStableSocketIds(sockets) {
-  return sockets.map(socket => ({
-    ...socket,
-    id: stableSocketId(socket)
-  }));
-}
-
-function stableSocketId(socket) {
-  let hash = 2166136261;
-  for (const char of socketKey(socket)) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `socket-${(hash >>> 0).toString(36)}`;
-}
-
-function aggregateParsedSocketsByKey(sockets) {
-  const byKey = new Map();
-  for (const socket of sockets) {
-    const key = socketKey(socket);
-    const previous = byKey.get(key);
-    byKey.set(key, {
-      ...socket,
-      firstSeenMs: previous?.firstSeenMs,
-      lastSeenMs: previous?.lastSeenMs,
-      snapshotCount: (previous?.snapshotCount || 0) + 1
-    });
-  }
-  return [...byKey.values()];
+  return aggregateTimestampedSockets(state.raw);
 }
 
 function recomputeFromSockets() {
@@ -636,10 +590,6 @@ const EXPERT_CORRELATIONS = [
   { id: "segments-bytes", x: "segs_out", y: "bytes_acked", label: "12. Segments out vs bytes acked", reason: "Finds inefficient tiny-segment patterns or poor payload efficiency." }
 ];
 
-function socketKey(socket) {
-  return `${socket.local}|${socket.peer}|${socket.state}`;
-}
-
 function buildHistoryFromTimestampedSnapshots() {
   const snapshots = parsedTimestampSnapshots();
   if (!snapshots.length) return [];
@@ -678,18 +628,7 @@ function buildHistoryFromTimestampedSnapshots() {
 
 function timestampBlocks() {
   if (state.cache.timestampRawVersion === state.rawVersion) return state.cache.timestampBlocks;
-  const blocks = [];
-  let current = null;
-  for (const line of state.raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    const epochMs = parseTimestampLine(trimmed);
-    if (epochMs != null) {
-      current = { epochMs, lines: [] };
-      blocks.push(current);
-    } else if (current) {
-      current.lines.push(line);
-    }
-  }
+  const blocks = splitTimestampBlocks(state.raw);
   state.cache.timestampRawVersion = state.rawVersion;
   state.cache.timestampBlocks = blocks;
   return blocks;
@@ -697,10 +636,7 @@ function timestampBlocks() {
 
 function parsedTimestampSnapshots() {
   if (state.cache.snapshotRawVersion === state.rawVersion) return state.cache.timestampSnapshots;
-  const snapshots = timestampBlocks().map(block => ({
-    epochMs: block.epochMs,
-    sockets: parseSs(block.lines.join("\n"))
-  }));
+  const snapshots = parseTimestampedSnapshots(state.raw);
   state.cache.snapshotRawVersion = state.rawVersion;
   state.cache.timestampSnapshots = snapshots;
   return snapshots;
