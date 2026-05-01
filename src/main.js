@@ -1628,12 +1628,15 @@ function renderKeepingWorkspacePosition() {
   const workspace = document.querySelector(".workspace");
   const scrollTop = workspace?.scrollTop || 0;
   const scrollLeft = workspace?.scrollLeft || 0;
+  const windowScrollX = window.scrollX || 0;
+  const windowScrollY = window.scrollY || 0;
   render();
   const nextWorkspace = document.querySelector(".workspace");
   if (nextWorkspace) {
     nextWorkspace.scrollTop = scrollTop;
     nextWorkspace.scrollLeft = scrollLeft;
   }
+  window.scrollTo(windowScrollX, windowScrollY);
 }
 
 function renderKeepingModalPosition() {
@@ -2349,15 +2352,21 @@ function renderConversationAnomalyCell(conv) {
     : "";
   const counts = Object.entries(summary.counts).filter(([, count]) => count);
   return `<div class="conversation-anomaly-cell">
-    <button class="conversation-anomaly-badge ${summary.dominantSeverity}" data-conversation-insight="${escapeHtml(conv.key)}" aria-label="${escapeHtml(formatConversationAnomalyTitle(conv, summary))}">
+    <button class="conversation-anomaly-trigger" data-conversation-insight="${escapeHtml(conv.key)}" aria-label="Open anomaly detail dialog">
+      <i class="ri-menu-search-line"></i>
+    </button>
+    <span class="conversation-anomaly-badge ${summary.dominantSeverity}" aria-label="${escapeHtml(formatConversationAnomalyTitle(conv, summary))}">
       <span>${formatNumber(conv.anomalies)}</span>
       <small>${escapeHtml(summary.dominantSeverity)}</small>
-    </button>
-    <div class="conversation-insight-popover ${state.openConversationInsightKey === conv.key ? "open" : ""}" ${pos}>
-      <div class="conversation-insight-head">
-        <span class="tooltip-kicker">Conversation anomaly lens</span>
-        <strong>${formatNumber(conv.anomalies)} signal(s) on this flow</strong>
-        <small>${escapeHtml(conv.local)} -> ${escapeHtml(conv.peer)}</small>
+    </span>
+    <div class="conversation-insight-popover ${state.openConversationInsightKey === conv.key ? "open" : ""}" ${pos} role="dialog" aria-label="Conversation anomaly details">
+      <div class="conversation-insight-titlebar">
+        <div class="conversation-insight-head">
+          <span class="tooltip-kicker">Conversation anomaly lens</span>
+          <strong>${formatNumber(conv.anomalies)} signal(s) on this flow</strong>
+          <small>${escapeHtml(conv.local)} -> ${escapeHtml(conv.peer)}</small>
+        </div>
+        <button class="icon mini" data-conversation-close title="Close anomaly dialog" aria-label="Close anomaly dialog">${icons.x}</button>
       </div>
       <div class="conversation-severity-strip">
         ${counts.map(([severity, count]) => `<span class="${severity}"><b>${escapeHtml(severity)}</b>${formatNumber(count)}</span>`).join("")}
@@ -2389,11 +2398,14 @@ function formatConversationAnomalyTitle(conv, summary) {
 function positionConversationInsight(button) {
   const key = button.dataset.conversationInsight;
   const rect = button.getBoundingClientRect();
-  const panelWidth = 420;
-  const panelHeight = 420;
-  const left = Math.min(Math.max(8, rect.left - 12), window.innerWidth - panelWidth - 8);
-  const preferBelow = rect.bottom + panelHeight + 8 <= window.innerHeight;
-  const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - panelHeight - 6);
+  const rowRect = button.closest("tr")?.getBoundingClientRect() || rect;
+  const panelWidth = Math.min(620, window.innerWidth - 16);
+  const panelHeight = Math.min(520, window.innerHeight - 16);
+  const rightSideLeft = rect.right + 12;
+  const leftSideLeft = rect.left - panelWidth - 12;
+  const preferredLeft = rightSideLeft + panelWidth <= window.innerWidth - 8 ? rightSideLeft : leftSideLeft;
+  const left = Math.min(Math.max(8, preferredLeft), window.innerWidth - panelWidth - 8);
+  const top = Math.min(Math.max(8, rowRect.top - 12), window.innerHeight - panelHeight - 8);
   state.openConversationInsightKey = key;
   state.openConversationInsightPos = { left: Math.round(left), top: Math.round(top) };
 }
@@ -4389,16 +4401,6 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-conversation-insight]").forEach(btn => {
-    btn.addEventListener("pointerenter", event => {
-      const key = event.currentTarget.dataset.conversationInsight;
-      if (state.openConversationInsightKey === key) return;
-      positionConversationInsight(event.currentTarget);
-      render();
-    });
-    btn.addEventListener("focus", event => {
-      positionConversationInsight(event.currentTarget);
-      render();
-    });
     btn.addEventListener("click", event => {
       event.stopPropagation();
       const key = event.currentTarget.dataset.conversationInsight;
@@ -4408,9 +4410,18 @@ function bindEvents() {
       } else {
         positionConversationInsight(event.currentTarget);
       }
-      render();
+      renderKeepingWorkspacePosition();
     });
   });
+  document.querySelectorAll(".conversation-insight-popover").forEach(popover => popover.addEventListener("click", event => {
+    event.stopPropagation();
+  }));
+  document.querySelectorAll("[data-conversation-close]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    state.openConversationInsightKey = null;
+    state.openConversationInsightPos = null;
+    renderKeepingWorkspacePosition();
+  }));
   document.querySelectorAll("[data-conversation-action]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     const socket = state.sockets.find(s => s.id === event.currentTarget.dataset.socketId);

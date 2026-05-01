@@ -1428,10 +1428,29 @@ th:focus-within .column-tooltip,
 .conversation-anomaly-cell {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 .conversation-anomaly-zero {
   color: var(--muted);
   font-weight: 800;
+}
+.conversation-anomaly-trigger {
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-color: rgba(124, 226, 255, .45);
+  background: linear-gradient(180deg, #172538, #0d1520);
+  color: var(--cyan);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.conversation-anomaly-trigger:hover,
+.conversation-anomaly-trigger:focus {
+  border-color: rgba(57, 214, 214, .9);
+  background: linear-gradient(180deg, #1f3650, #101a27);
+  box-shadow: 0 0 0 3px rgba(57, 214, 214, .12);
 }
 .conversation-anomaly-badge {
   min-height: 30px;
@@ -1441,11 +1460,6 @@ th:focus-within .column-tooltip,
   padding: 0 9px;
   border-radius: 999px;
   font-weight: 900;
-}
-.conversation-anomaly-badge:hover,
-.conversation-anomaly-badge:focus {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, .26);
 }
 .conversation-anomaly-badge span {
   color: var(--text);
@@ -1473,23 +1487,31 @@ th:focus-within .column-tooltip,
 }
 .conversation-insight-popover {
   position: fixed;
-  z-index: 95;
+  z-index: 140;
   display: none;
-  width: min(420px, calc(100vw - 16px));
+  width: min(620px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow: auto;
-  padding: 12px;
-  border: 1px solid rgba(93, 183, 255, .45);
-  border-top: 3px solid var(--cyan);
-  border-radius: 8px;
+  padding: 14px;
+  border: 1px solid rgba(124, 226, 255, .52);
+  border-top: 4px solid var(--cyan);
+  border-radius: 10px;
   background:
-    radial-gradient(circle at 18% 0%, rgba(57, 214, 214, .12), transparent 34%),
-    linear-gradient(180deg, #101926, #070b11);
-  box-shadow: var(--shadow);
+    radial-gradient(circle at 18% 0%, rgba(57, 214, 214, .16), transparent 36%),
+    linear-gradient(180deg, #111b28, #070b11);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .62), 0 0 0 1px rgba(57, 214, 214, .08);
 }
 .conversation-insight-popover.open {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+}
+.conversation-insight-titlebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(124, 226, 255, .18);
 }
 .conversation-insight-head {
   display: grid;
