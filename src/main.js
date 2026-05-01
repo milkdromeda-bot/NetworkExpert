@@ -2259,7 +2259,7 @@ function renderConversationAnomalyCell(conv) {
     : "";
   const counts = Object.entries(summary.counts).filter(([, count]) => count);
   return `<div class="conversation-anomaly-cell">
-    <button class="conversation-anomaly-badge ${summary.dominantSeverity}" data-conversation-insight="${escapeHtml(conv.key)}" title="${escapeHtml(formatConversationAnomalyTitle(conv, summary))}">
+    <button class="conversation-anomaly-badge ${summary.dominantSeverity}" data-conversation-insight="${escapeHtml(conv.key)}" aria-label="${escapeHtml(formatConversationAnomalyTitle(conv, summary))}">
       <span>${formatNumber(conv.anomalies)}</span>
       <small>${escapeHtml(summary.dominantSeverity)}</small>
     </button>
@@ -2294,6 +2294,18 @@ function formatConversationAnomalyTitle(conv, summary) {
   const counts = Object.entries(summary.counts).filter(([, count]) => count).map(([severity, count]) => `${severity}: ${count}`).join(", ");
   const top = summary.topItems[0];
   return `${conv.anomalies} anomalies (${counts}). Top: ${top?.title || "none"}`;
+}
+
+function positionConversationInsight(button) {
+  const key = button.dataset.conversationInsight;
+  const rect = button.getBoundingClientRect();
+  const panelWidth = 420;
+  const panelHeight = 420;
+  const left = Math.min(Math.max(8, rect.left - 12), window.innerWidth - panelWidth - 8);
+  const preferBelow = rect.bottom + panelHeight + 8 <= window.innerHeight;
+  const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - panelHeight - 6);
+  state.openConversationInsightKey = key;
+  state.openConversationInsightPos = { left: Math.round(left), top: Math.round(top) };
 }
 
 function renderPeerEndpoint(endpoint) {
@@ -4240,24 +4252,29 @@ function bindEvents() {
     }
     render();
   }));
-  document.querySelectorAll("[data-conversation-insight]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const key = event.currentTarget.dataset.conversationInsight;
-    if (state.openConversationInsightKey === key) {
-      state.openConversationInsightKey = null;
-      state.openConversationInsightPos = null;
-    } else {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const panelWidth = 420;
-      const panelHeight = 420;
-      const left = Math.min(Math.max(8, rect.left - 12), window.innerWidth - panelWidth - 8);
-      const preferBelow = rect.bottom + panelHeight + 8 <= window.innerHeight;
-      const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - panelHeight - 6);
-      state.openConversationInsightKey = key;
-      state.openConversationInsightPos = { left: Math.round(left), top: Math.round(top) };
-    }
-    render();
-  }));
+  document.querySelectorAll("[data-conversation-insight]").forEach(btn => {
+    btn.addEventListener("pointerenter", event => {
+      const key = event.currentTarget.dataset.conversationInsight;
+      if (state.openConversationInsightKey === key) return;
+      positionConversationInsight(event.currentTarget);
+      render();
+    });
+    btn.addEventListener("focus", event => {
+      positionConversationInsight(event.currentTarget);
+      render();
+    });
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
+      const key = event.currentTarget.dataset.conversationInsight;
+      if (state.openConversationInsightKey === key) {
+        state.openConversationInsightKey = null;
+        state.openConversationInsightPos = null;
+      } else {
+        positionConversationInsight(event.currentTarget);
+      }
+      render();
+    });
+  });
   document.querySelectorAll("[data-conversation-action]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     const socket = state.sockets.find(s => s.id === event.currentTarget.dataset.socketId);

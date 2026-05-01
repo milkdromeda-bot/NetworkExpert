@@ -1442,6 +1442,11 @@ th:focus-within .column-tooltip,
   border-radius: 999px;
   font-weight: 900;
 }
+.conversation-anomaly-badge:hover,
+.conversation-anomaly-badge:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, .26);
+}
 .conversation-anomaly-badge span {
   color: var(--text);
 }
