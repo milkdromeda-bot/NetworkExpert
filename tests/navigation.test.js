@@ -1,0 +1,69 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { applyContextAction } from "../src/navigation.js";
+
+function baseState() {
+  return {
+    selectedId: "socket-a",
+    drawer: null,
+    openConversationInsightKey: "flow-a",
+    openConversationInsightPos: { left: 10, top: 20 },
+    view: "analysis",
+    activeTab: "sockets",
+    prefs: { graphMetric: "rtt" },
+    chartMetrics: ["rtt"],
+    anomalyFilters: { severity: "high", metric: "rtt", text: "old", sort: "metric" },
+    table: {
+      page: 3,
+      filters: {
+        text: "state:ESTAB",
+        risk: "all",
+        state: "all",
+        family: "all",
+        minRecvQ: "",
+        minSendQ: "",
+        minRtt: "",
+        srcIp: "192.168.145.205",
+        dstIp: "192.168.145.115",
+        srcPort: "20002",
+        dstPort: "41476",
+        process: "java",
+        onlyAnomalies: true
+      }
+    }
+  };
+}
+
+const socket = {
+  id: "socket-a",
+  localAddress: { host: "192.168.145.205", port: "20002" },
+  peerAddress: { host: "192.168.145.115", port: "41476" }
+};
+
+test("context Conversations navigates without preserving endpoint filters", () => {
+  const state = baseState();
+
+  applyContextAction(state, "conversations", socket);
+
+  assert.equal(state.view, "analysis");
+  assert.equal(state.activeTab, "conversations");
+  assert.equal(state.table.page, 1);
+  assert.equal(state.table.filters.srcIp, "");
+  assert.equal(state.table.filters.dstIp, "");
+  assert.equal(state.table.filters.srcPort, "");
+  assert.equal(state.table.filters.dstPort, "");
+  assert.equal(state.table.filters.text, "");
+  assert.equal(state.table.filters.process, "");
+  assert.equal(state.table.filters.onlyAnomalies, false);
+  assert.equal(state.table.filters.risk, "all");
+});
+
+test("context Charts adds the suggested metric without removing existing charts", () => {
+  const state = baseState();
+
+  applyContextAction(state, "charts", socket, { chartMetrics: ["rtt", "skmem.d"], suggestedMetric: "skmem.d" });
+
+  assert.equal(state.view, "charts");
+  assert.equal(state.prefs.graphMetric, "skmem.d");
+  assert.deepEqual(state.chartMetrics, ["skmem.d", "rtt"]);
+});

@@ -8,6 +8,7 @@ import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTe
 import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot } from "./compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
+import { applyContextAction } from "./navigation.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -4334,41 +4335,8 @@ function bindEvents() {
   document.querySelectorAll("[data-context-action]").forEach(btn => btn.addEventListener("click", event => {
     const action = event.currentTarget.dataset.contextAction;
     const socket = selectedSocket();
-    if (action === "clear") {
-      state.selectedId = null;
-      state.drawer = null;
-      state.openConversationInsightKey = null;
-      state.openConversationInsightPos = null;
-      renderKeepingWorkspacePosition();
-      return;
-    }
-    if (!socket) return;
-    state.selectedId = socket.id;
-    state.openConversationInsightKey = null;
-    state.openConversationInsightPos = null;
-    if (action === "details") {
-      state.drawer = "details";
-    }
-    if (action === "charts") {
-      state.view = "charts";
-      const suggested = state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric;
-      if (suggested && chartMetricList().includes(suggested)) {
-        state.prefs.graphMetric = suggested;
-        state.chartMetrics = [...new Set([suggested, ...state.chartMetrics])];
-      }
-    }
-    if (action === "anomalies") {
-      state.view = "analysis";
-      state.activeTab = "anomalies";
-      state.anomalyFilters = { ...state.anomalyFilters, severity: "all", metric: "all", text: socket.id, sort: "priority" };
-    }
-    if (action === "conversations") {
-      state.view = "analysis";
-      state.activeTab = "conversations";
-      state.table.filters.srcIp = socket.localAddress.host || state.table.filters.srcIp;
-      state.table.filters.dstIp = socket.peerAddress.host || state.table.filters.dstIp;
-      state.table.page = 1;
-    }
+    const suggestedMetric = socket ? state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric : null;
+    applyContextAction(state, action, socket, { chartMetrics: chartMetricList(), suggestedMetric });
     renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-pref-tab]").forEach(btn => btn.addEventListener("click", event => {
