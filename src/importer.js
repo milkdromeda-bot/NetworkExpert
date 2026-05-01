@@ -60,7 +60,7 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
   const decoder = new TextDecoder();
   const reader = stream.getReader();
   const sockets = [];
-  const filterContext = { pendingTimestamp: "" };
+  const filterContext = { pendingTimestamp: "", currentBlock: [] };
   let buffer = "";
   let readBytes = 0;
   let preview = "";
@@ -126,6 +126,7 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
     const filteredRaw = appendParsedLines(sockets, batch, maxSockets, activePreFilter, filterContext);
     if (activePreFilter) appendKeptRaw(filteredRaw);
   }
+  if (activePreFilter) appendKeptRaw(flushPreFilterBlock(sockets, maxSockets, activePreFilter, filterContext));
   return { raw: keptRaw, sockets, sourceName: label };
 }
 
@@ -143,23 +144,43 @@ function appendPreFilteredLines(target, lines, maxSockets, preFilter, context) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     if (parseTimestampLine(trimmed) != null) {
+      const flushed = flushPreFilterBlock(target, maxSockets, preFilter, context);
+      if (flushed) kept.push(flushed.trimEnd());
       context.pendingTimestamp = line;
       continue;
     }
     if (/^(State|Netid)\b/i.test(trimmed) || /^Socket\s+/.test(trimmed) || /^Command to be executed:/i.test(trimmed)) continue;
-    const parsed = applyRisks(parseSs(line));
-    const filtered = parsed.filter(socket => socketMatchesPreFilter(socket, preFilter));
-    if (!filtered.length) continue;
-    const remaining = Math.max(0, maxSockets - target.length);
-    if (remaining <= 0) break;
-    if (context.pendingTimestamp) {
-      kept.push(context.pendingTimestamp);
-      context.pendingTimestamp = "";
+    if (isSocketStartLine(trimmed)) {
+      const flushed = flushPreFilterBlock(target, maxSockets, preFilter, context);
+      if (flushed) kept.push(flushed.trimEnd());
+      context.currentBlock = [line];
+      continue;
     }
-    kept.push(line);
-    target.push(...filtered.slice(0, remaining));
+    if (context.currentBlock?.length) context.currentBlock.push(line);
   }
   return kept.length ? `${kept.join("\n")}\n` : "";
+}
+
+function flushPreFilterBlock(target, maxSockets, preFilter, context) {
+  const block = context.currentBlock || [];
+  context.currentBlock = [];
+  if (!block.length) return "";
+  const parsed = applyRisks(parseSs(block.join("\n")));
+  const filtered = parsed.filter(socket => socketMatchesPreFilter(socket, preFilter));
+  if (!filtered.length) return "";
+  const remaining = Math.max(0, maxSockets - target.length);
+  if (remaining <= 0) return "";
+  target.push(...filtered.slice(0, remaining));
+  const prefix = context.pendingTimestamp ? `${context.pendingTimestamp}\n` : "";
+  context.pendingTimestamp = "";
+  return `${prefix}${block.join("\n")}\n`;
+}
+
+function isSocketStartLine(line) {
+  const parts = line.split(/\s+/);
+  const hasStateHead = parts.length >= 5 && /^[A-Z-]+|UNCONN|ESTAB|LISTEN|TIME-WAIT|CLOSE-WAIT/i.test(parts[0]) && /^-?\d+$/.test(parts[1]);
+  const hasNetidHead = parts.length >= 6 && /^[a-z_][\w-]*$/i.test(parts[0]) && /^[A-Z-]+|UNCONN|ESTAB|LISTEN|TIME-WAIT|CLOSE-WAIT/i.test(parts[1]) && /^-?\d+$/.test(parts[2]);
+  return hasStateHead || hasNetidHead;
 }
 
 function socketMatchesPreFilter(socket, f) {

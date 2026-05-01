@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check": "node --check server.js && node --check src/main.js"
+    "check": "node --check server.js && node --check src/main.js && node --check src/importer.js && node --check src/parser.js && node --check src/analysis.js && node --check src/alerts.js && node --check src/compare.js && node --check src/profiles.js && node --check src/search.js && node --check src/ip-intel.js"
   },
   "keywords": [
     "ss",
