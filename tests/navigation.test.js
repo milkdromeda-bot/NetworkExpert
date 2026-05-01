@@ -67,3 +67,34 @@ test("context Charts adds the suggested metric without removing existing charts"
   assert.equal(state.prefs.graphMetric, "skmem.d");
   assert.deepEqual(state.chartMetrics, ["skmem.d", "rtt"]);
 });
+
+test("context Charts ignores unknown suggested metrics", () => {
+  const state = baseState();
+
+  applyContextAction(state, "charts", socket, { chartMetrics: ["rtt", "skmem.d"], suggestedMetric: "not_a_metric" });
+
+  assert.equal(state.view, "charts");
+  assert.equal(state.prefs.graphMetric, "rtt");
+  assert.deepEqual(state.chartMetrics, ["rtt"]);
+});
+
+test("context Anomalies scopes the anomaly list to the active socket id", () => {
+  const state = baseState();
+
+  applyContextAction(state, "anomalies", socket);
+
+  assert.equal(state.view, "analysis");
+  assert.equal(state.activeTab, "anomalies");
+  assert.deepEqual(state.anomalyFilters, { severity: "all", metric: "all", text: "socket-a", sort: "priority" });
+});
+
+test("context Clear removes active socket and open dialog state", () => {
+  const state = baseState();
+
+  applyContextAction(state, "clear", socket);
+
+  assert.equal(state.selectedId, null);
+  assert.equal(state.drawer, null);
+  assert.equal(state.openConversationInsightKey, null);
+  assert.equal(state.openConversationInsightPos, null);
+});

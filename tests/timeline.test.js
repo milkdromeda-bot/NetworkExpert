@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { parseSs } from "../src/parser.js";
-import { aggregateTimestampedSockets, timestampBlocks } from "../src/timeline.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, socketKey, timestampBlocks } from "../src/timeline.js";
 
 const lightSample = readFileSync(new URL("../samples/lplalo-light.log", import.meta.url), "utf8");
 
@@ -35,4 +35,58 @@ test("non timestamped captures are not collapsed by endpoint", () => {
   assert.equal(sockets.length, 2);
   assert.equal(sockets[0].details.values.rtt.avg, 1.5);
   assert.equal(sockets[1].details.values.rtt.avg, 2.5);
+});
+
+test("timestamp blocks ignore preamble and keep socket lines under the right timestamp", () => {
+  const raw = [
+    "Command to be executed: ss -ti",
+    "--- 2026-04-27 16:24:13 ---",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1",
+    "--- 2026-04-27 16:24:14 ---",
+    "ESTAB 0 0 10.0.0.3:1001 10.0.0.4:80 rtt:2/0.2"
+  ].join("\n");
+
+  const blocks = timestampBlocks(raw);
+
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].lines.length, 1);
+  assert.equal(blocks[1].lines[0].includes("10.0.0.3:1001"), true);
+});
+
+test("timestamped aggregation keeps latest values while preserving first and last observation", () => {
+  const raw = [
+    "--- 2026-04-27 16:24:13 ---",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1 cwnd:7",
+    "--- 2026-04-27 16:24:14 ---",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:5/0.2 cwnd:11"
+  ].join("\n");
+
+  const [socket] = aggregateTimestampedSockets(raw);
+
+  assert.equal(socket.snapshotCount, 2);
+  assert.equal(socket.details.values.rtt.avg, 5);
+  assert.equal(socket.details.values.cwnd, 11);
+  assert.ok(socket.lastSeenMs > socket.firstSeenMs);
+});
+
+test("streamed progress aggregation collapses repeated parsed sockets by key", () => {
+  const sockets = parseSs([
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:2/0.2",
+    "ESTAB 0 0 10.0.0.1:1001 10.0.0.3:443 rtt:3/0.3"
+  ].join("\n"));
+
+  const aggregated = aggregateParsedSocketsByKey(sockets);
+
+  assert.equal(aggregated.length, 2);
+  assert.equal(aggregated.find(socket => socket.local.endsWith(":1000")).snapshotCount, 2);
+});
+
+test("socket keys distinguish state for the same endpoints", () => {
+  const [a, b] = parseSs([
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1",
+    "CLOSE-WAIT 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1"
+  ].join("\n"));
+
+  assert.notEqual(socketKey(a), socketKey(b));
 });
