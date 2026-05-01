@@ -1608,6 +1608,7 @@ function render() {
           <button class="danger" data-action="resetAll">${icons.x} Reset all</button>
         </div>
       </header>
+      ${renderInvestigationContext()}
       ${state.view === "ingest" ? `<main class="workspace wide">${renderIngestPage()}</main>` : ""}
       ${state.view === "analysis" ? `<main class="workspace wide">${renderAnalysisPage()}</main>` : ""}
       ${state.view === "charts" ? `<main class="workspace wide">${renderChartsPage()}</main>` : ""}
@@ -1622,6 +1623,50 @@ function render() {
   drawCorrelation();
   scheduleAnomalyBadgeSettle();
   scheduleIpIntelEnrichment();
+}
+
+function selectedSocket() {
+  return state.selectedId ? state.sockets.find(socket => socket.id === state.selectedId) || null : null;
+}
+
+function renderInvestigationContext() {
+  const socket = selectedSocket();
+  if (!socket) return "";
+  const socketAnomalies = state.anomalies.filter(anomaly => anomaly.socketId === socket.id);
+  const topAnomaly = socketAnomalies
+    .slice()
+    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))[0];
+  const process = socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "unknown process";
+  return `<section class="investigation-context" aria-label="Active investigation context">
+    <div class="investigation-main">
+      <span class="tooltip-kicker">Active investigation</span>
+      <div class="investigation-flow">
+        <strong>${escapeHtml(socket.local)}</strong>
+        <span>${icons.arrowRight}</span>
+        <strong>${escapeHtml(socket.peer)}</strong>
+      </div>
+      <small>${escapeHtml(socket.family || "socket")} / ${escapeHtml(socket.state)} / ${escapeHtml(process)}</small>
+    </div>
+    <div class="investigation-metrics">
+      <span><b class="risk ${socket.risk}">${escapeHtml(socket.risk)}</b><small>risk</small></span>
+      <span><b>${formatNumber(socketAnomalies.length)}</b><small>anomalies</small></span>
+      <span><b>${formatMetricValue("rtt", metricValue(socket, "rtt"))}</b><small>RTT</small></span>
+      <span><b>${formatMetricValue("rto", metricValue(socket, "rto"))}</b><small>RTO</small></span>
+      <span><b>${formatMetricValue("tx_bps", socketBandwidth(socket, "tx_bps"))}</b><small>TX</small></span>
+      <span><b>${formatMetricValue("rx_bps", socketBandwidth(socket, "rx_bps"))}</b><small>RX</small></span>
+    </div>
+    <div class="investigation-actions">
+      <button data-context-action="details">${icons.activity} Details</button>
+      <button data-context-action="charts">${icons.chart} Charts</button>
+      <button data-context-action="anomalies" class="${socketAnomalies.length ? "hot-action" : ""}">${icons.alert} Anomalies</button>
+      <button data-context-action="conversations"><i class="ri-chat-3-line"></i> Conversations</button>
+      <button class="icon" data-context-action="clear" title="Clear active context" aria-label="Clear active context">${icons.x}</button>
+    </div>
+    ${topAnomaly ? `<div class="investigation-note ${topAnomaly.severity}">
+      <b>${escapeHtml(topAnomaly.severity)}</b>
+      <span>${escapeHtml(topAnomaly.title)}</span>
+    </div>` : ""}
+  </section>`;
 }
 
 function renderKeepingWorkspacePosition() {
@@ -4349,6 +4394,46 @@ function bindEvents() {
   document.querySelectorAll("[data-view]").forEach(btn => btn.addEventListener("click", event => {
     state.view = event.currentTarget.dataset.view;
     render();
+  }));
+  document.querySelectorAll("[data-context-action]").forEach(btn => btn.addEventListener("click", event => {
+    const action = event.currentTarget.dataset.contextAction;
+    const socket = selectedSocket();
+    if (action === "clear") {
+      state.selectedId = null;
+      state.drawer = null;
+      state.openConversationInsightKey = null;
+      state.openConversationInsightPos = null;
+      renderKeepingWorkspacePosition();
+      return;
+    }
+    if (!socket) return;
+    state.selectedId = socket.id;
+    state.openConversationInsightKey = null;
+    state.openConversationInsightPos = null;
+    if (action === "details") {
+      state.drawer = "details";
+    }
+    if (action === "charts") {
+      state.view = "charts";
+      const suggested = state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric;
+      if (suggested && chartMetricList().includes(suggested)) {
+        state.prefs.graphMetric = suggested;
+        state.chartMetrics = [...new Set([suggested, ...state.chartMetrics])];
+      }
+    }
+    if (action === "anomalies") {
+      state.view = "analysis";
+      state.activeTab = "anomalies";
+      state.anomalyFilters = { ...state.anomalyFilters, severity: "all", metric: "all", text: socket.id, sort: "priority" };
+    }
+    if (action === "conversations") {
+      state.view = "analysis";
+      state.activeTab = "conversations";
+      state.table.filters.srcIp = socket.localAddress.host || state.table.filters.srcIp;
+      state.table.filters.dstIp = socket.peerAddress.host || state.table.filters.dstIp;
+      state.table.page = 1;
+    }
+    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-pref-tab]").forEach(btn => btn.addEventListener("click", event => {
     state.prefsTab = event.currentTarget.dataset.prefTab;

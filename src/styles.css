@@ -156,10 +156,10 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   height: 100vh;
   display: grid;
   grid-template-columns: 76px minmax(320px, 420px) minmax(0, 1fr) minmax(290px, 360px);
-  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-rows: 64px auto minmax(0, 1fr);
 }
 .rail {
-  grid-row: 1 / span 2;
+  grid-row: 1 / span 3;
   background:
     linear-gradient(180deg, rgba(57, 214, 214, .05), transparent 22%),
     #070a10;
@@ -496,6 +496,116 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 18px var(--green); }
 
+.investigation-context {
+  grid-column: 2 / span 3;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(260px, 1.35fr) minmax(360px, 1.6fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(38, 50, 65, .78);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(57, 214, 214, .12), transparent 34%),
+    linear-gradient(180deg, #0d141f, #080d14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.investigation-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.investigation-flow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: var(--text);
+}
+.investigation-flow strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.investigation-flow span {
+  color: var(--cyan);
+  flex: 0 0 auto;
+}
+.investigation-main small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.investigation-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(72px, 1fr));
+  gap: 7px;
+}
+.investigation-metrics span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid rgba(113, 143, 173, .24);
+  border-radius: 8px;
+  background: rgba(5, 9, 16, .62);
+}
+.investigation-metrics b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: 12px;
+}
+.investigation-metrics small {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.investigation-actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.investigation-actions button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+.investigation-actions .hot-action {
+  border-color: rgba(255, 92, 119, .58);
+  background: linear-gradient(135deg, rgba(91, 22, 36, .95), rgba(15, 18, 27, .96));
+}
+.investigation-note {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid rgba(113, 143, 173, .22);
+  border-left: 3px solid var(--yellow);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .025);
+  color: var(--soft);
+  font-size: 12px;
+}
+.investigation-note.critical { border-left-color: var(--red); }
+.investigation-note.high { border-left-color: var(--orange); }
+.investigation-note.medium { border-left-color: var(--yellow); }
+.investigation-note.low { border-left-color: var(--green); }
+.investigation-note b {
+  text-transform: uppercase;
+  color: var(--text);
+}
+.investigation-note span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .left-pane, .right-pane, .workspace {
   min-height: 0;
   overflow: auto;
@@ -511,6 +621,7 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   padding: 16px;
 }
 .workspace {
+  grid-row: 3;
   background:
     radial-gradient(circle at 18% -10%, rgba(93, 183, 255, 0.12), transparent 26%),
     linear-gradient(180deg, #080c13, #05070b 42%);
@@ -2898,6 +3009,12 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .app-shell { grid-template-columns: 62px minmax(300px, 370px) minmax(0, 1fr); }
   .right-pane { display: none; }
   .topbar { grid-column: 2 / span 2; }
+  .investigation-context {
+    grid-column: 2 / span 2;
+    grid-template-columns: 1fr;
+  }
+  .investigation-metrics { grid-template-columns: repeat(3, minmax(72px, 1fr)); }
+  .investigation-actions { justify-content: flex-start; }
   .workspace.wide,
   .view-ingest .workspace,
   .view-analysis .workspace,
@@ -2914,7 +3031,13 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   body { overflow: auto; }
   .app-shell { height: auto; min-height: 100vh; grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
   .rail { grid-row: auto; flex-direction: row; width: 100%; border-right: 0; border-bottom: 1px solid var(--line); }
-  .topbar, .left-pane, .workspace { grid-column: 1; }
+  .topbar, .investigation-context, .left-pane, .workspace { grid-column: 1; }
+  .investigation-context {
+    grid-row: auto;
+    padding: 10px;
+  }
+  .workspace { grid-row: auto; }
+  .investigation-metrics { grid-template-columns: repeat(2, minmax(80px, 1fr)); }
   .left-pane { border-right: 0; border-bottom: 1px solid var(--line); }
   .workspace.wide,
   .view-ingest .workspace,
