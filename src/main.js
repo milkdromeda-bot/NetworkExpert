@@ -278,6 +278,8 @@ let state = {
   statsMetric: null,
   helpColumn: null,
   openMenuPos: null,
+  openConversationInsightKey: null,
+  openConversationInsightPos: null,
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
   correlation: { x: "rtt", y: "sendQ" },
@@ -1055,6 +1057,10 @@ function riskRank(risk) {
   return { low: 1, medium: 2, high: 3, critical: 4 }[risk] || 0;
 }
 
+function severityRank(severity) {
+  return { low: 1, medium: 2, high: 3, critical: 4 }[severity] || 0;
+}
+
 function getColumn(key) {
   return TABLE_COLUMNS.find(col => col.key === key) || TABLE_COLUMNS[0];
 }
@@ -1219,8 +1225,19 @@ function conversationKey(socket) {
   return `${socket.localAddress.host || socket.local}|${socket.localAddress.port || ""}|${socket.peerAddress.host || socket.peer}|${socket.peerAddress.port || ""}|${socket.family}`;
 }
 
+function anomaliesBySocketId() {
+  const map = new Map();
+  for (const anomaly of state.anomalies) {
+    if (!anomaly.socketId) continue;
+    if (!map.has(anomaly.socketId)) map.set(anomaly.socketId, []);
+    map.get(anomaly.socketId).push(anomaly);
+  }
+  return map;
+}
+
 function buildConversations() {
   const map = new Map();
+  const anomalyMap = anomaliesBySocketId();
   for (const socket of sortedFilteredSockets()) {
     const key = conversationKey(socket);
     if (!map.has(key)) {
@@ -1241,15 +1258,18 @@ function buildConversations() {
         rxBps: 0,
         maxRtt: 0,
         maxRto: 0,
-        drops: 0
+        drops: 0,
+        anomalyItems: []
       });
     }
     const conv = map.get(key);
+    const socketAnomalies = anomalyMap.get(socket.id) || [];
     conv.count += 1;
     conv.states.add(socket.state);
     if (socket.details.process?.name) conv.processes.add(socket.details.process.name);
     conv.maxRisk = riskRank(socket.risk) > riskRank(conv.maxRisk) ? socket.risk : conv.maxRisk;
-    conv.anomalies += state.anomalies.filter(a => a.socketId === socket.id).length;
+    conv.anomalies += socketAnomalies.length;
+    conv.anomalyItems.push(...socketAnomalies);
     conv.recvQ += socket.recvQ;
     conv.sendQ += socket.sendQ;
     conv.txBps += socketBandwidth(socket, "tx_bps");
@@ -1264,6 +1284,25 @@ function buildConversations() {
     b.sendQ - a.sendQ ||
     b.txBps - a.txBps
   );
+}
+
+function conversationAnomalySummary(conv) {
+  const items = conv.anomalyItems || [];
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  const byMetric = new Map();
+  const byTitle = new Map();
+  for (const item of items) {
+    counts[item.severity] = (counts[item.severity] || 0) + 1;
+    const metric = item.metric || "socket";
+    byMetric.set(metric, (byMetric.get(metric) || 0) + 1);
+    const key = `${item.severity}|${item.title}|${metric}`;
+    if (!byTitle.has(key)) byTitle.set(key, { ...item, count: 0 });
+    byTitle.get(key).count += 1;
+  }
+  const dominantSeverity = ["critical", "high", "medium", "low"].find(severity => counts[severity]) || "low";
+  const topMetric = [...byMetric.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "rtt";
+  const topItems = [...byTitle.values()].sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || b.count - a.count || a.title.localeCompare(b.title)).slice(0, 4);
+  return { counts, dominantSeverity, topMetric, topItems, metrics: [...byMetric.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) };
 }
 
 function buildExpertInformation() {
@@ -2198,7 +2237,7 @@ function renderConversations() {
         <td><span class="badge ${c.family.includes("udp") ? "udp" : "tcp"}">${escapeHtml(c.family)}</span> ${[...c.states].map(stateName => `<span class="badge ${stateName === "LISTEN" ? "listen" : ""}">${escapeHtml(stateName)}</span>`).join(" ")}</td>
         <td>${escapeHtml([...c.processes].slice(0, 3).join(", ") || "-")}</td>
         <td>${formatNumber(c.count)}</td>
-        <td>${formatNumber(c.anomalies)}</td>
+        <td>${renderConversationAnomalyCell(c)}</td>
         <td>${renderTableMetricCell("tx_bps", c.txBps)}</td>
         <td>${renderTableMetricCell("rx_bps", c.rxBps)}</td>
         <td>${renderTableMetricCell("sendQ", c.sendQ)}</td>
@@ -2210,6 +2249,51 @@ function renderConversations() {
     </table></div>
     ${bottomPager}
   </div>`;
+}
+
+function renderConversationAnomalyCell(conv) {
+  if (!conv.anomalies) return `<span class="conversation-anomaly-zero">0</span>`;
+  const summary = conversationAnomalySummary(conv);
+  const pos = state.openConversationInsightKey === conv.key && state.openConversationInsightPos
+    ? `style="left:${state.openConversationInsightPos.left}px;top:${state.openConversationInsightPos.top}px"`
+    : "";
+  const counts = Object.entries(summary.counts).filter(([, count]) => count);
+  return `<div class="conversation-anomaly-cell">
+    <button class="conversation-anomaly-badge ${summary.dominantSeverity}" data-conversation-insight="${escapeHtml(conv.key)}" title="${escapeHtml(formatConversationAnomalyTitle(conv, summary))}">
+      <span>${formatNumber(conv.anomalies)}</span>
+      <small>${escapeHtml(summary.dominantSeverity)}</small>
+    </button>
+    <div class="conversation-insight-popover ${state.openConversationInsightKey === conv.key ? "open" : ""}" ${pos}>
+      <div class="conversation-insight-head">
+        <span class="tooltip-kicker">Conversation anomaly lens</span>
+        <strong>${formatNumber(conv.anomalies)} signal(s) on this flow</strong>
+        <small>${escapeHtml(conv.local)} -> ${escapeHtml(conv.peer)}</small>
+      </div>
+      <div class="conversation-severity-strip">
+        ${counts.map(([severity, count]) => `<span class="${severity}"><b>${escapeHtml(severity)}</b>${formatNumber(count)}</span>`).join("")}
+      </div>
+      <div class="conversation-metric-strip">
+        ${summary.metrics.map(([metric, count]) => `<em>${escapeHtml(metricLabel(metric))}<b>${formatNumber(count)}</b></em>`).join("")}
+      </div>
+      <div class="conversation-anomaly-list">
+        ${summary.topItems.map(item => `<article class="${item.severity}">
+          <header><span class="risk ${item.severity}">${escapeHtml(item.severity)}</span><b>${escapeHtml(item.title)}</b><em>${escapeHtml(metricLabel(item.metric || "socket"))}${item.count > 1 ? ` x${formatNumber(item.count)}` : ""}</em></header>
+          <p>${escapeHtml(item.detail)}</p>
+        </article>`).join("")}
+      </div>
+      <footer>
+        <button data-conversation-action="chart" data-socket-id="${escapeHtml(conv.socket.id)}" data-metric="${escapeHtml(summary.topMetric)}">${icons.chart} Open charts</button>
+        <button data-conversation-action="details" data-socket-id="${escapeHtml(conv.socket.id)}">${icons.focus} Socket context</button>
+        <button data-conversation-action="anomalies" data-socket-id="${escapeHtml(conv.socket.id)}" data-metric="${escapeHtml(summary.topMetric)}">${icons.alert} Details</button>
+      </footer>
+    </div>
+  </div>`;
+}
+
+function formatConversationAnomalyTitle(conv, summary) {
+  const counts = Object.entries(summary.counts).filter(([, count]) => count).map(([severity, count]) => `${severity}: ${count}`).join(", ");
+  const top = summary.topItems[0];
+  return `${conv.anomalies} anomalies (${counts}). Top: ${top?.title || "none"}`;
 }
 
 function renderPeerEndpoint(endpoint) {
@@ -3503,6 +3587,8 @@ function resetAllState() {
   state.modal = null;
   state.statsMetric = null;
   state.openMenuPos = null;
+  state.openConversationInsightKey = null;
+  state.openConversationInsightPos = null;
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
   state.correlation = { x: "rtt", y: "sendQ" };
@@ -4154,6 +4240,54 @@ function bindEvents() {
     }
     render();
   }));
+  document.querySelectorAll("[data-conversation-insight]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const key = event.currentTarget.dataset.conversationInsight;
+    if (state.openConversationInsightKey === key) {
+      state.openConversationInsightKey = null;
+      state.openConversationInsightPos = null;
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const panelWidth = 420;
+      const panelHeight = 420;
+      const left = Math.min(Math.max(8, rect.left - 12), window.innerWidth - panelWidth - 8);
+      const preferBelow = rect.bottom + panelHeight + 8 <= window.innerHeight;
+      const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - panelHeight - 6);
+      state.openConversationInsightKey = key;
+      state.openConversationInsightPos = { left: Math.round(left), top: Math.round(top) };
+    }
+    render();
+  }));
+  document.querySelectorAll("[data-conversation-action]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const socket = state.sockets.find(s => s.id === event.currentTarget.dataset.socketId);
+    if (!socket) return;
+    const action = event.currentTarget.dataset.conversationAction;
+    const metric = event.currentTarget.dataset.metric || "rtt";
+    state.selectedId = socket.id;
+    state.openConversationInsightKey = null;
+    state.openConversationInsightPos = null;
+    if (action === "chart") {
+      state.view = "charts";
+      if (chartMetricList().includes(metric)) {
+        state.prefs.graphMetric = metric;
+        state.chartMetrics = [...new Set([metric, ...state.chartMetrics])];
+      }
+      toast("Conversation chart opened", `${metricLabel(metric)} for ${socket.local} -> ${socket.peer}.`);
+    }
+    if (action === "details") {
+      state.activeTab = "sockets";
+      state.drawer = "details";
+      toast("Conversation context selected", `${socket.local} -> ${socket.peer}.`);
+    }
+    if (action === "anomalies") {
+      state.view = "analysis";
+      state.activeTab = "anomalies";
+      state.anomalyFilters = { ...state.anomalyFilters, severity: "all", metric: metric === "socket" ? "all" : metric, text: socket.id, sort: "priority" };
+      toast("Anomalies filtered", "Showing detailed signals for this conversation.");
+    }
+    render();
+  }));
   document.querySelectorAll("[data-row-action]").forEach(btn => btn.addEventListener("click", async event => {
     event.stopPropagation();
     const socket = state.sockets.find(s => s.id === event.currentTarget.dataset.socketId);
@@ -4185,6 +4319,8 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-socket]").forEach(row => row.addEventListener("click", event => {
     state.selectedId = event.currentTarget.dataset.socket;
+    state.openConversationInsightKey = null;
+    state.openConversationInsightPos = null;
     render();
   }));
   document.querySelectorAll("[data-sort]").forEach(btn => btn.addEventListener("click", event => {
