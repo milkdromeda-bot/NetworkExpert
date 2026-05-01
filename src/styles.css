@@ -2347,13 +2347,18 @@ th:focus-within .column-tooltip,
 .hero-chart { height: 380px; }
 .small-chart { height: 220px; }
 .chart-grid {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   margin-top: 14px;
 }
-.chart-grid.cols-1 { grid-template-columns: 1fr; }
-.chart-grid.cols-2 { grid-template-columns: repeat(2, minmax(280px, 1fr)); }
-.chart-grid.cols-3 { grid-template-columns: repeat(3, minmax(240px, 1fr)); }
+.chart-grid > .chart-card {
+  flex: 1 1 var(--chart-card-basis, 100%);
+  min-width: min(100%, var(--chart-card-min, 280px));
+}
+.chart-grid.cols-1 { --chart-card-basis: 100%; --chart-card-min: 280px; }
+.chart-grid.cols-2 { --chart-card-basis: calc((100% - 14px) / 2); --chart-card-min: 360px; }
+.chart-grid.cols-3 { --chart-card-basis: calc((100% - 28px) / 3); --chart-card-min: 340px; }
 .small-chart.compact { height: 170px; }
 .small-chart.standard { height: 220px; }
 .small-chart.tall { height: 320px; }
@@ -2901,7 +2906,7 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .kpis { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
   .split { grid-template-columns: 1fr; }
   .ingest-grid { grid-template-columns: 1fr; }
-  .chart-grid { grid-template-columns: 1fr; }
+  .chart-grid { display: grid; grid-template-columns: 1fr; }
   .threshold-grid { grid-template-columns: repeat(2, minmax(240px, 1fr)); }
   .chart-stats-layout { grid-template-columns: 1fr; }
 }
