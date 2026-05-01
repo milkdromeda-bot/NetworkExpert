@@ -255,6 +255,10 @@ let state = {
   alertEvents: [],
   importStatus: null,
   pendingFile: null,
+  analysisDirty: true,
+  dataVersion: 0,
+  rawVersion: 0,
+  chartRenderToken: 0,
   advisorFindings: [],
   bandwidthIndex: {},
   anomalyAlertSince: null,
@@ -284,6 +288,18 @@ let state = {
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
   correlation: { x: "rtt", y: "sendQ" },
   chartZoom: { start: 0, end: 1 },
+  cache: {
+    timestampRawVersion: -1,
+    timestampBlocks: [],
+    snapshotRawVersion: -1,
+    timestampSnapshots: [],
+    filteredKey: "",
+    filteredRows: null,
+    optionKey: "",
+    optionSets: null,
+    visibleHistoryKey: "",
+    visibleHistoryRows: null
+  },
   thresholds: cloneThresholds(),
   table: {
     page: 1,
@@ -435,6 +451,28 @@ function commandCoverage(command) {
   }));
 }
 
+function resetDerivedCaches({ raw = false } = {}) {
+  state.dataVersion += 1;
+  state.cache.filteredKey = "";
+  state.cache.filteredRows = null;
+  state.cache.optionKey = "";
+  state.cache.optionSets = null;
+  state.cache.visibleHistoryKey = "";
+  state.cache.visibleHistoryRows = null;
+  if (raw) {
+    state.rawVersion += 1;
+    state.cache.timestampRawVersion = -1;
+    state.cache.timestampBlocks = [];
+    state.cache.snapshotRawVersion = -1;
+    state.cache.timestampSnapshots = [];
+  }
+}
+
+function markAnalysisDirty({ raw = false } = {}) {
+  state.analysisDirty = true;
+  resetDerivedCaches({ raw });
+}
+
 function recompute() {
   state.sockets = applyRisks(parseAnalysisSockets());
   state.bandwidthIndex = buildSocketBandwidthIndex();
@@ -445,15 +483,17 @@ function recompute() {
   addCollectionAnomalies();
   runAdvisorAnalysis();
   evaluateAlertRules();
+  state.analysisDirty = false;
+  resetDerivedCaches();
 }
 
 function parseAnalysisSockets() {
-  const blocks = timestampBlocks();
-  if (blocks.length < 2) return withStableSocketIds(parseSs(state.raw));
+  const snapshots = parsedTimestampSnapshots();
+  if (snapshots.length < 2) return withStableSocketIds(parseSs(state.raw));
 
   const byKey = new Map();
-  for (const block of blocks) {
-    for (const socket of parseSs(block.lines.join("\n"))) {
+  for (const block of snapshots) {
+    for (const socket of block.sockets) {
       const key = socketKey(socket);
       const previous = byKey.get(key);
       byKey.set(key, {
@@ -493,6 +533,8 @@ function recomputeFromSockets() {
   addCollectionAnomalies();
   runAdvisorAnalysis();
   evaluateAlertRules();
+  state.analysisDirty = false;
+  resetDerivedCaches();
 }
 
 function scheduleIpIntelEnrichment() {
@@ -584,15 +626,14 @@ function socketKey(socket) {
 }
 
 function buildHistoryFromTimestampedSnapshots() {
-  const blocks = timestampBlocks();
-  if (!blocks.length) return [];
+  const snapshots = parsedTimestampSnapshots();
+  if (!snapshots.length) return [];
   const selected = state.sockets.find(s => s.id === state.selectedId) || state.sockets[0];
   if (!selected) return [];
   const key = socketKey(selected);
-  const start = blocks[0].epochMs;
-  const rows = blocks.map(block => {
-    const sockets = parseSs(block.lines.join("\n"));
-    const exact = sockets.find(s => socketKey(s) === key) || sockets.find(s => s.local === selected.local || s.peer === selected.peer);
+  const start = snapshots[0].epochMs;
+  const rows = snapshots.map(block => {
+    const exact = block.sockets.find(s => socketKey(s) === key) || block.sockets.find(s => s.local === selected.local || s.peer === selected.peer);
     return {
       t: Math.max(0, Math.round((block.epochMs - start) / 1000)),
       epochMs: block.epochMs,
@@ -621,6 +662,7 @@ function buildHistoryFromTimestampedSnapshots() {
 }
 
 function timestampBlocks() {
+  if (state.cache.timestampRawVersion === state.rawVersion) return state.cache.timestampBlocks;
   const blocks = [];
   let current = null;
   for (const line of state.raw.split(/\r?\n/)) {
@@ -633,14 +675,26 @@ function timestampBlocks() {
       current.lines.push(line);
     }
   }
+  state.cache.timestampRawVersion = state.rawVersion;
+  state.cache.timestampBlocks = blocks;
   return blocks;
+}
+
+function parsedTimestampSnapshots() {
+  if (state.cache.snapshotRawVersion === state.rawVersion) return state.cache.timestampSnapshots;
+  const snapshots = timestampBlocks().map(block => ({
+    epochMs: block.epochMs,
+    sockets: parseSs(block.lines.join("\n"))
+  }));
+  state.cache.snapshotRawVersion = state.rawVersion;
+  state.cache.timestampSnapshots = snapshots;
+  return snapshots;
 }
 
 function buildSocketBandwidthIndex() {
   const samples = {};
-  for (const block of timestampBlocks()) {
-    const sockets = parseSs(block.lines.join("\n"));
-    for (const socket of sockets) {
+  for (const block of parsedTimestampSnapshots()) {
+    for (const socket of block.sockets) {
       const key = socketKey(socket);
       const current = {
         epochMs: block.epochMs,
@@ -753,7 +807,7 @@ function formatDropCadence(summary) {
 }
 
 function addCollectionAnomalies() {
-  const hasTimestamp = state.raw.split(/\r?\n/).some(line => parseTimestampLine(line.trim()) != null);
+  const hasTimestamp = hasTimestampedRawData();
   const huge = state.sockets.length >= 5000;
   const dropRate = dropRateSummary();
   if (!hasTimestamp && state.raw.trim()) {
@@ -1161,14 +1215,24 @@ function socketMatchesFilters(socket) {
 }
 
 function sortedFilteredSockets() {
+  const cacheKey = JSON.stringify({
+    version: state.dataVersion,
+    filters: state.table.filters,
+    sortKey: state.table.sortKey,
+    sortDir: state.table.sortDir
+  });
+  if (state.cache.filteredKey === cacheKey && state.cache.filteredRows) return state.cache.filteredRows;
   const col = getColumn(state.table.sortKey);
   const factor = state.table.sortDir === "asc" ? 1 : -1;
-  return state.sockets.filter(socketMatchesFilters).sort((a, b) => {
+  const rows = state.sockets.filter(socketMatchesFilters).sort((a, b) => {
     const av = col.value(a);
     const bv = col.value(b);
     if (typeof av === "number" && typeof bv === "number") return (av - bv) * factor;
     return String(av).localeCompare(String(bv), "fr", { numeric: true }) * factor;
   });
+  state.cache.filteredKey = cacheKey;
+  state.cache.filteredRows = rows;
+  return rows;
 }
 
 function uniqueValues(key) {
@@ -1478,7 +1542,7 @@ function scheduleAnomalyBadgeSettle() {
 }
 
 function render() {
-  recompute();
+  if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
   const app = document.querySelector("#app");
   app.innerHTML = html`
@@ -1539,7 +1603,7 @@ function render() {
   `;
   bindEvents();
   drawChart();
-  drawMultiCharts();
+  scheduleMultiChartDraw();
   drawCorrelation();
   scheduleAnomalyBadgeSettle();
   scheduleIpIntelEnrichment();
@@ -2142,14 +2206,25 @@ function renderColumnTooltip(col) {
   </div>`;
 }
 
+function gridOptionSets() {
+  const key = `${state.dataVersion}|${state.sockets.length}`;
+  if (state.cache.optionKey === key && state.cache.optionSets) return state.cache.optionSets;
+  const optionSets = {
+    states: uniqueValues("state"),
+    families: uniqueValues("family"),
+    srcIps: uniqueSocketValues(s => s.localAddress.host),
+    dstIps: uniqueSocketValues(s => s.peerAddress.host),
+    srcPorts: uniqueSocketValues(s => s.localAddress.port),
+    dstPorts: uniqueSocketValues(s => s.peerAddress.port),
+    processes: uniqueSocketValues(s => s.details.process?.name)
+  };
+  state.cache.optionKey = key;
+  state.cache.optionSets = optionSets;
+  return optionSets;
+}
+
 function renderGridControls(total) {
-  const states = uniqueValues("state");
-  const families = uniqueValues("family");
-  const srcIps = uniqueSocketValues(s => s.localAddress.host);
-  const dstIps = uniqueSocketValues(s => s.peerAddress.host);
-  const srcPorts = uniqueSocketValues(s => s.localAddress.port);
-  const dstPorts = uniqueSocketValues(s => s.peerAddress.port);
-  const processes = uniqueSocketValues(s => s.details.process?.name);
+  const { states, families, srcIps, dstIps, srcPorts, dstPorts, processes } = gridOptionSets();
   return `<div class="grid-controls-shell">
     <div class="grid-controls">
       <select id="riskFilter">${["all", "critical", "high", "medium", "low"].map(v => `<option value="${v}" ${state.table.filters.risk === v ? "selected" : ""}>risk ${v}</option>`).join("")}</select>
@@ -3444,9 +3519,14 @@ function chartResolutionLabel() {
 function visibleHistory() {
   const rows = state.history.length ? state.history : [];
   if (rows.length <= 2) return rows;
+  const cacheKey = `${state.dataVersion}|${rows.length}|${state.chartZoom.start}|${state.chartZoom.end}`;
+  if (state.cache.visibleHistoryKey === cacheKey && state.cache.visibleHistoryRows) return state.cache.visibleHistoryRows;
   const start = Math.floor(state.chartZoom.start * (rows.length - 1));
   const end = Math.max(start + 1, Math.ceil(state.chartZoom.end * (rows.length - 1)));
-  return rows.slice(start, end + 1);
+  const visibleRows = rows.slice(start, end + 1);
+  state.cache.visibleHistoryKey = cacheKey;
+  state.cache.visibleHistoryRows = visibleRows;
+  return visibleRows;
 }
 
 function chartPointBudget(style, width) {
@@ -3604,6 +3684,21 @@ function resetAllState() {
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
   state.correlation = { x: "rtt", y: "sendQ" };
+  state.analysisDirty = true;
+  state.bandwidthIndex = {};
+  state.cache = {
+    timestampRawVersion: -1,
+    timestampBlocks: [],
+    snapshotRawVersion: -1,
+    timestampSnapshots: [],
+    filteredKey: "",
+    filteredRows: null,
+    optionKey: "",
+    optionSets: null,
+    visibleHistoryKey: "",
+    visibleHistoryRows: null
+  };
+  state.rawVersion += 1;
   setZoom(0, 1);
   state.table = {
     page: 1,
@@ -3680,6 +3775,9 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const barWidth = Math.max(4, Math.min(18, (w - pad.l - pad.r) / Math.max(8, data.length) * 0.55));
   const pointRadius = chartPointRadius(data.length, style);
   const showPoints = style === "points" || style === "xy" || data.length <= 1500;
+  const anyDanger = values.some(v => thresholdSeverity(metric, v) === "danger");
+  const anyWarn = values.some(v => thresholdSeverity(metric, v) === "warn");
+  const stroke = anyDanger ? "#ff5c77" : anyWarn ? "#ff9f43" : metricColor(metric);
   const singlePointLine = data.length === 1 ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(values[0] || 0)}" y2="${y(values[0] || 0)}" stroke="${stroke}" stroke-width="3" opacity=".85"/>` : "";
   const bars = values.map((v, i) => `<rect x="${x(data[i], i) - barWidth / 2}" y="${y(v)}" width="${barWidth}" height="${h - pad.b - y(v)}" fill="${thresholdColor(metric, v)}" opacity=".86"/>`).join("");
   const points = showPoints ? values.map((v, i) => `<circle cx="${x(data[i], i)}" cy="${y(v)}" r="${pointRadius.toFixed(2)}" fill="${thresholdColor(metric, v)}"><title>${metricLabel(metric)}=${formatMetricValue(metric, v)} at ${timeLabel(data[i]?.t || 0, data[i]?.epochMs)}</title></circle>`).join("") : "";
@@ -3693,9 +3791,6 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger);
   const warnY = showWarnLine ? y(t.warn) : 0;
   const dangerY = showDangerLine ? y(t.danger) : 0;
-  const anyDanger = values.some(v => thresholdSeverity(metric, v) === "danger");
-  const anyWarn = values.some(v => thresholdSeverity(metric, v) === "warn");
-  const stroke = anyDanger ? "#ff5c77" : anyWarn ? "#ff9f43" : metricColor(metric);
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.dataset.metric = metric;
   svg.dataset.plotLeft = String(pad.l);
@@ -3725,10 +3820,24 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   if (state.prefs.chartLayout.showCrosshair) attachChartInteractions(svg);
 }
 
-function drawMultiCharts() {
-  document.querySelectorAll("[data-mini-chart]").forEach(svg => {
-    drawChartInto(svg, svg.dataset.miniChart, state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle, true);
-  });
+function scheduleMultiChartDraw() {
+  const charts = [...document.querySelectorAll("[data-mini-chart]")];
+  if (!charts.length) return;
+  const token = state.chartRenderToken + 1;
+  state.chartRenderToken = token;
+  const renderStyle = state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle;
+  let index = 0;
+  const drawSlice = () => {
+    if (state.chartRenderToken !== token) return;
+    const frameStart = performance.now();
+    while (index < charts.length && performance.now() - frameStart < 12) {
+      const svg = charts[index];
+      if (svg?.isConnected) drawChartInto(svg, svg.dataset.miniChart, renderStyle, true);
+      index += 1;
+    }
+    if (index < charts.length) requestAnimationFrame(drawSlice);
+  };
+  requestAnimationFrame(drawSlice);
 }
 
 function drawCorrelation() {
@@ -3890,6 +3999,8 @@ async function importFile(file) {
   state.selectedId = null;
   state.sourceName = file.name;
   state.view = "ingest";
+  state.analysisDirty = false;
+  resetDerivedCaches({ raw: true });
   render();
 
   const result = await importSocketFile(file, {
@@ -3900,6 +4011,7 @@ async function importFile(file) {
       state.sockets = update.sockets;
       state.importStatus = update.status;
       if (options.render !== false) {
+        resetDerivedCaches({ raw: true });
         recomputeFromSockets();
         render();
       }
@@ -3913,6 +4025,7 @@ async function importFile(file) {
   state.importStatus = null;
   state.view = "analysis";
   state.activeTab = "advisor";
+  resetDerivedCaches({ raw: true });
   recomputeFromSockets();
   toast("Import complete", `${formatNumber(state.sockets.length)} sockets parsed from ${file.name}.`);
   render();
@@ -3953,6 +4066,7 @@ function bindEvents() {
       const rawInput = document.querySelector("#rawInput");
       state.command = commandInput ? commandInput.value : state.command;
       state.raw = rawInput ? rawInput.value : state.raw;
+      resetDerivedCaches({ raw: true });
       recompute();
       if (state.prefs.autoToast) {
         const top = state.anomalies[0];
@@ -3962,7 +4076,7 @@ function bindEvents() {
       state.activeTab = "advisor";
       render();
     }
-    if (action === "sample") { state.raw = SAMPLE; toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
+    if (action === "sample") { state.raw = SAMPLE; state.sourceName = "built-in sample"; markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
     if (action === "sample10m") {
       state.raw = generateTenMinuteSample();
       state.sourceName = "10-minute synthetic sample";
@@ -3970,10 +4084,11 @@ function bindEvents() {
       state.view = "analysis";
       state.activeTab = "advisor";
       setZoom(0, 1);
+      markAnalysisDirty({ raw: true });
       toast("10-minute sample loaded", "600 timestamped snapshots, one per second, are ready for analysis.");
       render();
     }
-    if (action === "clear") { state.raw = ""; render(); }
+    if (action === "clear") { state.raw = ""; markAnalysisDirty({ raw: true }); render(); }
     if (action === "resetAll") {
       resetAllState();
       toast("Workspace reset", "All loaded data, filters, zoom, and UI selections have been cleared.");

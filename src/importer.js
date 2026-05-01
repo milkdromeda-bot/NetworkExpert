@@ -67,6 +67,9 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
   let keptRaw = "";
   let batch = [];
   let chunks = 0;
+  let parsedBatches = 0;
+  let lastProgressAt = 0;
+  let stopped = false;
   const maxSockets = 250000;
   const appendKeptRaw = text => {
     if (!text) return;
@@ -86,34 +89,41 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
     buffer = lines.pop() || "";
     batch.push(...lines);
 
-    if (batch.length >= 1200) {
-      const filteredRaw = appendParsedLines(sockets, batch.splice(0), maxSockets, activePreFilter, filterContext);
+    while (batch.length >= 1200) {
+      const filteredRaw = appendParsedLines(sockets, batch.splice(0, 1200), maxSockets, activePreFilter, filterContext);
+      parsedBatches += 1;
       if (activePreFilter) appendKeptRaw(filteredRaw);
-      const shouldRender = chunks % 6 === 0;
+      const now = performance.now();
+      const shouldRender = now - lastProgressAt > 180 || parsedBatches % 24 === 0;
+      if (shouldRender) lastProgressAt = now;
       onProgress({
         raw: preview,
-        sockets: [...sockets],
+        sockets,
         status: {
           title: "Streaming parse",
           detail: `${label}: ${formatNumber(sockets.length)} sockets kept, ${formatNumber(readBytes)} bytes read${activePreFilter ? " with pre-import filters" : ""}.`,
           progress: totalBytes ? Math.min(99, Math.round((readBytes / totalBytes) * 100)) : Math.min(99, chunks)
         }
       }, { render: shouldRender });
-      await new Promise(resolve => setTimeout(resolve, 0));
+      if (parsedBatches % 4 === 0) await new Promise(resolve => setTimeout(resolve, 0));
       if (sockets.length >= maxSockets) {
         onProgress({
           raw: preview,
-          sockets: [...sockets],
+          sockets,
           status: {
             title: "Performance guard reached",
             detail: `Stopped at ${formatNumber(maxSockets)} sockets to keep the UI responsive. Add filters or split the file for deeper analysis.`,
             progress: 100
           }
         });
+        stopped = true;
         break;
       }
     }
+    if (stopped) break;
   }
+
+  if (stopped) return { raw: keptRaw, sockets, sourceName: label };
 
   const finalText = decoder.decode();
   if (finalText) {
