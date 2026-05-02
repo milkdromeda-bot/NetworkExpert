@@ -1509,8 +1509,6 @@ function render() {
         <button class="icon ${state.view === "charts" ? "primary" : ""}" data-view="charts" title="Charts">${icons.chart}</button>
         <button class="icon" data-action="guide" title="Guide">${icons.book}</button>
         <button class="icon" data-action="prefs" title="Preferences">${icons.settings}</button>
-        <div class="rail-spacer"></div>
-        <button class="icon" data-action="sample" title="Load sample">${icons.upload}</button>
       </nav>
       <header class="topbar">
         <div class="title">
@@ -1653,7 +1651,7 @@ function renderIngestPage() {
     <section class="ingest-hero">
       <div>
         <h2>Import an ss collection</h2>
-        <p>Paste output, open a large file, then run the analysis. This is the main entry point for Ultimate Network Expert.</p>
+        <p>Paste output or open a file, then analyze.</p>
       </div>
       <div class="hero-actions">
         <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
