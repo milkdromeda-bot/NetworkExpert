@@ -1830,7 +1830,42 @@ th:focus-within .column-tooltip,
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  align-items: stretch;
+  align-items: start;
+}
+.service-map-head .expert-strip {
+  grid-template-columns: repeat(5, minmax(116px, 1fr));
+  margin-bottom: 0;
+}
+.service-labels-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border-color: rgba(57, 214, 214, .58);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .02) 46%),
+    linear-gradient(135deg, #123650, #0a1624 70%);
+  color: #edfaff;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 8px;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 10px 26px rgba(0, 0, 0, .28),
+    0 0 0 1px rgba(57, 214, 214, .08);
+}
+.service-labels-button i {
+  color: #9ff8ff;
+}
+.service-labels-button:hover {
+  border-color: rgba(137, 244, 255, .86);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .03) 48%),
+    linear-gradient(135deg, #174b6b, #0c2032 72%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .24),
+    0 14px 34px rgba(57, 214, 214, .14),
+    0 0 0 3px rgba(57, 214, 214, .1);
 }
 .service-map-layout {
   display: grid;
@@ -3238,6 +3273,7 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .topbar { flex-wrap: wrap; min-height: 86px; }
   .chart-toolbar { flex-wrap: wrap; }
   .chart-timezone-group { margin-left: 0; min-width: 100%; grid-template-columns: 1fr; }
+  .service-map-head .expert-strip { grid-template-columns: 1fr; }
   .preimport-presets,
   .preimport-grid { grid-template-columns: 1fr; }
 }

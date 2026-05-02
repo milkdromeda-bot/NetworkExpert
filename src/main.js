@@ -2504,7 +2504,7 @@ function renderServiceMap() {
         <article><span>Labels</span><strong>${formatNumber(Object.keys(state.serviceAliases).length)}</strong></article>
         <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
       </div>
-      <button class="primary compact-action" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Service labels</button>
+      <button class="service-labels-button" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Service labels</button>
     </div>
     <div class="service-map-layout">
       <div class="service-map-canvas">
