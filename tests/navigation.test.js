@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyContextAction } from "../src/navigation.js";
+import { applyContextAction, setActiveInvestigation } from "../src/navigation.js";
 
 function baseState() {
   return {
     selectedId: "socket-a",
+    activeContextId: "socket-a",
+    activeContextReason: "Chosen by clicking a row",
     drawer: null,
     openConversationInsightKey: "flow-a",
     openConversationInsightPos: { left: 10, top: 20 },
@@ -47,6 +49,8 @@ test("context Conversations navigates without preserving endpoint filters", () =
 
   assert.equal(state.view, "analysis");
   assert.equal(state.activeTab, "conversations");
+  assert.equal(state.activeContextId, "socket-a");
+  assert.equal(state.activeContextReason, "Chosen from Active Investigation action");
   assert.equal(state.table.page, 1);
   assert.equal(state.table.filters.srcIp, "");
   assert.equal(state.table.filters.dstIp, "");
@@ -93,7 +97,9 @@ test("context Clear removes active socket and open dialog state", () => {
 
   applyContextAction(state, "clear", socket);
 
-  assert.equal(state.selectedId, null);
+  assert.equal(state.selectedId, "socket-a");
+  assert.equal(state.activeContextId, null);
+  assert.equal(state.activeContextReason, "");
   assert.equal(state.drawer, null);
   assert.equal(state.openConversationInsightKey, null);
   assert.equal(state.openConversationInsightPos, null);
@@ -106,6 +112,7 @@ test("context Details opens details drawer without changing table filters", () =
   applyContextAction(state, "details", socket);
 
   assert.equal(state.drawer, "details");
+  assert.equal(state.activeContextId, "socket-a");
   assert.deepEqual(state.table.filters, before);
 });
 
@@ -133,4 +140,23 @@ test("context Charts avoids duplicate metrics", () => {
   applyContextAction(state, "charts", socket, { chartMetrics: ["rtt"], suggestedMetric: "rtt" });
 
   assert.deepEqual(state.chartMetrics, ["rtt"]);
+});
+
+test("clearing active investigation does not clear internal selected socket", () => {
+  const state = baseState();
+
+  setActiveInvestigation(state, null);
+
+  assert.equal(state.selectedId, "socket-a");
+  assert.equal(state.activeContextId, null);
+  assert.equal(state.activeContextReason, "");
+});
+
+test("active investigation reason is explicit when user chooses a socket", () => {
+  const state = baseState();
+
+  setActiveInvestigation(state, "socket-b", "Chosen by clicking a row");
+
+  assert.equal(state.activeContextId, "socket-b");
+  assert.equal(state.activeContextReason, "Chosen by clicking a row");
 });

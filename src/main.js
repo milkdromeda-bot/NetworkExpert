@@ -8,7 +8,7 @@ import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTe
 import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot } from "./compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
-import { applyContextAction } from "./navigation.js";
+import { applyContextAction, setActiveInvestigation } from "./navigation.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -253,6 +253,8 @@ let state = {
   sourceName: "built-in sample",
   sockets: [],
   selectedId: null,
+  activeContextId: null,
+  activeContextReason: "",
   anomalies: [],
   alertEvents: [],
   importStatus: null,
@@ -480,6 +482,7 @@ function recompute() {
   state.bandwidthIndex = buildSocketBandwidthIndex();
   state.anomalies = analyzeAll(state.sockets);
   state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
+  if (!state.sockets.some(socket => socket.id === state.activeContextId)) setActiveInvestigation(state, null);
   setZoom(0, 1);
   buildHistory();
   addCollectionAnomalies();
@@ -498,6 +501,7 @@ function recomputeFromSockets() {
   state.bandwidthIndex = buildSocketBandwidthIndex();
   state.anomalies = analyzeAll(state.sockets);
   state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
+  if (!state.sockets.some(socket => socket.id === state.activeContextId)) setActiveInvestigation(state, null);
   setZoom(0, 1);
   buildHistory();
   addCollectionAnomalies();
@@ -1563,7 +1567,7 @@ function render() {
 }
 
 function selectedSocket() {
-  return state.selectedId ? state.sockets.find(socket => socket.id === state.selectedId) || null : null;
+  return state.activeContextId ? state.sockets.find(socket => socket.id === state.activeContextId) || null : null;
 }
 
 function renderInvestigationContext() {
@@ -1582,7 +1586,7 @@ function renderInvestigationContext() {
         <span>${icons.arrowRight}</span>
         <strong>${escapeHtml(socket.peer)}</strong>
       </div>
-      <small>${escapeHtml(socket.family || "socket")} / ${escapeHtml(socket.state)} / ${escapeHtml(process)}</small>
+      <small>${escapeHtml(state.activeContextReason || "Chosen by explicit user selection")} / ${escapeHtml(socket.family || "socket")} / ${escapeHtml(socket.state)} / ${escapeHtml(process)}</small>
     </div>
     <div class="investigation-metrics">
       <span><b class="risk ${socket.risk}">${escapeHtml(socket.risk)}</b><small>risk</small></span>
@@ -3680,6 +3684,7 @@ function resetAllState() {
   state.sourceName = "empty workspace";
   state.sockets = [];
   state.selectedId = null;
+  setActiveInvestigation(state, null);
   state.anomalies = [];
   state.alertEvents = [];
   state.baseline = null;
@@ -4006,6 +4011,7 @@ async function importFile(file) {
   state.sockets = [];
   state.anomalies = [];
   state.selectedId = null;
+  setActiveInvestigation(state, null);
   state.sourceName = file.name;
   state.view = "ingest";
   state.analysisDirty = false;
@@ -4081,6 +4087,7 @@ function bindEvents() {
       const rawInput = document.querySelector("#rawInput");
       state.command = commandInput ? commandInput.value : state.command;
       state.raw = rawInput ? rawInput.value : state.raw;
+      setActiveInvestigation(state, null);
       resetDerivedCaches({ raw: true });
       recompute();
       if (state.prefs.autoToast) {
@@ -4091,11 +4098,12 @@ function bindEvents() {
       state.activeTab = "advisor";
       render();
     }
-    if (action === "sample") { state.raw = SAMPLE; state.sourceName = "built-in sample"; markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
+    if (action === "sample") { state.raw = SAMPLE; state.sourceName = "built-in sample"; setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
     if (action === "sample10m") {
       state.raw = generateTenMinuteSample();
       state.sourceName = "10-minute synthetic sample";
       state.selectedId = null;
+      setActiveInvestigation(state, null);
       state.view = "analysis";
       state.activeTab = "advisor";
       setZoom(0, 1);
@@ -4418,6 +4426,7 @@ function bindEvents() {
     const action = event.currentTarget.dataset.conversationAction;
     const metric = event.currentTarget.dataset.metric || "rtt";
     state.selectedId = socket.id;
+    setActiveInvestigation(state, socket.id, "Chosen from conversation action");
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
     if (action === "chart") {
@@ -4447,6 +4456,7 @@ function bindEvents() {
     if (!socket) return;
     const action = event.currentTarget.dataset.rowAction;
     state.selectedId = socket.id;
+    setActiveInvestigation(state, socket.id, "Chosen from row action");
     state.openMenuId = null;
     state.openMenuPos = null;
     if (action === "chart") {
@@ -4472,6 +4482,7 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-socket]").forEach(row => row.addEventListener("click", event => {
     state.selectedId = event.currentTarget.dataset.socket;
+    setActiveInvestigation(state, state.selectedId, "Chosen by clicking a row");
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
     render();
@@ -4614,6 +4625,7 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-jump]").forEach(btn => btn.addEventListener("click", event => {
     state.selectedId = event.currentTarget.dataset.jump;
+    setActiveInvestigation(state, state.selectedId, "Chosen from navigation jump");
     state.activeTab = "sockets";
     render();
   }));

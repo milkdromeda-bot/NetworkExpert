@@ -8,9 +8,14 @@ export function clearConversationScopeFilters(filters) {
   filters.onlyAnomalies = false;
 }
 
+export function setActiveInvestigation(state, socketId, reason = "Selected by user") {
+  state.activeContextId = socketId || null;
+  state.activeContextReason = socketId ? reason : "";
+}
+
 export function applyContextAction(state, action, socket, { chartMetrics = [], suggestedMetric = null } = {}) {
   if (action === "clear") {
-    state.selectedId = null;
+    setActiveInvestigation(state, null);
     state.drawer = null;
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
@@ -19,6 +24,7 @@ export function applyContextAction(state, action, socket, { chartMetrics = [], s
   if (!socket) return;
 
   state.selectedId = socket.id;
+  setActiveInvestigation(state, socket.id, "Chosen from Active Investigation action");
   state.openConversationInsightKey = null;
   state.openConversationInsightPos = null;
 
