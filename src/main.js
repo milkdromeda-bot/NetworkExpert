@@ -1470,14 +1470,15 @@ function serviceMapGroupBands(lanes, positions) {
       if (!run) return;
       const ys = run.nodes.map(node => positions[node.id]?.y).filter(Number.isFinite);
       if (ys.length) {
-        const top = Math.min(...ys) - 36;
+        const top = Math.min(...ys) - 50;
         const bottom = Math.max(...ys) + 36;
         bands.push({
           group: run.group,
           x: lane.x - 166,
           y: top,
           width: 332,
-          height: bottom - top
+          height: bottom - top,
+          labelY: top + 22
         });
       }
       run = null;
@@ -2561,10 +2562,10 @@ function renderServiceMap() {
     { key: "locals", title: "Local sockets", x: 520, nodes: map.locals },
     { key: "peers", title: "Peers", x: 920, nodes: map.peers }
   ];
-  const height = Math.max(420, Math.max(...lanes.map(lane => lane.nodes.length)) * 66 + 90);
+  const height = Math.max(420, Math.max(...lanes.map(lane => lane.nodes.length)) * 66 + 112);
   const positions = {};
   lanes.forEach(lane => lane.nodes.forEach((node, index) => {
-    positions[node.id] = { x: lane.x, y: 74 + index * 66 };
+    positions[node.id] = { x: lane.x, y: 96 + index * 66 };
   }));
   const groupBands = serviceMapGroupBands(lanes, positions);
   const visibleEdges = map.edges.filter(edge => positions[edge.from] && positions[edge.mid] && positions[edge.to]).slice(0, 160);
@@ -2593,7 +2594,7 @@ function renderServiceMap() {
           ${lanes.map(lane => `<text x="${lane.x}" y="28" class="map-lane-title">${escapeHtml(lane.title)}</text>`).join("")}
           ${groupBands.map(band => `<g class="map-group-band ${escapeHtml(band.group.color)}">
             <rect x="${band.x}" y="${band.y}" width="${band.width}" height="${band.height}" rx="14"/>
-            <text x="${band.x + 12}" y="${band.y + 18}">${escapeHtml(band.group.name)}</text>
+            <text x="${band.x + 14}" y="${band.labelY}">${escapeHtml(band.group.name)}</text>
           </g>`).join("")}
           ${visibleEdges.map(edge => {
             const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
