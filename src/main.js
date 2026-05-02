@@ -9,6 +9,7 @@ import { buildComparison as buildBaselineComparison, createBaseline as createBas
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 import { applyContextAction, setActiveInvestigation } from "./navigation.js";
+import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -18,7 +19,7 @@ const TABLE_COLUMNS = [
   { key: "sendQ", label: "Send-Q", value: s => s.sendQ, render: s => renderTableMetricCell("sendQ", s.sendQ) },
   { key: "tx_bps", label: "TX bps", value: s => socketBandwidth(s, "tx_bps"), render: s => renderTableMetricCell("tx_bps", socketBandwidth(s, "tx_bps")), defaultVisible: false },
   { key: "rx_bps", label: "RX bps", value: s => socketBandwidth(s, "rx_bps"), render: s => renderTableMetricCell("rx_bps", socketBandwidth(s, "rx_bps")), defaultVisible: false },
-  { key: "local", label: "Local", value: s => s.local, render: s => escapeHtml(s.local) },
+  { key: "local", label: "Local", value: s => s.local, render: s => renderEndpointCell(s.local) },
   { key: "peer", label: "Peer", value: s => s.peer, render: s => renderPeerCell(s) },
   { key: "process", label: "Process", value: s => s.details.process ? `${s.details.process.name}:${s.details.process.pid}` : "", render: s => escapeHtml(s.details.process ? `${s.details.process.name}:${s.details.process.pid}` : "-") },
   { key: "rtt", label: "RTT", value: s => metricValue(s, "rtt"), render: s => renderTableMetricCell("rtt", metricValue(s, "rtt")) },
@@ -271,6 +272,8 @@ let state = {
   filterHistory: loadFilterHistory(),
   tableProfiles: loadTableProfiles(),
   dashboardProfiles: loadDashboardProfiles(),
+  serviceAliases: loadServiceAliases(),
+  aliasEditKey: "",
   alertRules: loadAlertRules(),
   alertAcks: loadAlertAcks(),
   baseline: null,
@@ -423,6 +426,18 @@ function loadDashboardProfiles() {
 
 function saveDashboardProfiles() {
   localStorage.setItem("networkExpertDashboardProfiles", JSON.stringify(state.dashboardProfiles.slice(0, 24)));
+}
+
+function loadServiceAliases() {
+  try {
+    return normalizeAliasStore(JSON.parse(localStorage.getItem("networkExpertServiceAliases") || "{}"));
+  } catch {
+    return {};
+  }
+}
+
+function saveServiceAliases() {
+  localStorage.setItem("networkExpertServiceAliases", JSON.stringify(normalizeAliasStore(state.serviceAliases)));
 }
 
 function saveAlertRules() {
@@ -1395,21 +1410,55 @@ function buildTimelineEvents() {
     .slice(0, 160);
 }
 
+function endpointPresentation(endpoint) {
+  const alias = aliasForEndpoint(state.serviceAliases, endpoint);
+  return {
+    endpoint,
+    label: alias?.label || endpoint,
+    role: alias?.role || "",
+    note: alias?.note || "",
+    alias
+  };
+}
+
+function nodeLabel(node) {
+  return node.alias?.label || node.label;
+}
+
+function nodeSubtitle(node) {
+  if (node.kind === "process") return `${formatNumber(node.count)} socket(s)`;
+  if (node.alias?.role) return `${node.alias.role} | ${node.endpoint}`;
+  return node.alias ? node.endpoint : `${formatNumber(node.count)} socket(s)`;
+}
+
 function buildServiceMap() {
   const sockets = sortedFilteredSockets().slice(0, 120);
   const processNodes = new Map();
   const localNodes = new Map();
   const peerNodes = new Map();
   const edges = [];
-  const ensure = (map, id, label, kind) => {
-    if (!map.has(id)) map.set(id, { id, label, kind, count: 0, risk: "low", anomalies: 0 });
+  const ensure = (map, id, label, kind, endpoint = "") => {
+    if (!map.has(id)) {
+      const presentation = endpoint ? endpointPresentation(endpoint) : null;
+      map.set(id, {
+        id,
+        label: presentation?.label || label,
+        rawLabel: label,
+        endpoint,
+        alias: presentation?.alias || null,
+        kind,
+        count: 0,
+        risk: "low",
+        anomalies: 0
+      });
+    }
     return map.get(id);
   };
   for (const socket of sockets) {
     const processLabel = socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "unknown process";
     const process = ensure(processNodes, `process:${processLabel}`, processLabel, "process");
-    const local = ensure(localNodes, `local:${socket.local}`, socket.local, "local");
-    const peer = ensure(peerNodes, `peer:${socket.peer}`, socket.peer, "peer");
+    const local = ensure(localNodes, `local:${socket.local}`, socket.local, "local", socket.local);
+    const peer = ensure(peerNodes, `peer:${socket.peer}`, socket.peer, "peer", socket.peer);
     const anomalyCount = state.anomalies.filter(a => a.socketId === socket.id).length;
     for (const node of [process, local, peer]) {
       node.count += 1;
@@ -2119,13 +2168,23 @@ function renderRowActions(socket) {
   </div>`;
 }
 
+function renderEndpointCell(endpoint, extra = "") {
+  const alias = aliasForEndpoint(state.serviceAliases, endpoint);
+  if (!alias?.label) return `<span>${escapeHtml(endpoint)}</span>${extra}`;
+  return `<div class="endpoint-cell" title="${escapeHtml(endpoint)}">
+    <strong>${escapeHtml(alias.label)}</strong>
+    <small>${escapeHtml([alias.role, endpoint].filter(Boolean).join(" | "))}</small>
+    ${extra}
+  </div>`;
+}
+
 function renderPeerCell(socket) {
   const host = socket.peerAddress?.host || "";
   const intel = state.ipIntel[host];
   const summary = ipIntelSummary(intel);
   const detail = ipIntelDetail(intel);
   return `<div class="peer-cell">
-    <span>${escapeHtml(socket.peer)}</span>
+    ${renderEndpointCell(socket.peer)}
     ${summary ? `<small class="ip-intel" title="${escapeHtml(detail || summary)}"><i class="ri-building-4-line"></i> ${escapeHtml(summary)}</small>` : ""}
     ${intel?.status === "loading" ? `<small class="ip-intel loading"><i class="ri-loader-4-line"></i> enriching public IP...</small>` : ""}
   </div>`;
@@ -2425,10 +2484,10 @@ function renderServiceMap() {
     { key: "locals", title: "Local sockets", x: 520, nodes: map.locals },
     { key: "peers", title: "Peers", x: 920, nodes: map.peers }
   ];
-  const height = Math.max(420, Math.max(...lanes.map(lane => lane.nodes.length)) * 54 + 90);
+  const height = Math.max(420, Math.max(...lanes.map(lane => lane.nodes.length)) * 66 + 90);
   const positions = {};
   lanes.forEach(lane => lane.nodes.forEach((node, index) => {
-    positions[node.id] = { x: lane.x, y: 74 + index * 54 };
+    positions[node.id] = { x: lane.x, y: 74 + index * 66 };
   }));
   const visibleEdges = map.edges.filter(edge => positions[edge.from] && positions[edge.mid] && positions[edge.to]).slice(0, 160);
   const hotPaths = [...map.edges].sort((a, b) =>
@@ -2437,11 +2496,15 @@ function renderServiceMap() {
     b.weight - a.weight
   ).slice(0, 8);
   return `<div class="service-map-workbench">
-    <div class="expert-strip">
-      <article><span>Processes</span><strong>${formatNumber(map.processes.length)}</strong></article>
-      <article><span>Local sockets</span><strong>${formatNumber(map.locals.length)}</strong></article>
-      <article><span>Peers</span><strong>${formatNumber(map.peers.length)}</strong></article>
-      <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
+    <div class="service-map-head">
+      <div class="expert-strip">
+        <article><span>Processes</span><strong>${formatNumber(map.processes.length)}</strong></article>
+        <article><span>Local sockets</span><strong>${formatNumber(map.locals.length)}</strong></article>
+        <article><span>Peers</span><strong>${formatNumber(map.peers.length)}</strong></article>
+        <article><span>Labels</span><strong>${formatNumber(Object.keys(state.serviceAliases).length)}</strong></article>
+        <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
+      </div>
+      <button class="primary compact-action" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Service labels</button>
     </div>
     <div class="service-map-layout">
       <div class="service-map-canvas">
@@ -2451,16 +2514,19 @@ function renderServiceMap() {
             const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
             const color = edge.risk === "critical" ? "#ff5c77" : edge.risk === "high" ? "#ff9f43" : edge.risk === "medium" ? "#ffd166" : "#39d6d6";
             const width = Math.min(5, 1.5 + Math.log10(edge.weight + 1));
-            return `<path d="M ${a.x + 112} ${a.y} C ${a.x + 210} ${a.y}, ${b.x - 150} ${b.y}, ${b.x - 112} ${b.y} S ${c.x - 190} ${c.y}, ${c.x - 112} ${c.y}" stroke="${color}" stroke-width="${width}" fill="none" opacity=".38"/>`;
+            return `<path d="M ${a.x + 128} ${a.y} C ${a.x + 218} ${a.y}, ${b.x - 164} ${b.y}, ${b.x - 128} ${b.y} S ${c.x - 198} ${c.y}, ${c.x - 128} ${c.y}" stroke="${color}" stroke-width="${width}" fill="none" opacity=".38"/>`;
           }).join("")}
           ${lanes.flatMap(lane => lane.nodes.map(node => {
             const p = positions[node.id];
             const fill = node.risk === "critical" ? "#4b1420" : node.risk === "high" ? "#3b220b" : node.risk === "medium" ? "#2b270b" : "#071d24";
             const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
-            return `<g class="map-node">
-              <rect x="${p.x - 112}" y="${p.y - 18}" width="224" height="36" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
-              <text x="${p.x - 100}" y="${p.y + 4}" class="map-node-label">${escapeHtml(truncateMiddle(node.label, 28))}</text>
-              <circle cx="${p.x + 96}" cy="${p.y}" r="5" fill="${stroke}"/>
+            const aliasAction = node.endpoint ? `data-map-alias="${escapeHtml(node.endpoint)}"` : "";
+            return `<g class="map-node ${node.endpoint ? "editable" : ""}" ${aliasAction}>
+              <rect x="${p.x - 128}" y="${p.y - 24}" width="256" height="48" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
+              <text x="${p.x - 116}" y="${p.y - 3}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 28))}</text>
+              <text x="${p.x - 116}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(truncateMiddle(nodeSubtitle(node), 34))}</text>
+              ${node.endpoint ? `<text x="${p.x + 96}" y="${p.y + 5}" class="map-node-edit">edit</text>` : ""}
+              <circle cx="${p.x + 116}" cy="${p.y}" r="5" fill="${stroke}"/>
             </g>`;
           })).join("")}
         </svg>
@@ -2469,7 +2535,8 @@ function renderServiceMap() {
         <strong>Hot paths</strong>
         ${hotPaths.map(edge => `<article class="hot-path ${edge.risk}" data-socket="${escapeHtml(edge.socket.id)}">
           <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
-          <p>${escapeHtml(edge.socket.details.process?.name || "unknown")} -> ${escapeHtml(edge.socket.peer)}</p>
+          <p>${escapeHtml(edge.socket.details.process?.name || "unknown")} -> ${escapeHtml(aliasDisplay(edge.socket.peer, state.serviceAliases))}</p>
+          ${aliasForEndpoint(state.serviceAliases, edge.socket.peer)?.role ? `<em>${escapeHtml(aliasForEndpoint(state.serviceAliases, edge.socket.peer).role)}</em>` : ""}
           <small>${formatNumber(edge.anomalies)} anomaly signal(s), Send-Q ${formatMetricValue("sendQ", edge.socket.sendQ)}, RTT ${formatMetricValue("rtt", metricValue(edge.socket, "rtt"))}</small>
         </article>`).join("")}
       </aside>
@@ -3047,6 +3114,64 @@ function renderGuideReferences() {
     <article class="guide-card"><strong>Reference links</strong><p><a href="https://manpages.debian.org/testing/iproute2/ss.8.en.html" target="_blank" rel="noreferrer">Debian testing ss(8), iproute2 6.19</a> - command options, filters, tables, and output modes.</p><p><a href="https://man7.org/linux/man-pages/man7/tcp.7.html" target="_blank" rel="noreferrer">man7 tcp(7)</a> - TCP socket options and TCP_INFO background.</p><p><a href="https://docs.kernel.org/next/networking/ip-sysctl.html" target="_blank" rel="noreferrer">Linux kernel IP sysctl documentation</a> - tcp_rmem, tcp_wmem, tcp_mem, pacing, SACK, ECN, and tuning knobs.</p><p><a href="https://docs.kernel.org/6.12/networking/proc_net_tcp.html" target="_blank" rel="noreferrer">Linux kernel /proc/net/tcp documentation</a> - raw kernel socket table fields.</p></article>`;
 }
 
+function serviceAliasEndpointOptions() {
+  const endpoints = new Set();
+  for (const socket of sortedFilteredSockets()) {
+    if (socket.local) endpoints.add(socket.local);
+    if (socket.peer) endpoints.add(socket.peer);
+    if (endpoints.size > 2000) break;
+  }
+  for (const alias of Object.values(state.serviceAliases)) {
+    if (alias.endpoint) endpoints.add(alias.endpoint);
+  }
+  return [...endpoints].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+}
+
+function selectedAliasEndpoint(endpoints) {
+  if (state.aliasEditKey && endpoints.includes(state.aliasEditKey)) return state.aliasEditKey;
+  const firstAlias = Object.values(state.serviceAliases).find(alias => alias.endpoint)?.endpoint;
+  return firstAlias || endpoints[0] || "";
+}
+
+function renderServiceAliasesModal() {
+  const endpoints = serviceAliasEndpointOptions();
+  const selectedEndpoint = selectedAliasEndpoint(endpoints);
+  const alias = aliasForEndpoint(state.serviceAliases, selectedEndpoint) || { label: "", role: "", note: "" };
+  const aliases = Object.values(state.serviceAliases).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const suggestions = endpoints.filter(endpoint => !aliasForEndpoint(state.serviceAliases, endpoint)).slice(0, 8);
+  return `<div class="service-alias-modal">
+    <section class="service-alias-editor">
+      <div class="field-card">
+        <strong>Endpoint identity</strong>
+        <label>Endpoint<input id="aliasEndpoint" list="aliasEndpointOptions" placeholder="10.0.0.5:9100" value="${escapeHtml(selectedEndpoint)}" /></label>
+        ${renderDatalist("aliasEndpointOptions", endpoints)}
+        <label>Business name<input id="aliasLabel" placeholder="FIX stream - Aggregator A" value="${escapeHtml(alias.label)}" /></label>
+        <label>Role / component<input id="aliasRole" placeholder="FIX streaming port, market data, container..." value="${escapeHtml(alias.role)}" /></label>
+        <label>Notes<textarea id="aliasNote" class="alias-note" placeholder="Owner, environment, expected traffic, incident hint...">${escapeHtml(alias.note)}</textarea></label>
+        <div class="toolbar">
+          <button class="primary" data-action="saveServiceAlias"><i class="ri-price-tag-3-line"></i> Save label</button>
+          <button data-action="deleteServiceAlias">${icons.trash} Delete label</button>
+        </div>
+      </div>
+      <div class="field-card">
+        <strong>Unlabelled endpoints</strong>
+        <div class="alias-suggestions">
+          ${suggestions.length ? suggestions.map(endpoint => `<button data-alias-pick="${escapeHtml(endpoint)}"><span>${escapeHtml(endpoint)}</span><small>add label</small></button>`).join("") : `<p class="hint">Every visible endpoint already has a label.</p>`}
+        </div>
+      </div>
+    </section>
+    <section class="service-alias-list">
+      <strong>Saved labels</strong>
+      ${aliases.length ? aliases.map(item => `<article class="alias-card">
+        <div><b>${escapeHtml(item.label || item.endpoint)}</b><span>${escapeHtml(item.endpoint)}</span></div>
+        ${item.role ? `<small>${escapeHtml(item.role)}</small>` : ""}
+        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
+        <button data-alias-pick="${escapeHtml(item.endpoint)}"><i class="ri-edit-line"></i> Edit</button>
+      </article>`).join("") : `<div class="empty">No saved service labels yet.</div>`}
+    </section>
+  </div>`;
+}
+
 function renderModal() {
   const modalTitle = state.modal === "columns" ? "Columns and order"
     : state.modal === "thresholds" ? "Threshold configuration"
@@ -3054,14 +3179,16 @@ function renderModal() {
         : state.modal === "preImport" ? "Pre-import filters"
           : state.modal === "columnHelp" ? "Column guide"
             : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
-            : "ss field documentation";
+              : state.modal === "serviceAliases" ? "Service labels"
+              : "ss field documentation";
   const modalBody = state.modal === "columns" ? renderColumnChooser()
     : state.modal === "thresholds" ? renderThresholdConfig()
       : state.modal === "layout" ? renderLayoutPrefs()
         : state.modal === "preImport" ? renderPreImportFilters()
           : state.modal === "columnHelp" ? renderColumnHelpDetail()
             : state.modal === "chartStats" ? renderChartStatsModal()
-            : renderFields();
+              : state.modal === "serviceAliases" ? renderServiceAliasesModal()
+              : renderFields();
   return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
     <section class="modal ${state.modal || ""}">
       <header><strong>${modalTitle}</strong><button class="icon" data-action="closeModal">${icons.x}</button></header>
@@ -4122,6 +4249,7 @@ function bindEvents() {
     if (action === "columns") { state.modal = "columns"; render(); }
     if (action === "thresholds") { state.drawer = "thresholds"; render(); }
     if (action === "layoutPrefs") { state.modal = "layout"; render(); }
+    if (action === "serviceAliases") { state.modal = "serviceAliases"; render(); }
     if (action === "toggleDeepAnalysis") {
       state.prefs.deepAnalysis = !state.prefs.deepAnalysis;
       savePrefs();
@@ -4308,6 +4436,29 @@ function bindEvents() {
       toast("Dashboard saved", `"${name}" is ready in saved dashboards.`);
       render();
     }
+    if (action === "saveServiceAlias") {
+      const endpoint = document.querySelector("#aliasEndpoint")?.value?.trim() || "";
+      if (!endpoint) {
+        toast("Endpoint required", "Choose an IP:port endpoint before saving a service label.", "danger");
+        return;
+      }
+      state.serviceAliases = upsertEndpointAlias(state.serviceAliases, endpoint, {
+        label: document.querySelector("#aliasLabel")?.value || "",
+        role: document.querySelector("#aliasRole")?.value || "",
+        note: document.querySelector("#aliasNote")?.value || ""
+      });
+      state.aliasEditKey = endpoint;
+      saveServiceAliases();
+      toast("Service label saved", `${aliasDisplay(endpoint, state.serviceAliases)} is now shown on the map and tables.`);
+      render();
+    }
+    if (action === "deleteServiceAlias") {
+      const endpoint = document.querySelector("#aliasEndpoint")?.value?.trim() || "";
+      state.serviceAliases = deleteEndpointAlias(state.serviceAliases, endpoint);
+      saveServiceAliases();
+      toast("Service label deleted", endpoint || "Endpoint label removed.");
+      render();
+    }
     if (action === "closeDrawer") { state.drawer = null; render(); }
     if (action === "closeModal") { state.modal = null; state.helpColumn = null; render(); }
     if (action === "savePrefs") {
@@ -4373,6 +4524,22 @@ function bindEvents() {
     state.activeTab = event.currentTarget.dataset.tab;
     render();
   }));
+  document.querySelectorAll("[data-map-alias]").forEach(node => node.addEventListener("click", event => {
+    event.stopPropagation();
+    state.aliasEditKey = event.currentTarget.dataset.mapAlias;
+    state.modal = "serviceAliases";
+    render();
+  }));
+  document.querySelectorAll("[data-alias-pick]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    state.aliasEditKey = event.currentTarget.dataset.aliasPick;
+    state.modal = "serviceAliases";
+    renderKeepingModalPosition();
+  }));
+  document.querySelector("#aliasEndpoint")?.addEventListener("change", event => {
+    state.aliasEditKey = event.target.value;
+    renderKeepingModalPosition();
+  });
   document.querySelectorAll("[data-guide-tab]").forEach(tab => tab.addEventListener("click", event => {
     state.guideTab = event.currentTarget.dataset.guideTab;
     render();

@@ -1111,6 +1111,27 @@ th:focus-within .column-tooltip,
   gap: 3px;
   min-width: 0;
 }
+.endpoint-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.endpoint-cell strong {
+  overflow: hidden;
+  color: #edf4ff;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.endpoint-cell small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .peer-cell > span,
 .peer-cell > strong {
   min-width: 0;
@@ -1805,6 +1826,12 @@ th:focus-within .column-tooltip,
   display: grid;
   gap: 10px;
 }
+.service-map-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
 .service-map-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -1840,6 +1867,25 @@ th:focus-within .column-tooltip,
   font-size: 12px;
   font-weight: 800;
 }
+.map-node-subtitle {
+  fill: #9fb0c2;
+  font-size: 10px;
+  font-weight: 650;
+}
+.map-node-edit {
+  fill: #8defff;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.map-node.editable {
+  cursor: pointer;
+}
+.map-node.editable:hover rect {
+  filter: brightness(1.18);
+  stroke-width: 2;
+}
 .hot-paths {
   display: grid;
   align-content: start;
@@ -1869,8 +1915,106 @@ th:focus-within .column-tooltip,
   font-weight: 800;
   font-size: 12px;
 }
+.hot-path em {
+  color: var(--cyan);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
 .hot-path small {
   color: var(--muted);
+  line-height: 1.35;
+}
+.service-alias-modal {
+  display: grid;
+  grid-template-columns: minmax(360px, .9fr) minmax(360px, 1.1fr);
+  gap: 12px;
+}
+.service-alias-editor {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.service-alias-editor label {
+  display: grid;
+  gap: 6px;
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+.service-alias-editor input,
+.service-alias-editor select,
+.service-alias-editor textarea {
+  width: 100%;
+}
+.alias-note {
+  min-height: 92px;
+}
+.alias-suggestions {
+  display: grid;
+  gap: 8px;
+}
+.alias-suggestions button {
+  justify-content: space-between;
+  min-height: 42px;
+  text-align: left;
+}
+.alias-suggestions span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alias-suggestions small {
+  color: var(--cyan);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.service-alias-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.service-alias-list > strong {
+  color: #edf4ff;
+  font-size: 13px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.alias-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(113, 143, 173, .28);
+  border-left: 4px solid var(--cyan);
+  border-radius: 8px;
+  background: #080d14;
+}
+.alias-card div,
+.alias-card small,
+.alias-card p {
+  min-width: 0;
+}
+.alias-card b,
+.alias-card span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alias-card b {
+  color: #edf4ff;
+}
+.alias-card span,
+.alias-card small {
+  color: var(--muted);
+}
+.alias-card p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--soft);
+  font-size: 12px;
   line-height: 1.35;
 }
 .alert-workbench {
@@ -2921,6 +3065,12 @@ th:focus-within .column-tooltip,
 .modal.chartStats .body {
   overflow: auto;
 }
+.modal.serviceAliases {
+  width: min(1180px, calc(100vw - 30px));
+}
+.modal.serviceAliases .body {
+  overflow: auto;
+}
 #toastStack {
   position: fixed;
   right: 18px;
@@ -3055,6 +3205,8 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .dashboard-presets,
   .dashboard-profile-list,
   .service-map-layout,
+  .service-map-head,
+  .service-alias-modal,
   .alert-rule-builder,
   .alert-layout,
   .template-grid,
