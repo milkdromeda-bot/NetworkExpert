@@ -296,6 +296,7 @@ let state = {
   openMenuPos: null,
   openConversationInsightKey: null,
   openConversationInsightPos: null,
+  selectedMapEdgeId: null,
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
   correlation: { x: "rtt", y: "sendQ" },
@@ -1500,6 +1501,86 @@ function serviceMapGroupBands(lanes, positions) {
   return bands;
 }
 
+function renderMapLegend() {
+  return `<div class="map-legend" aria-label="Map legend">
+    <span><i class="legend-line low"></i> normal</span>
+    <span><i class="legend-line high"></i> high risk</span>
+    <span><i class="legend-line critical"></i> critical</span>
+    <span><i class="legend-box"></i> topology group</span>
+    <span><i class="legend-dot"></i> editable endpoint</span>
+  </div>`;
+}
+
+function edgeAnomalies(edge) {
+  return state.anomalies
+    .filter(anomaly => anomaly.socketId === edge.socket.id)
+    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+}
+
+function renderHotPaths(hotPaths) {
+  return `<aside class="map-side-panel hot-paths">
+    <strong>Hot paths</strong>
+    ${hotPaths.map(edge => `<article class="hot-path ${edge.risk}" data-socket="${escapeHtml(edge.socket.id)}">
+      <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
+      <p>${escapeHtml(edge.socket.details.process?.name || "unknown")} -> ${escapeHtml(aliasDisplay(edge.socket.peer, state.serviceAliases))}</p>
+      ${aliasForEndpoint(state.serviceAliases, edge.socket.peer)?.role ? `<em>${escapeHtml(aliasForEndpoint(state.serviceAliases, edge.socket.peer).role)}</em>` : ""}
+      <small>${formatNumber(edge.anomalies)} anomaly signal(s), Send-Q ${formatMetricValue("sendQ", edge.socket.sendQ)}, RTT ${formatMetricValue("rtt", metricValue(edge.socket, "rtt"))}</small>
+    </article>`).join("")}
+  </aside>`;
+}
+
+function renderMapEdgeInsight(edge) {
+  const socket = edge.socket;
+  const anomalies = edgeAnomalies(edge);
+  const localGroup = topologyGroupForEndpoint(state.topology, socket.local);
+  const peerGroup = topologyGroupForEndpoint(state.topology, socket.peer);
+  const topMetric = [
+    ["TX", "tx_bps", socketBandwidth(socket, "tx_bps")],
+    ["RX", "rx_bps", socketBandwidth(socket, "rx_bps")],
+    ["Send-Q", "sendQ", socket.sendQ],
+    ["Recv-Q", "recvQ", socket.recvQ],
+    ["RTT", "rtt", metricValue(socket, "rtt")],
+    ["RTO", "rto", metricValue(socket, "rto")],
+    ["Drops", "skmem.d", metricValue(socket, "skmem.d")]
+  ];
+  return `<aside class="map-side-panel link-inspector ${edge.risk}">
+    <header>
+      <span class="tooltip-kicker">Link intelligence</span>
+      <button class="icon" data-map-edge-close title="Close link inspector">${icons.x}</button>
+    </header>
+    <h3>${escapeHtml(aliasDisplay(socket.local, state.serviceAliases))} -> ${escapeHtml(aliasDisplay(socket.peer, state.serviceAliases))}</h3>
+    <p class="link-endpoints">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</p>
+    <div class="link-badges">
+      <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
+      <span>${escapeHtml(socket.family)} / ${escapeHtml(socket.state)}</span>
+      <span>${formatNumber(anomalies.length)} anomalies</span>
+    </div>
+    <div class="link-groups">
+      ${localGroup ? `<span><b>Local group</b>${escapeHtml(localGroup.name)}</span>` : ""}
+      ${peerGroup ? `<span><b>Peer group</b>${escapeHtml(peerGroup.name)}</span>` : ""}
+      ${socket.details.process?.name ? `<span><b>Process</b>${escapeHtml(socket.details.process.name)}${socket.details.process.pid ? `:${escapeHtml(socket.details.process.pid)}` : ""}</span>` : ""}
+    </div>
+    <div class="link-metrics">
+      ${topMetric.map(([label, metric, value]) => `<article class="${thresholdSeverity(metric, Number(value || 0))}">
+        <span>${escapeHtml(label)}</span>
+        <strong>${formatMetricValue(metric, value)}</strong>
+      </article>`).join("")}
+    </div>
+    ${anomalies.length ? `<section class="link-anomalies">
+      <strong>Signals</strong>
+      ${anomalies.slice(0, 4).map(anomaly => `<article class="${escapeHtml(anomaly.severity)}">
+        <span class="risk ${escapeHtml(anomaly.severity)}">${escapeHtml(anomaly.severity)}</span>
+        <div><b>${escapeHtml(anomaly.title)}</b><p>${escapeHtml(anomaly.detail || metricLabel(anomaly.metric || "socket"))}</p></div>
+      </article>`).join("")}
+    </section>` : `<div class="empty compact">No anomaly attached to this link.</div>`}
+    <footer>
+      <button data-map-edge-action="details" data-socket-id="${escapeHtml(socket.id)}">${icons.activity} Details</button>
+      <button data-map-edge-action="chart" data-socket-id="${escapeHtml(socket.id)}">${icons.chart} Charts</button>
+      ${anomalies.length ? `<button data-map-edge-action="anomalies" data-socket-id="${escapeHtml(socket.id)}">${icons.alert} Anomalies</button>` : ""}
+    </footer>
+  </aside>`;
+}
+
 function buildServiceMap() {
   const sockets = sortedFilteredSockets().slice(0, 120);
   const processNodes = new Map();
@@ -2569,6 +2650,7 @@ function renderServiceMap() {
   }));
   const groupBands = serviceMapGroupBands(lanes, positions);
   const visibleEdges = map.edges.filter(edge => positions[edge.from] && positions[edge.mid] && positions[edge.to]).slice(0, 160);
+  const selectedEdge = visibleEdges.find(edge => edge.id === state.selectedMapEdgeId) || null;
   const hotPaths = [...map.edges].sort((a, b) =>
     riskRank(b.risk) - riskRank(a.risk) ||
     b.anomalies - a.anomalies ||
@@ -2590,6 +2672,7 @@ function renderServiceMap() {
     </div>
     <div class="service-map-layout">
       <div class="service-map-canvas">
+        ${renderMapLegend()}
         <svg viewBox="0 0 1100 ${height}" role="img" aria-label="Service dependency map">
           ${lanes.map(lane => `<text x="${lane.x}" y="28" class="map-lane-title">${escapeHtml(lane.title)}</text>`).join("")}
           ${groupBands.map(band => `<g class="map-group-band ${escapeHtml(band.group.color)}">
@@ -2600,7 +2683,12 @@ function renderServiceMap() {
             const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
             const color = edge.risk === "critical" ? "#ff5c77" : edge.risk === "high" ? "#ff9f43" : edge.risk === "medium" ? "#ffd166" : "#39d6d6";
             const width = Math.min(5, 1.5 + Math.log10(edge.weight + 1));
-            return `<path d="M ${a.x + 146} ${a.y} C ${a.x + 228} ${a.y}, ${b.x - 178} ${b.y}, ${b.x - 146} ${b.y} S ${c.x - 210} ${c.y}, ${c.x - 146} ${c.y}" stroke="${color}" stroke-width="${width}" fill="none" opacity=".38"/>`;
+            const d = `M ${a.x + 146} ${a.y} C ${a.x + 228} ${a.y}, ${b.x - 178} ${b.y}, ${b.x - 146} ${b.y} S ${c.x - 210} ${c.y}, ${c.x - 146} ${c.y}`;
+            return `<g class="map-link-wrap ${edge.id === state.selectedMapEdgeId ? "selected" : ""} ${edge.risk}" data-map-edge="${escapeHtml(edge.id)}" style="--link-color:${color};--link-width:${width}px;--link-hover-width:${Math.max(width + 2, 5.5)}px">
+              <path class="map-link-hit" d="${d}"/>
+              <path class="map-link" d="${d}"/>
+              <title>${escapeHtml(edge.socket.local)} -> ${escapeHtml(edge.socket.peer)} | ${edge.risk} | ${formatNumber(edge.anomalies)} anomaly signal(s)</title>
+            </g>`;
           }).join("")}
           ${lanes.flatMap(lane => lane.nodes.map(node => {
             const p = positions[node.id];
@@ -2618,15 +2706,7 @@ function renderServiceMap() {
           })).join("")}
         </svg>
       </div>
-      <aside class="hot-paths">
-        <strong>Hot paths</strong>
-        ${hotPaths.map(edge => `<article class="hot-path ${edge.risk}" data-socket="${escapeHtml(edge.socket.id)}">
-          <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
-          <p>${escapeHtml(edge.socket.details.process?.name || "unknown")} -> ${escapeHtml(aliasDisplay(edge.socket.peer, state.serviceAliases))}</p>
-          ${aliasForEndpoint(state.serviceAliases, edge.socket.peer)?.role ? `<em>${escapeHtml(aliasForEndpoint(state.serviceAliases, edge.socket.peer).role)}</em>` : ""}
-          <small>${formatNumber(edge.anomalies)} anomaly signal(s), Send-Q ${formatMetricValue("sendQ", edge.socket.sendQ)}, RTT ${formatMetricValue("rtt", metricValue(edge.socket, "rtt"))}</small>
-        </article>`).join("")}
-      </aside>
+      ${selectedEdge ? renderMapEdgeInsight(selectedEdge) : renderHotPaths(hotPaths)}
     </div>
   </div>`;
 }
@@ -3959,6 +4039,7 @@ function resetAllState() {
   state.openMenuPos = null;
   state.openConversationInsightKey = null;
   state.openConversationInsightPos = null;
+  state.selectedMapEdgeId = null;
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
   state.correlation = { x: "rtt", y: "sendQ" };
@@ -4697,6 +4778,41 @@ function bindEvents() {
     event.stopPropagation();
     state.aliasEditKey = event.currentTarget.dataset.mapAlias;
     state.modal = "serviceAliases";
+    render();
+  }));
+  document.querySelectorAll("[data-map-edge]").forEach(edge => edge.addEventListener("click", event => {
+    event.stopPropagation();
+    state.selectedMapEdgeId = event.currentTarget.dataset.mapEdge;
+    renderKeepingWorkspacePosition();
+  }));
+  document.querySelector("[data-map-edge-close]")?.addEventListener("click", event => {
+    event.stopPropagation();
+    state.selectedMapEdgeId = null;
+    renderKeepingWorkspacePosition();
+  });
+  document.querySelectorAll("[data-map-edge-action]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const socket = state.sockets.find(item => item.id === event.currentTarget.dataset.socketId);
+    if (!socket) return;
+    const action = event.currentTarget.dataset.mapEdgeAction;
+    state.selectedId = socket.id;
+    setActiveInvestigation(state, socket.id, "Chosen from map link");
+    if (action === "details") {
+      state.drawer = "details";
+    }
+    if (action === "chart") {
+      state.view = "charts";
+      const metric = state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric || "rtt";
+      if (chartMetricList().includes(metric)) {
+        state.prefs.graphMetric = metric;
+        state.chartMetrics = [...new Set([metric, ...state.chartMetrics])];
+      }
+    }
+    if (action === "anomalies") {
+      state.view = "analysis";
+      state.activeTab = "anomalies";
+      state.anomalyFilters = { ...state.anomalyFilters, severity: "all", metric: "all", text: socket.id, sort: "priority" };
+    }
     render();
   }));
   document.querySelectorAll("[data-alias-pick]").forEach(btn => btn.addEventListener("click", event => {
