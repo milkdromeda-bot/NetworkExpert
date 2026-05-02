@@ -10,6 +10,7 @@ import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 import { applyContextAction, setActiveInvestigation } from "./navigation.js";
 import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
+import { deleteTopologyGroup, endpointHost, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -274,6 +275,10 @@ let state = {
   dashboardProfiles: loadDashboardProfiles(),
   serviceAliases: loadServiceAliases(),
   aliasEditKey: "",
+  topologyProfiles: loadTopologyProfiles(),
+  topology: loadTopologyForSource("built-in sample"),
+  topologyEditId: "",
+  topologyDraftMatch: "",
   alertRules: loadAlertRules(),
   alertAcks: loadAlertAcks(),
   baseline: null,
@@ -438,6 +443,33 @@ function loadServiceAliases() {
 
 function saveServiceAliases() {
   localStorage.setItem("networkExpertServiceAliases", JSON.stringify(normalizeAliasStore(state.serviceAliases)));
+}
+
+function loadTopologyProfiles() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("networkExpertTopologyProfiles") || "{}");
+    return Object.fromEntries(Object.entries(saved).map(([scope, profile]) => [scope, normalizeTopologyProfile(profile)]));
+  } catch {
+    return {};
+  }
+}
+
+function loadTopologyForSource(sourceName) {
+  return normalizeTopologyProfile(loadTopologyProfiles()[topologyScopeKey(sourceName)]);
+}
+
+function setSourceName(sourceName) {
+  state.sourceName = sourceName;
+  state.topology = normalizeTopologyProfile(state.topologyProfiles[topologyScopeKey(sourceName)]);
+  state.topologyEditId = "";
+  state.topologyDraftMatch = "";
+}
+
+function saveCurrentTopology() {
+  const scope = topologyScopeKey(state.sourceName);
+  state.topology = normalizeTopologyProfile(state.topology);
+  state.topologyProfiles = { ...state.topologyProfiles, [scope]: state.topology };
+  localStorage.setItem("networkExpertTopologyProfiles", JSON.stringify(state.topologyProfiles));
 }
 
 function saveAlertRules() {
@@ -1430,6 +1462,43 @@ function nodeSubtitle(node) {
   return node.alias?.label ? node.endpoint : "";
 }
 
+function serviceMapGroupBands(lanes, positions) {
+  const bands = [];
+  for (const lane of lanes.filter(item => item.key !== "processes")) {
+    let run = null;
+    const closeRun = () => {
+      if (!run) return;
+      const ys = run.nodes.map(node => positions[node.id]?.y).filter(Number.isFinite);
+      if (ys.length) {
+        const top = Math.min(...ys) - 36;
+        const bottom = Math.max(...ys) + 36;
+        bands.push({
+          group: run.group,
+          x: lane.x - 166,
+          y: top,
+          width: 332,
+          height: bottom - top
+        });
+      }
+      run = null;
+    };
+    for (const node of lane.nodes) {
+      const group = node.topologyGroup;
+      if (!group) {
+        closeRun();
+        continue;
+      }
+      if (!run || run.group.id !== group.id) {
+        closeRun();
+        run = { group, nodes: [] };
+      }
+      run.nodes.push(node);
+    }
+    closeRun();
+  }
+  return bands;
+}
+
 function buildServiceMap() {
   const sockets = sortedFilteredSockets().slice(0, 120);
   const processNodes = new Map();
@@ -1445,6 +1514,7 @@ function buildServiceMap() {
         rawLabel: label,
         endpoint,
         alias: presentation?.alias || null,
+        topologyGroup: endpoint ? topologyGroupForEndpoint(state.topology, endpoint) : null,
         kind,
         count: 0,
         risk: "low",
@@ -1475,7 +1545,14 @@ function buildServiceMap() {
       weight: Math.max(1, socket.sendQ + socket.recvQ + socketBandwidth(socket, "tx_bps") / 100000)
     });
   }
-  const sortNodes = nodes => [...nodes.values()].sort((a, b) => riskRank(b.risk) - riskRank(a.risk) || b.anomalies - a.anomalies || b.count - a.count).slice(0, 18);
+  const sortNodes = nodes => [...nodes.values()].sort((a, b) => {
+    const groupA = a.topologyGroup?.name || "\uffff";
+    const groupB = b.topologyGroup?.name || "\uffff";
+    return groupA.localeCompare(groupB, "en", { numeric: true })
+      || riskRank(b.risk) - riskRank(a.risk)
+      || b.anomalies - a.anomalies
+      || b.count - a.count;
+  }).slice(0, 18);
   return {
     processes: sortNodes(processNodes),
     locals: sortNodes(localNodes),
@@ -2489,6 +2566,7 @@ function renderServiceMap() {
   lanes.forEach(lane => lane.nodes.forEach((node, index) => {
     positions[node.id] = { x: lane.x, y: 74 + index * 66 };
   }));
+  const groupBands = serviceMapGroupBands(lanes, positions);
   const visibleEdges = map.edges.filter(edge => positions[edge.from] && positions[edge.mid] && positions[edge.to]).slice(0, 160);
   const hotPaths = [...map.edges].sort((a, b) =>
     riskRank(b.risk) - riskRank(a.risk) ||
@@ -2504,12 +2582,19 @@ function renderServiceMap() {
         <article><span>Labels</span><strong>${formatNumber(Object.keys(state.serviceAliases).length)}</strong></article>
         <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
       </div>
-      <button class="service-labels-button" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Service labels</button>
+      <div class="service-map-actions">
+        <button class="service-labels-button topology" data-action="topology"><i class="ri-node-tree"></i> Topology</button>
+        <button class="service-labels-button" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Labels</button>
+      </div>
     </div>
     <div class="service-map-layout">
       <div class="service-map-canvas">
         <svg viewBox="0 0 1100 ${height}" role="img" aria-label="Service dependency map">
           ${lanes.map(lane => `<text x="${lane.x}" y="28" class="map-lane-title">${escapeHtml(lane.title)}</text>`).join("")}
+          ${groupBands.map(band => `<g class="map-group-band ${escapeHtml(band.group.color)}">
+            <rect x="${band.x}" y="${band.y}" width="${band.width}" height="${band.height}" rx="14"/>
+            <text x="${band.x + 12}" y="${band.y + 18}">${escapeHtml(band.group.name)}</text>
+          </g>`).join("")}
           ${visibleEdges.map(edge => {
             const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
             const color = edge.risk === "critical" ? "#ff5c77" : edge.risk === "high" ? "#ff9f43" : edge.risk === "medium" ? "#ffd166" : "#39d6d6";
@@ -3173,6 +3258,56 @@ function renderServiceAliasesModal() {
   </div>`;
 }
 
+function topologyMatchOptions() {
+  const endpoints = serviceAliasEndpointOptions();
+  const hosts = [...new Set(endpoints.map(endpointHost).filter(Boolean))];
+  return [...hosts, ...endpoints];
+}
+
+function topologyColorOptions(selected) {
+  return ["cyan", "blue", "green", "orange", "pink", "violet"]
+    .map(color => `<option value="${color}" ${selected === color ? "selected" : ""}>${color}</option>`)
+    .join("");
+}
+
+function renderTopologyModal() {
+  const groups = normalizeTopologyProfile(state.topology).groups;
+  const selected = groups.find(group => group.id === state.topologyEditId) || null;
+  const matchValue = selected?.match || state.topologyDraftMatch || "";
+  const suggestions = topologyMatchOptions().filter(Boolean).slice(0, 16);
+  return `<div class="topology-modal">
+    <section class="topology-editor">
+      <article class="field-card">
+        <strong>Recording topology</strong>
+        <p class="hint">Scope: ${escapeHtml(state.sourceName)}. A host rule such as 192.168.145.115 groups every visible port on that host; IP:port and wildcards are also accepted.</p>
+        <label>Group name<input id="topologyName" placeholder="Market data simulators" value="${escapeHtml(selected?.name || "")}" /></label>
+        <label>Match hosts or endpoints<input id="topologyMatch" list="topologyMatchOptions" placeholder="192.168.145.115, 192.168.145.204:57067" value="${escapeHtml(matchValue)}" /></label>
+        ${renderDatalist("topologyMatchOptions", suggestions)}
+        <label>Color<select id="topologyColor">${topologyColorOptions(selected?.color || "cyan")}</select></label>
+        <label>Notes<textarea id="topologyNote" class="alias-note" placeholder="Business role, owner, recording-specific context...">${escapeHtml(selected?.note || "")}</textarea></label>
+        <div class="toolbar">
+          <button class="primary" data-action="saveTopologyGroup"><i class="ri-node-tree"></i> Save group</button>
+          <button data-action="deleteTopologyGroup">${icons.trash} Delete group</button>
+        </div>
+      </article>
+      <article class="field-card">
+        <strong>Fast host picks</strong>
+        <div class="topology-suggestions">
+          ${suggestions.slice(0, 10).map(value => `<button data-topology-suggest="${escapeHtml(value)}"><span>${escapeHtml(value)}</span><small>use</small></button>`).join("")}
+        </div>
+      </article>
+    </section>
+    <section class="topology-group-list">
+      <strong>Groups for this recording</strong>
+      ${groups.length ? groups.map(group => `<article class="topology-group-card ${escapeHtml(group.color)}">
+        <div><b>${escapeHtml(group.name)}</b><span>${escapeHtml(group.match)}</span></div>
+        ${group.note ? `<p>${escapeHtml(group.note)}</p>` : ""}
+        <button data-topology-edit="${escapeHtml(group.id)}"><i class="ri-edit-line"></i> Edit</button>
+      </article>`).join("") : `<div class="empty">No topology group for this recording yet.</div>`}
+    </section>
+  </div>`;
+}
+
 function renderModal() {
   const modalTitle = state.modal === "columns" ? "Columns and order"
     : state.modal === "thresholds" ? "Threshold configuration"
@@ -3181,6 +3316,7 @@ function renderModal() {
           : state.modal === "columnHelp" ? "Column guide"
             : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
               : state.modal === "serviceAliases" ? "Service labels"
+                : state.modal === "topology" ? "Recording topology"
               : "ss field documentation";
   const modalBody = state.modal === "columns" ? renderColumnChooser()
     : state.modal === "thresholds" ? renderThresholdConfig()
@@ -3189,6 +3325,7 @@ function renderModal() {
           : state.modal === "columnHelp" ? renderColumnHelpDetail()
             : state.modal === "chartStats" ? renderChartStatsModal()
               : state.modal === "serviceAliases" ? renderServiceAliasesModal()
+                : state.modal === "topology" ? renderTopologyModal()
               : renderFields();
   return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
     <section class="modal ${state.modal || ""}">
@@ -3807,7 +3944,7 @@ function moveVisibleChartMetric(metric, dir) {
 function resetAllState() {
   state.raw = "";
   state.command = "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all";
-  state.sourceName = "empty workspace";
+  setSourceName("empty workspace");
   state.sockets = [];
   state.selectedId = null;
   setActiveInvestigation(state, null);
@@ -4138,7 +4275,7 @@ async function importFile(file) {
   state.anomalies = [];
   state.selectedId = null;
   setActiveInvestigation(state, null);
-  state.sourceName = file.name;
+  setSourceName(file.name);
   state.view = "ingest";
   state.analysisDirty = false;
   resetDerivedCaches({ raw: true });
@@ -4163,7 +4300,7 @@ async function importFile(file) {
 
   state.raw = result.raw;
   state.sockets = result.sockets;
-  state.sourceName = result.sourceName;
+  setSourceName(result.sourceName);
   rememberFilterHistory(state.preImportFilters);
   state.importStatus = null;
   state.view = "analysis";
@@ -4224,10 +4361,10 @@ function bindEvents() {
       state.activeTab = "advisor";
       render();
     }
-    if (action === "sample") { state.raw = SAMPLE; state.sourceName = "built-in sample"; setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
+    if (action === "sample") { state.raw = SAMPLE; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
     if (action === "sample10m") {
       state.raw = generateTenMinuteSample();
-      state.sourceName = "10-minute synthetic sample";
+      setSourceName("10-minute synthetic sample");
       state.selectedId = null;
       setActiveInvestigation(state, null);
       state.view = "analysis";
@@ -4251,6 +4388,7 @@ function bindEvents() {
     if (action === "thresholds") { state.drawer = "thresholds"; render(); }
     if (action === "layoutPrefs") { state.modal = "layout"; render(); }
     if (action === "serviceAliases") { state.modal = "serviceAliases"; render(); }
+    if (action === "topology") { state.modal = "topology"; render(); }
     if (action === "toggleDeepAnalysis") {
       state.prefs.deepAnalysis = !state.prefs.deepAnalysis;
       savePrefs();
@@ -4460,6 +4598,35 @@ function bindEvents() {
       toast("Service label deleted", endpoint || "Endpoint label removed.");
       render();
     }
+    if (action === "saveTopologyGroup") {
+      const name = document.querySelector("#topologyName")?.value?.trim() || "";
+      const match = document.querySelector("#topologyMatch")?.value?.trim() || "";
+      if (!name || !match) {
+        toast("Topology group incomplete", "Add a group name and at least one IP or IP:port matcher.", "danger");
+        return;
+      }
+      state.topology = upsertTopologyGroup(state.topology, {
+        id: state.topologyEditId || "",
+        name,
+        match,
+        color: document.querySelector("#topologyColor")?.value || "cyan",
+        note: document.querySelector("#topologyNote")?.value || ""
+      });
+      state.topologyEditId = state.topology.groups[0]?.id || "";
+      state.topologyDraftMatch = "";
+      saveCurrentTopology();
+      toast("Topology group saved", `${name} is mapped for ${state.sourceName}.`);
+      render();
+    }
+    if (action === "deleteTopologyGroup") {
+      if (!state.topologyEditId) return;
+      state.topology = deleteTopologyGroup(state.topology, state.topologyEditId);
+      state.topologyEditId = "";
+      state.topologyDraftMatch = "";
+      saveCurrentTopology();
+      toast("Topology group deleted", "This recording topology was updated.");
+      render();
+    }
     if (action === "closeDrawer") { state.drawer = null; render(); }
     if (action === "closeModal") { state.modal = null; state.helpColumn = null; render(); }
     if (action === "savePrefs") {
@@ -4541,6 +4708,20 @@ function bindEvents() {
     state.aliasEditKey = event.target.value;
     renderKeepingModalPosition();
   });
+  document.querySelectorAll("[data-topology-edit]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    state.topologyEditId = event.currentTarget.dataset.topologyEdit;
+    state.topologyDraftMatch = "";
+    state.modal = "topology";
+    renderKeepingModalPosition();
+  }));
+  document.querySelectorAll("[data-topology-suggest]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    state.topologyEditId = "";
+    state.topologyDraftMatch = event.currentTarget.dataset.topologySuggest;
+    state.modal = "topology";
+    renderKeepingModalPosition();
+  }));
   document.querySelectorAll("[data-guide-tab]").forEach(tab => tab.addEventListener("click", event => {
     state.guideTab = event.currentTarget.dataset.guideTab;
     render();

@@ -1845,6 +1845,11 @@ th:focus-within .column-tooltip,
   grid-template-columns: repeat(5, minmax(116px, 1fr));
   margin-bottom: 0;
 }
+.service-map-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
 .service-labels-button {
   min-height: 42px;
   padding: 0 14px;
@@ -1865,6 +1870,9 @@ th:focus-within .column-tooltip,
 }
 .service-labels-button i {
   color: #9ff8ff;
+}
+.service-labels-button.topology i {
+  color: #b7ff9b;
 }
 .service-labels-button:hover {
   border-color: rgba(137, 244, 255, .86);
@@ -1906,6 +1914,31 @@ th:focus-within .column-tooltip,
   text-transform: uppercase;
   letter-spacing: .08em;
 }
+.map-group-band {
+  pointer-events: none;
+}
+.map-group-band rect {
+  fill: rgba(57, 214, 214, .07);
+  stroke: rgba(57, 214, 214, .42);
+  stroke-dasharray: 7 6;
+}
+.map-group-band text {
+  fill: #9ff8ff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.map-group-band.blue rect { fill: rgba(93, 183, 255, .08); stroke: rgba(93, 183, 255, .48); }
+.map-group-band.blue text { fill: #9fcfff; }
+.map-group-band.green rect { fill: rgba(71, 255, 160, .08); stroke: rgba(71, 255, 160, .48); }
+.map-group-band.green text { fill: #8effbf; }
+.map-group-band.orange rect { fill: rgba(255, 159, 67, .09); stroke: rgba(255, 159, 67, .5); }
+.map-group-band.orange text { fill: #ffbf79; }
+.map-group-band.pink rect { fill: rgba(255, 92, 119, .09); stroke: rgba(255, 92, 119, .52); }
+.map-group-band.pink text { fill: #ff9aaa; }
+.map-group-band.violet rect { fill: rgba(145, 125, 255, .09); stroke: rgba(145, 125, 255, .52); }
+.map-group-band.violet text { fill: #c6bbff; }
 .map-node-label {
   fill: #edf4ff;
   font-size: 12px;
@@ -2056,6 +2089,95 @@ th:focus-within .column-tooltip,
   color: var(--muted);
 }
 .alias-card p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.topology-modal {
+  display: grid;
+  grid-template-columns: minmax(360px, .9fr) minmax(380px, 1.1fr);
+  gap: 12px;
+}
+.topology-editor {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.topology-editor label {
+  display: grid;
+  gap: 6px;
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+.topology-suggestions {
+  display: grid;
+  gap: 8px;
+}
+.topology-suggestions button {
+  justify-content: space-between;
+  min-height: 38px;
+  text-align: left;
+}
+.topology-suggestions span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topology-suggestions small {
+  color: var(--cyan);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.topology-group-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.topology-group-list > strong {
+  color: #edf4ff;
+  font-size: 13px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.topology-group-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(113, 143, 173, .28);
+  border-left: 4px solid var(--cyan);
+  border-radius: 8px;
+  background: #080d14;
+}
+.topology-group-card.blue { border-left-color: var(--blue); }
+.topology-group-card.green { border-left-color: var(--green); }
+.topology-group-card.orange { border-left-color: var(--orange); }
+.topology-group-card.pink { border-left-color: var(--red); }
+.topology-group-card.violet { border-left-color: #a896ff; }
+.topology-group-card div,
+.topology-group-card p {
+  min-width: 0;
+}
+.topology-group-card b,
+.topology-group-card span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topology-group-card b {
+  color: #edf4ff;
+}
+.topology-group-card span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.topology-group-card p {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--soft);
@@ -3113,8 +3235,12 @@ th:focus-within .column-tooltip,
 .modal.serviceAliases {
   width: min(1180px, calc(100vw - 30px));
 }
-.modal.serviceAliases .body {
+.modal.serviceAliases .body,
+.modal.topology .body {
   overflow: auto;
+}
+.modal.topology {
+  width: min(1220px, calc(100vw - 30px));
 }
 #toastStack {
   position: fixed;
@@ -3252,6 +3378,7 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .service-map-layout,
   .service-map-head,
   .service-alias-modal,
+  .topology-modal,
   .alert-rule-builder,
   .alert-layout,
   .template-grid,
