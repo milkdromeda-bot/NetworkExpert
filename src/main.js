@@ -1427,7 +1427,7 @@ function nodeLabel(node) {
 
 function nodeSubtitle(node) {
   if (node.kind === "process") return `${formatNumber(node.count)} socket(s)`;
-  return node.endpoint || `${formatNumber(node.count)} socket(s)`;
+  return node.alias?.label ? node.endpoint : "";
 }
 
 function buildServiceMap() {
@@ -2521,10 +2521,11 @@ function renderServiceMap() {
             const fill = node.risk === "critical" ? "#4b1420" : node.risk === "high" ? "#3b220b" : node.risk === "medium" ? "#2b270b" : "#071d24";
             const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
             const aliasAction = node.endpoint ? `data-map-alias="${escapeHtml(node.endpoint)}"` : "";
+            const subtitle = nodeSubtitle(node);
             return `<g class="map-node ${node.endpoint ? "editable" : ""}" ${aliasAction}>
               <rect x="${p.x - 146}" y="${p.y - 24}" width="292" height="48" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
-              <text x="${p.x - 134}" y="${p.y - 3}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 30))}</text>
-              <text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(nodeSubtitle(node))}</text>
+              <text x="${p.x - 134}" y="${subtitle ? p.y - 3 : p.y + 5}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 30))}</text>
+              ${subtitle ? `<text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(subtitle)}</text>` : ""}
               ${node.endpoint ? `<text x="${p.x + 112}" y="${p.y + 5}" class="map-node-edit">edit</text>` : ""}
               <circle cx="${p.x + 134}" cy="${p.y}" r="5" fill="${stroke}"/>
             </g>`;
