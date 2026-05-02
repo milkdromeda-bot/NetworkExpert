@@ -1427,8 +1427,7 @@ function nodeLabel(node) {
 
 function nodeSubtitle(node) {
   if (node.kind === "process") return `${formatNumber(node.count)} socket(s)`;
-  if (node.alias?.role) return `${node.alias.role} | ${node.endpoint}`;
-  return node.alias ? node.endpoint : `${formatNumber(node.count)} socket(s)`;
+  return node.endpoint || `${formatNumber(node.count)} socket(s)`;
 }
 
 function buildServiceMap() {
@@ -2173,7 +2172,8 @@ function renderEndpointCell(endpoint, extra = "") {
   if (!alias?.label) return `<span>${escapeHtml(endpoint)}</span>${extra}`;
   return `<div class="endpoint-cell" title="${escapeHtml(endpoint)}">
     <strong>${escapeHtml(alias.label)}</strong>
-    <small>${escapeHtml([alias.role, endpoint].filter(Boolean).join(" | "))}</small>
+    ${alias.role ? `<em>${escapeHtml(alias.role)}</em>` : ""}
+    <small>${escapeHtml(endpoint)}</small>
     ${extra}
   </div>`;
 }
@@ -2514,7 +2514,7 @@ function renderServiceMap() {
             const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
             const color = edge.risk === "critical" ? "#ff5c77" : edge.risk === "high" ? "#ff9f43" : edge.risk === "medium" ? "#ffd166" : "#39d6d6";
             const width = Math.min(5, 1.5 + Math.log10(edge.weight + 1));
-            return `<path d="M ${a.x + 128} ${a.y} C ${a.x + 218} ${a.y}, ${b.x - 164} ${b.y}, ${b.x - 128} ${b.y} S ${c.x - 198} ${c.y}, ${c.x - 128} ${c.y}" stroke="${color}" stroke-width="${width}" fill="none" opacity=".38"/>`;
+            return `<path d="M ${a.x + 146} ${a.y} C ${a.x + 228} ${a.y}, ${b.x - 178} ${b.y}, ${b.x - 146} ${b.y} S ${c.x - 210} ${c.y}, ${c.x - 146} ${c.y}" stroke="${color}" stroke-width="${width}" fill="none" opacity=".38"/>`;
           }).join("")}
           ${lanes.flatMap(lane => lane.nodes.map(node => {
             const p = positions[node.id];
@@ -2522,11 +2522,11 @@ function renderServiceMap() {
             const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
             const aliasAction = node.endpoint ? `data-map-alias="${escapeHtml(node.endpoint)}"` : "";
             return `<g class="map-node ${node.endpoint ? "editable" : ""}" ${aliasAction}>
-              <rect x="${p.x - 128}" y="${p.y - 24}" width="256" height="48" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
-              <text x="${p.x - 116}" y="${p.y - 3}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 28))}</text>
-              <text x="${p.x - 116}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(truncateMiddle(nodeSubtitle(node), 34))}</text>
-              ${node.endpoint ? `<text x="${p.x + 96}" y="${p.y + 5}" class="map-node-edit">edit</text>` : ""}
-              <circle cx="${p.x + 116}" cy="${p.y}" r="5" fill="${stroke}"/>
+              <rect x="${p.x - 146}" y="${p.y - 24}" width="292" height="48" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
+              <text x="${p.x - 134}" y="${p.y - 3}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 30))}</text>
+              <text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(nodeSubtitle(node))}</text>
+              ${node.endpoint ? `<text x="${p.x + 112}" y="${p.y + 5}" class="map-node-edit">edit</text>` : ""}
+              <circle cx="${p.x + 134}" cy="${p.y}" r="5" fill="${stroke}"/>
             </g>`;
           })).join("")}
         </svg>

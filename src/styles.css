@@ -1124,13 +1124,22 @@ th:focus-within .column-tooltip,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.endpoint-cell small {
+.endpoint-cell em {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--cyan);
   font-size: 11px;
-  line-height: 1.25;
+  font-style: normal;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.endpoint-cell small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .peer-cell > span,
 .peer-cell > strong {
@@ -1904,8 +1913,9 @@ th:focus-within .column-tooltip,
 }
 .map-node-subtitle {
   fill: #9fb0c2;
-  font-size: 10px;
-  font-weight: 650;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 750;
 }
 .map-node-edit {
   fill: #8defff;
