@@ -31,6 +31,7 @@ export function parseNumber(value) {
     return Number(rate[1]) * multiplier;
   }
   const cleaned = raw.replace(/bps$/i, "").replace(/[^\d.-]/g, "");
+  if (!cleaned || !/\d/.test(cleaned)) return null;
   const num = Number(cleaned);
   return Number.isFinite(num) ? num : null;
 }

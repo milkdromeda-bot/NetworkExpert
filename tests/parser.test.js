@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { metricValue, parseNumber, parseSs, parseTimestampLine } from "../src/parser.js";
+import { inferFamily, metricValue, parseAddress, parseDuration, parseNumber, parseSs, parseTimestampLine } from "../src/parser.js";
 
 test("parseNumber handles bandwidth units consistently", () => {
   assert.equal(parseNumber("328kbps"), 328000);
@@ -52,4 +52,34 @@ test("metricValue falls back to send for pacing rate when pacing_rate is absent"
   const [socket] = parseSs("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 send 1480800bps");
 
   assert.equal(metricValue(socket, "pacing_rate"), 1480800);
+});
+
+test("parseAddress handles IPv4 host and port", () => {
+  assert.deepEqual(parseAddress("192.168.145.205:20002"), { host: "192.168.145.205", port: "20002" });
+});
+
+test("parseAddress keeps wildcard listeners parseable", () => {
+  assert.deepEqual(parseAddress("*:22"), { host: "*", port: "22" });
+});
+
+test("parseDuration normalizes common timer units to milliseconds", () => {
+  assert.equal(parseDuration("2sec"), 2000);
+  assert.equal(parseDuration("3min"), 180000);
+  assert.equal(parseDuration("1hour"), 3600000);
+  assert.equal(parseDuration("276"), 276);
+});
+
+test("parseNumber returns null for non numeric values", () => {
+  assert.equal(parseNumber("keepalive"), null);
+  assert.equal(parseNumber(undefined), null);
+});
+
+test("parseSs extracts process owner when users metadata is present", () => {
+  const [socket] = parseSs('ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 users:(("java",pid=3450060,fd=77))');
+
+  assert.deepEqual(socket.details.process, { name: "java", pid: 3450060, fd: 77 });
+});
+
+test("inferFamily identifies udp from unconnected socket state", () => {
+  assert.equal(inferFamily("10.0.0.1:53", "0.0.0.0:*", "UNCONN"), "udp");
 });

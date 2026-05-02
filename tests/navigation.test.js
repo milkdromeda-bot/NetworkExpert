@@ -98,3 +98,39 @@ test("context Clear removes active socket and open dialog state", () => {
   assert.equal(state.openConversationInsightKey, null);
   assert.equal(state.openConversationInsightPos, null);
 });
+
+test("context Details opens details drawer without changing table filters", () => {
+  const state = baseState();
+  const before = { ...state.table.filters };
+
+  applyContextAction(state, "details", socket);
+
+  assert.equal(state.drawer, "details");
+  assert.deepEqual(state.table.filters, before);
+});
+
+test("context action with no socket is a no-op except clear", () => {
+  const state = baseState();
+  const before = structuredClone(state);
+
+  applyContextAction(state, "charts", null, { chartMetrics: ["rtt"], suggestedMetric: "rtt" });
+
+  assert.deepEqual(state, before);
+});
+
+test("context Clear does not erase current table filters", () => {
+  const state = baseState();
+  const before = { ...state.table.filters };
+
+  applyContextAction(state, "clear", socket);
+
+  assert.deepEqual(state.table.filters, before);
+});
+
+test("context Charts avoids duplicate metrics", () => {
+  const state = baseState();
+
+  applyContextAction(state, "charts", socket, { chartMetrics: ["rtt"], suggestedMetric: "rtt" });
+
+  assert.deepEqual(state.chartMetrics, ["rtt"]);
+});

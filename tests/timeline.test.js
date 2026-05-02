@@ -90,3 +90,56 @@ test("socket keys distinguish state for the same endpoints", () => {
 
   assert.notEqual(socketKey(a), socketKey(b));
 });
+
+test("empty captures produce no timestamp blocks or sockets", () => {
+  assert.deepEqual(timestampBlocks(""), []);
+  assert.deepEqual(aggregateTimestampedSockets(""), []);
+});
+
+test("single timestamp captures do not collapse repeated rows", () => {
+  const raw = [
+    "--- 2026-04-27 16:24:13 ---",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:2/0.2"
+  ].join("\n");
+
+  assert.equal(aggregateTimestampedSockets(raw).length, 2);
+});
+
+test("timestamped aggregation keeps distinct peers for one local socket", () => {
+  const raw = [
+    "--- 2026-04-27 16:24:13 ---",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.3:443 rtt:2/0.2",
+    "--- 2026-04-27 16:24:14 ---",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:3/0.3",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.3:443 rtt:4/0.4"
+  ].join("\n");
+
+  assert.equal(aggregateTimestampedSockets(raw).length, 2);
+});
+
+test("timestamp blocks accept EPOCH_MS markers", () => {
+  const raw = [
+    "EPOCH_MS=1777300000000",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1"
+  ].join("\n");
+
+  const [block] = timestampBlocks(raw);
+
+  assert.equal(block.epochMs, 1777300000000);
+  assert.equal(block.lines.length, 1);
+});
+
+test("progress aggregation keeps the latest socket values", () => {
+  const sockets = parseSs([
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1 cwnd:4",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:9/0.9 cwnd:12"
+  ].join("\n"));
+
+  const [socket] = aggregateParsedSocketsByKey(sockets);
+
+  assert.equal(socket.snapshotCount, 2);
+  assert.equal(socket.details.values.rtt.avg, 9);
+  assert.equal(socket.details.values.cwnd, 12);
+});

@@ -75,3 +75,35 @@ test("streaming import reports progressive updates for larger text files", async
   assert.equal(result.sockets.length, 3000);
   assert.ok(progressCalls >= 1);
 });
+
+test("pre-import state filter keeps only matching socket states", async () => {
+  const raw = [
+    "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1"
+  ].join("\n");
+
+  const result = await importSocketFile(textFile("capture.log", raw), {
+    formatNumber: String,
+    preFilter: { enabled: true, state: "LISTEN" },
+    onProgress() {}
+  });
+
+  assert.equal(result.sockets.length, 1);
+  assert.equal(result.sockets[0].state, "LISTEN");
+});
+
+test("pre-import source IP filter keeps matching local endpoints", async () => {
+  const raw = [
+    "ESTAB 0 0 192.168.145.205:20002 192.168.145.204:57067 rtt:1/0.1",
+    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:2/0.2"
+  ].join("\n");
+
+  const result = await importSocketFile(textFile("capture.log", raw), {
+    formatNumber: String,
+    preFilter: { enabled: true, srcIp: "192.168.145.205" },
+    onProgress() {}
+  });
+
+  assert.equal(result.sockets.length, 1);
+  assert.equal(result.sockets[0].localAddress.host, "192.168.145.205");
+});
