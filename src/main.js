@@ -293,6 +293,7 @@ let state = {
   modal: null,
   statsMetric: null,
   helpColumn: null,
+  ssOptionHelpKey: "-i",
   openMenuPos: null,
   openConversationInsightKey: null,
   openConversationInsightPos: null,
@@ -598,13 +599,26 @@ function ssOptionIntel(short, long, desc, group) {
   };
 }
 
-function renderSsOptionTooltip({ short = "", long = "", desc = "", group = "" }) {
-  const key = ssOptionKey(short, long);
+function ssOptionObject(option) {
+  const [short, long, desc, group] = option;
+  return { short, long, desc, group, key: ssOptionKey(short, long) };
+}
+
+function selectedSsOption(options, active) {
+  const objects = options.map(ssOptionObject);
+  return objects.find(option => option.key === state.ssOptionHelpKey)
+    || objects.find(option => active.some(item => ssOptionKey(item.short, item.long) === option.key))
+    || objects.find(option => option.key === "-i")
+    || objects[0];
+}
+
+function renderSsOptionDetail({ short = "", long = "", desc = "", group = "", key = "" }) {
+  const detailKey = key || ssOptionKey(short, long);
   const intel = ssOptionIntel(short, long, desc, group);
   return `
-    <span class="ss-option-tooltip" role="tooltip">
+    <article class="ss-option-detail-card">
       <span class="ss-option-kicker">ss option intelligence</span>
-      <strong>${escapeHtml(key)}${long && long !== key ? ` <small>${escapeHtml(long)}</small>` : ""}</strong>
+      <strong>${escapeHtml(detailKey)}${long && long !== detailKey ? ` <small>${escapeHtml(long)}</small>` : ""}</strong>
       <span class="ss-option-role">${escapeHtml(intel.role)}</span>
       <span>${escapeHtml(desc)}</span>
       <dl>
@@ -612,7 +626,7 @@ function renderSsOptionTooltip({ short = "", long = "", desc = "", group = "" })
         <dt>Use it when</dt><dd>${escapeHtml(intel.use)}</dd>
         <dt>If missing</dt><dd>${escapeHtml(intel.missing)}</dd>
       </dl>
-    </span>
+    </article>
   `;
 }
 
@@ -626,20 +640,20 @@ function renderSsOptionChip(option) {
   `;
 }
 
-function renderSsOptionControl(option, coverage) {
+function renderSsOptionControl(option, coverage, selectedKey) {
   const [short, long, desc, group] = option;
   const key = ssOptionKey(short, long);
+  const intel = ssOptionIntel(short, long, desc, group);
   const active = coverage.find(c => c.short === short && c.long === long)?.active;
   return `
-    <div class="check ss-option-row">
+    <div class="check ss-option-row ${key === selectedKey ? "selected" : ""}">
       <label class="ss-option-check">
         <input type="checkbox" data-opt="${escapeHtml(key)}" ${active ? "checked" : ""}/>
-        <span class="ss-option-code">${escapeHtml(key)}</span>
+        <span class="ss-option-code"><b>${escapeHtml(key)}</b><small>${escapeHtml(intel.role)}</small></span>
       </label>
-      <button type="button" class="ss-option-info" aria-label="${escapeHtml(`Explain ${key}`)}">
+      <button type="button" class="ss-option-info" data-ss-option-help="${escapeHtml(key)}" aria-label="${escapeHtml(`Explain ${key}`)}" title="${escapeHtml(`Show ${key} details`)}">
         <i class="ri-information-line"></i>
       </button>
-      ${renderSsOptionTooltip({ short, long, desc, group })}
     </div>
   `;
 }
@@ -2011,6 +2025,8 @@ function renderIngestPage() {
   const coverage = commandCoverage(state.command);
   const active = coverage.filter(o => o.active);
   const best = ["-H", "-O", "-n", "-t", "-e", "-p", "-m", "-i", "--tos", "--cgroup", "--inet-sockopt", "-a", "-A"];
+  const featuredOptions = SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1]));
+  const selectedOption = selectedSsOption(featuredOptions, active);
   return html`
     <section class="ingest-hero">
       <div>
@@ -2047,8 +2063,11 @@ function renderIngestPage() {
           </div>
           <div class="chips">${active.map(renderSsOptionChip).join("") || `<span class="chip">no option detected</span>`}</div>
           <p class="hint">Compact flags such as ss -plunt are decomposed option by option.</p>
-          <div class="option-grid">
-            ${SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1])).map(option => renderSsOptionControl(option, coverage)).join("")}
+          <div class="ss-option-card-layout">
+            <div class="option-grid" aria-label="ss option toggles">
+              ${featuredOptions.map(option => renderSsOptionControl(option, coverage, selectedOption?.key)).join("")}
+            </div>
+            ${selectedOption ? renderSsOptionDetail(selectedOption) : ""}
           </div>
         </div>
       </div>
@@ -5278,9 +5297,20 @@ function bindEvents() {
     const tokens = tokenizeCommand(state.command);
     const set = new Set(tokens);
     event.currentTarget.checked ? set.add(opt) : set.delete(opt);
+    state.ssOptionHelpKey = opt;
     state.command = `ss ${Array.from(set).join(" ")}`.replace(/\s+/g, " ").trim();
     render();
   }));
+  document.querySelectorAll("[data-ss-option-help]").forEach(button => {
+    const showHelp = event => {
+      event.stopPropagation();
+      state.ssOptionHelpKey = event.currentTarget.dataset.ssOptionHelp;
+      renderKeepingWorkspacePosition();
+    };
+    button.addEventListener("click", showHelp);
+    button.addEventListener("mouseenter", showHelp);
+    button.addEventListener("focus", showHelp);
+  });
   for (const [id, key] of [["metricSelect", "graphMetric"], ["styleSelect", "graphStyle"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = e.target.value; savePrefs(); render(); });
   }
