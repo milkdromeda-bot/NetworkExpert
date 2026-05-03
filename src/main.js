@@ -1581,6 +1581,22 @@ function renderMapEdgeInsight(edge) {
   </aside>`;
 }
 
+function mapNodeTitle(node) {
+  const lines = [];
+  if (node.endpoint) lines.push(`Endpoint: ${node.endpoint}`);
+  if (node.alias?.label) lines.push(`Label: ${node.alias.label}`);
+  if (node.alias?.role) lines.push(`Role: ${node.alias.role}`);
+  if (node.topologyGroup) {
+    lines.push(`Topology group: ${node.topologyGroup.name}`);
+    lines.push(`Match: ${node.topologyGroup.match}`);
+    if (node.topologyGroup.note) lines.push(`Note: ${node.topologyGroup.note}`);
+  }
+  lines.push(`Risk: ${node.risk}`);
+  lines.push(`Sockets: ${formatNumber(node.count)}`);
+  if (node.anomalies) lines.push(`Anomalies: ${formatNumber(node.anomalies)}`);
+  return lines.join("\n");
+}
+
 function buildServiceMap() {
   const sockets = sortedFilteredSockets().slice(0, 120);
   const processNodes = new Map();
@@ -2702,6 +2718,7 @@ function renderServiceMap() {
               ${subtitle ? `<text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(subtitle)}</text>` : ""}
               ${node.endpoint ? `<text x="${p.x + 112}" y="${p.y + 5}" class="map-node-edit">edit</text>` : ""}
               <circle cx="${p.x + 134}" cy="${p.y}" r="5" fill="${stroke}"/>
+              <title>${escapeHtml(mapNodeTitle(node))}</title>
             </g>`;
           })).join("")}
         </svg>
@@ -4949,7 +4966,7 @@ function bindEvents() {
     setActiveInvestigation(state, state.selectedId, "Chosen by clicking a row");
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
-    render();
+    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-sort]").forEach(btn => btn.addEventListener("click", event => {
     const key = event.currentTarget.dataset.sort;
