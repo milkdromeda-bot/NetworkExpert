@@ -2133,15 +2133,12 @@ th:focus-within .column-tooltip,
   transition: filter .16s ease, stroke-width .16s ease, transform .16s ease;
 }
 .map-node-edit-action path {
-  fill: #eaffff;
+  fill: none;
+  stroke: #eaffff;
+  stroke-width: 2.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   filter: drop-shadow(0 0 5px rgba(137, 244, 255, .45));
-  pointer-events: none;
-}
-.map-node-edit-action text {
-  fill: #ffffff;
-  font-size: 8.5px;
-  font-weight: 950;
-  letter-spacing: 0;
   pointer-events: none;
 }
 .map-node-edit-action:hover rect,
@@ -2152,7 +2149,7 @@ th:focus-within .column-tooltip,
 }
 .map-node-edit-action:hover path,
 .map-node-edit-action:focus path {
-  fill: #ffffff;
+  stroke: #ffffff;
 }
 .map-legend {
   position: sticky;

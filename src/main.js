@@ -2864,10 +2864,12 @@ function renderServiceMap() {
               <text x="${p.x - 134}" y="${subtitle ? p.y - 3 : p.y + 5}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 30))}</text>
               ${subtitle ? `<text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(subtitle)}</text>` : ""}
               ${node.endpoint ? `<g class="map-node-edit-action" data-map-alias="${escapeHtml(node.endpoint)}" role="button" tabindex="0" aria-label="Edit ${escapeHtml(node.endpoint)} label">
-                <rect x="${p.x + 84}" y="${p.y - 16}" width="48" height="32" rx="10"/>
-                <path d="M ${p.x + 94} ${p.y + 5} L ${p.x + 94} ${p.y + 9} L ${p.x + 98} ${p.y + 9} L ${p.x + 109} ${p.y - 2} L ${p.x + 105} ${p.y - 6} Z"/>
-                <path d="M ${p.x + 103} ${p.y - 8} L ${p.x + 107} ${p.y - 12} L ${p.x + 113} ${p.y - 6} L ${p.x + 109} ${p.y - 2} Z"/>
-                <text x="${p.x + 114}" y="${p.y + 4}">Edit</text>
+                <title>Edit service label for ${escapeHtml(node.endpoint)}</title>
+                <rect x="${p.x + 96}" y="${p.y - 16}" width="31" height="32" rx="10"/>
+                <g class="map-node-edit-glyph" transform="translate(${p.x + 101} ${p.y - 10}) scale(.74)">
+                  <path d="M12 20h9"/>
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                </g>
               </g>` : ""}
               <circle cx="${p.x + 134}" cy="${p.y}" r="5" fill="${stroke}"/>
               <title>${escapeHtml(mapNodeTitle(node))}</title>
