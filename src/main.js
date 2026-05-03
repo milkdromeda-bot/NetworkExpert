@@ -202,6 +202,8 @@ const COLUMN_HELP = {
   }
 };
 
+const INGEST_RAW_EAGER_LIMIT = 200000;
+
 const COMMON_TIME_ZONES = [
   "UTC",
   "Europe/Paris",
@@ -295,6 +297,9 @@ let state = {
   helpColumn: null,
   ssOptionHelpKey: "-i",
   showSsOptions: false,
+  ingestRawExpanded: SAMPLE.length <= INGEST_RAW_EAGER_LIMIT,
+  openChartMoveMetric: null,
+  openChartMovePos: null,
   openMenuPos: null,
   openConversationInsightKey: null,
   openConversationInsightPos: null,
@@ -372,10 +377,11 @@ const icons = {
   clear: `<i class="ri-eraser-line"></i>`,
   brain: `<i class="ri-brain-line"></i>`,
   columns: `<i class="ri-table-line"></i>`,
-  copy: `<i class="ri-file-copy-line"></i>`,
-  focus: `<i class="ri-focus-3-line"></i>`,
-  saveDisk: `<i class="ri-save-3-line"></i>`,
-  first: `<i class="ri-skip-left-line"></i>`,
+    copy: `<i class="ri-file-copy-line"></i>`,
+    focus: `<i class="ri-focus-3-line"></i>`,
+    saveDisk: `<i class="ri-save-3-line"></i>`,
+    menu: `<i class="ri-menu-3-line"></i>`,
+    first: `<i class="ri-skip-left-line"></i>`,
   previous: `<i class="ri-arrow-left-s-line"></i>`,
   next: `<i class="ri-arrow-right-s-line"></i>`,
   last: `<i class="ri-skip-right-line"></i>`,
@@ -2001,9 +2007,11 @@ function render() {
     ${renderModal()}
   `;
   bindEvents();
-  drawChart();
-  scheduleMultiChartDraw();
-  drawCorrelation();
+  if (state.view === "charts") {
+    drawChart();
+    scheduleMultiChartDraw();
+    drawCorrelation();
+  }
   scheduleAnomalyBadgeSettle();
   scheduleIpIntelEnrichment();
 }
@@ -2100,6 +2108,27 @@ function renderKeepingModalPosition() {
   }
 }
 
+function shouldEagerRenderIngestRaw() {
+  return state.ingestRawExpanded || state.raw.length <= INGEST_RAW_EAGER_LIMIT;
+}
+
+function renderIngestRawPreview() {
+  const previewHead = state.raw.slice(0, 2200).trim();
+  const previewTail = state.raw.length > 2200 ? state.raw.slice(-1400).trim() : "";
+  return `<div class="raw-preview-card">
+    <div class="raw-preview-head">
+      <strong>Large capture kept out of the live textarea</strong>
+      <span>${formatNumber(state.raw.length)} characters loaded from ${escapeHtml(state.sourceName)}</span>
+    </div>
+    <p class="hint">This is the main freeze source when switching from Analysis to Import: rebuilding a huge textarea with the full raw capture blocks the browser thread. Use the lightweight preview below, or explicitly open the full editor only when you really need it.</p>
+    <div class="toolbar import-actions">
+      <button data-action="showRawInput">${icons.upload} Open full raw editor</button>
+      <button class="primary" data-action="parse">${icons.play} Re-analyze current raw text</button>
+    </div>
+    <pre class="code raw-preview">${escapeHtml(previewHead)}${previewTail ? `\n\n... truncated ...\n\n${escapeHtml(previewTail)}` : ""}</pre>
+  </div>`;
+}
+
 function renderIngestPage() {
   const coverage = commandCoverage(state.command);
   const active = coverage.filter(o => o.active);
@@ -2122,7 +2151,9 @@ function renderIngestPage() {
       <div class="panel">
         <div class="panel-head"><div class="panel-title">ss stats to parse</div><span class="status-pill">${escapeHtml(state.sourceName)}</span></div>
         <div class="panel-body">
-          <textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>
+          ${shouldEagerRenderIngestRaw()
+            ? `<textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>`
+            : renderIngestRawPreview()}
           <div class="toolbar import-actions" style="margin-top:10px">
             <button class="primary" data-action="parse">${icons.play} Analyze pasted text</button>
             <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}"><i class="ri-command-line"></i> Capture options</button>
@@ -2268,8 +2299,7 @@ function renderChartsPage() {
           </div>
           <div class="col-tools">
             <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
-            ${index > 0 ? `<button class="mini" data-move-chart="${m}" data-dir="-1" title="Move chart left/up">${icons.up}</button>` : ""}
-            ${index < orderedMetrics.length - 1 ? `<button class="mini" data-move-chart="${m}" data-dir="1" title="Move chart right/down">${icons.down}</button>` : ""}
+            ${renderChartMoveMenu(m)}
           </div>
         </div>
         <div class="panel-body"><svg class="chart small-chart ${layout.density}" data-mini-chart="${m}"></svg></div>
@@ -2437,6 +2467,42 @@ function renderChartMetricTooltip(metric) {
       </div>
     </span>
   </span>`;
+}
+
+function updateChartTooltipPosition(info) {
+  const tooltip = info?.querySelector(".chart-tooltip");
+  if (!tooltip) return;
+  const gutter = 16;
+  tooltip.classList.remove("chart-tooltip--flip", "chart-tooltip--above");
+  tooltip.style.removeProperty("--tooltip-shift");
+
+  const previousDisplay = tooltip.style.display;
+  const previousVisibility = tooltip.style.visibility;
+  tooltip.style.display = "grid";
+  tooltip.style.visibility = "hidden";
+
+  let rect = tooltip.getBoundingClientRect();
+  if (rect.right > window.innerWidth - gutter) tooltip.classList.add("chart-tooltip--flip");
+  if (rect.bottom > window.innerHeight - gutter) tooltip.classList.add("chart-tooltip--above");
+
+  rect = tooltip.getBoundingClientRect();
+  const shift = rect.left < gutter
+    ? gutter - rect.left
+    : rect.right > window.innerWidth - gutter
+      ? (window.innerWidth - gutter) - rect.right
+      : 0;
+  if (shift) tooltip.style.setProperty("--tooltip-shift", `${Math.round(shift)}px`);
+
+  tooltip.style.display = previousDisplay;
+  tooltip.style.visibility = previousVisibility;
+}
+
+function bindSmartChartTooltips() {
+  document.querySelectorAll(".chart-info").forEach(info => {
+    const refresh = () => updateChartTooltipPosition(info);
+    info.addEventListener("mouseenter", refresh);
+    info.addEventListener("focus", refresh);
+  });
 }
 
 function renderActiveTab() {
@@ -3779,13 +3845,13 @@ function renderChartStatsModal() {
   const stats = chartStats(metric);
   if (!stats.count) return `<div class="empty">No visible numeric data for ${escapeHtml(metricLabel(metric))}.</div>`;
   const rows = [
-    ["Min", stats.min],
-    ["Median", stats.p50],
-    ["P90", stats.p90],
-    ["P99", stats.p99],
-    ["P99.9", stats.p999],
-    ["P99.99", stats.p9999],
-    ["Max", stats.max]
+    ["Min", 0, stats.min],
+    ["Median", 50, stats.p50],
+    ["P90", 90, stats.p90],
+    ["P99", 99, stats.p99],
+    ["P99.9", 99.9, stats.p999],
+    ["P99.99", 99.99, stats.p9999],
+    ["Max", 100, stats.max]
   ];
   return `<div class="chart-stats-layout">
     <article class="stats-summary-card">
@@ -3803,7 +3869,7 @@ function renderChartStatsModal() {
     <article class="stats-table-card">
       <strong>Percentile table</strong>
       <table class="stats-table">
-        <tbody>${rows.map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${formatMetricValue(metric, value)}</td></tr>`).join("")}</tbody>
+        <tbody>${rows.map(([label, percentile, value]) => `<tr tabindex="0" data-percentile-row="${percentile}" data-percentile-label="${escapeHtml(label)}" data-percentile-value="${value}"><th>${escapeHtml(label)}</th><td>${formatMetricValue(metric, value)}</td></tr>`).join("")}</tbody>
       </table>
     </article>
     <article class="stats-dist-card">
@@ -4158,7 +4224,7 @@ function chartStats(metric) {
     p999: percentile(values, 99.9),
     p9999: percentile(values, 99.99),
     max: values[values.length - 1],
-    curve: [0, 10, 25, 50, 75, 90, 95, 99, 99.9, 99.99, 100].map(p => ({ p, value: percentile(values, p) }))
+    curve: Array.from({ length: 101 }, (_, p) => ({ p, value: percentile(values, p) }))
   };
 }
 
@@ -4173,6 +4239,7 @@ function renderPercentileDistribution(metric, stats) {
   const x = p => pad.l + (Math.max(0, Math.min(100, p)) / 100) * (w - pad.l - pad.r);
   const y = value => h - pad.b - ((value - min) / span) * (h - pad.t - pad.b);
   const path = values.map((point, index) => `${index ? "L" : "M"}${x(point.p).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ");
+  const percentilePoints = values.map(point => `<circle cx="${x(point.p)}" cy="${y(point.value)}" r="1.9" fill="${metricColor(metric)}" opacity=".95"><title>P${point.p}: ${formatMetricValue(metric, point.value)}</title></circle>`).join("");
   const markers = [
     ["P50", 50, stats.p50],
     ["P90", 90, stats.p90],
@@ -4181,17 +4248,43 @@ function renderPercentileDistribution(metric, stats) {
     ["P99.99", 99.99, stats.p9999]
   ];
   const yTicks = [0, .25, .5, .75, 1].map(f => min + f * span);
-  return `<svg class="percentile-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(metricLabel(metric))} percentile distribution">
-    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
-    ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, value)}</text>`).join("")}
-    ${[0, 50, 90, 99, 100].map(p => `<line x1="${x(p)}" x2="${x(p)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(p)}" y="${h - 20}" text-anchor="middle" fill="#8c9aab" font-size="11">${p === 100 ? "Max" : `P${p}`}</text>`).join("")}
-    <path d="${path}" fill="none" stroke="${metricColor(metric)}" stroke-width="3"/>
-    ${markers.map(([label, p, value]) => `<circle cx="${x(p)}" cy="${y(value)}" r="4" fill="${thresholdColor(metric, value)}"><title>${label}: ${formatMetricValue(metric, value)}</title></circle>`).join("")}
-    <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
-    <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
+  return `<svg class="percentile-chart" data-percentile-chart="1" data-chart-width="${w}" data-chart-height="${h}" data-pad-left="${pad.l}" data-pad-right="${pad.r}" data-pad-top="${pad.t}" data-pad-bottom="${pad.b}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(metricLabel(metric))} percentile distribution">
+      <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
+      ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, value)}</text>`).join("")}
+      ${[0, 25, 50, 75, 90, 99, 100].map(p => `<line x1="${x(p)}" x2="${x(p)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(p)}" y="${h - 20}" text-anchor="middle" fill="#8c9aab" font-size="11">${p === 100 ? "P100" : `P${p}`}</text>`).join("")}
+      <path d="${path}" fill="none" stroke="${metricColor(metric)}" stroke-width="3"/>
+      ${percentilePoints}
+      ${markers.map(([label, p, value]) => `<circle cx="${x(p)}" cy="${y(value)}" r="4" fill="${thresholdColor(metric, value)}"><title>${label}: ${formatMetricValue(metric, value)}</title></circle>`).join("")}
+      <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
+      <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
+      <g class="percentile-focus-layer" data-percentile-focus-layer="1"></g>
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${escapeHtml(metricLabel(metric))} percentile curve</text>
     <text x="${w / 2}" y="${h - 5}" text-anchor="middle" fill="#c4d0de" font-size="12">Percentile rank</text>
   </svg>`;
+}
+
+function showPercentileTableCrosshair(percentile, label, value) {
+  const svg = document.querySelector("[data-percentile-chart]");
+  const layer = svg?.querySelector("[data-percentile-focus-layer]");
+  if (!svg || !layer) return;
+  const w = Number(svg.dataset.chartWidth || 520);
+  const h = Number(svg.dataset.chartHeight || 260);
+  const left = Number(svg.dataset.padLeft || 76);
+  const right = Number(svg.dataset.padRight || 24);
+  const top = Number(svg.dataset.padTop || 28);
+  const bottom = Number(svg.dataset.padBottom || 52);
+  const x = left + (Math.max(0, Math.min(100, Number(percentile) || 0)) / 100) * (w - left - right);
+  const badgeX = Math.max(left + 6, Math.min(w - right - 112, x + 10));
+  layer.innerHTML = `
+    <line x1="${x}" x2="${x}" y1="${top}" y2="${h - bottom}" class="percentile-focus-line"/>
+    <rect x="${badgeX}" y="${top + 6}" width="104" height="28" rx="7" class="percentile-focus-badge"/>
+    <text x="${badgeX + 10}" y="${top + 24}" class="percentile-focus-text">${escapeHtml(label)}: ${formatMetricValue(state.statsMetric || state.prefs.graphMetric, value)}</text>
+  `;
+}
+
+function clearPercentileTableCrosshair() {
+  const layer = document.querySelector("[data-percentile-focus-layer]");
+  if (layer) layer.innerHTML = "";
 }
 
 function chartPointRadius(pointCount, style) {
@@ -4347,11 +4440,72 @@ function orderedChartMetrics() {
   });
 }
 
-function moveVisibleChartMetric(metric, dir) {
+function chartMoveTargetIndex(metric, direction) {
   const visible = orderedChartMetrics();
   const current = visible.indexOf(metric);
-  const targetMetric = visible[current + dir];
-  if (current < 0 || !targetMetric) return false;
+  const columns = clampChartColumns(state.prefs.chartLayout.columns);
+  if (current < 0) return -1;
+  const column = current % columns;
+  if (direction === "left") return column > 0 ? current - 1 : -1;
+  if (direction === "right") return column < columns - 1 && current + 1 < visible.length ? current + 1 : -1;
+  if (direction === "up") return current - columns >= 0 ? current - columns : -1;
+  if (direction === "down") return current + columns < visible.length ? current + columns : -1;
+  if (typeof direction === "number") return current + direction;
+  return -1;
+}
+
+function chartMoveOptions(metric) {
+  const visible = orderedChartMetrics();
+  const current = visible.indexOf(metric);
+  if (current < 0) return [];
+  const options = [
+    { direction: "left", label: "Move left", icon: icons.arrowLeft },
+    { direction: "right", label: "Move right", icon: icons.arrowRight },
+    { direction: "up", label: "Move up", icon: icons.up },
+    { direction: "down", label: "Move down", icon: icons.down }
+  ].filter(option => {
+    const targetIndex = chartMoveTargetIndex(metric, option.direction);
+    return targetIndex >= 0 && targetIndex < visible.length;
+  }).map(option => ({
+    ...option,
+    targetMetric: visible[chartMoveTargetIndex(metric, option.direction)]
+  }));
+  return options;
+}
+
+function renderChartMoveMenu(metric) {
+  const options = chartMoveOptions(metric);
+  if (!options.length) return "";
+  const pos = state.openChartMoveMetric === metric && state.openChartMovePos
+    ? `style="left:${state.openChartMovePos.left}px;top:${state.openChartMovePos.top}px"`
+    : "";
+  return `<button class="mini mini-menu" data-chart-move-menu="${escapeHtml(metric)}" title="Move chart">${icons.menu}</button>
+    <div class="row-menu chart-move-menu ${state.openChartMoveMetric === metric ? "open" : ""}" ${pos}>
+      ${options.map(option => `<button data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="${option.direction}">
+        ${option.icon}
+        <span>${escapeHtml(option.label)}</span>
+      </button>`).join("")}
+    </div>`;
+}
+
+function positionChartMoveMenu(button, metric) {
+  const options = chartMoveOptions(metric);
+  const menuWidth = 220;
+  const menuHeight = Math.max(56, 16 + options.length * 38);
+  const rect = button.getBoundingClientRect();
+  const left = Math.min(Math.max(8, rect.right - menuWidth), window.innerWidth - menuWidth - 8);
+  const preferBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+  const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
+  state.openChartMoveMetric = metric;
+  state.openChartMovePos = { left: Math.round(left), top: Math.round(top) };
+}
+
+function moveVisibleChartMetric(metric, direction) {
+  const visible = orderedChartMetrics();
+  const current = visible.indexOf(metric);
+  const targetIndex = chartMoveTargetIndex(metric, direction);
+  const targetMetric = visible[targetIndex];
+  if (current < 0 || targetIndex < 0 || !targetMetric) return false;
   const order = [...state.prefs.chartLayout.panelOrder];
   const currentOrderIndex = order.indexOf(metric);
   const targetOrderIndex = order.indexOf(targetMetric);
@@ -4376,6 +4530,9 @@ function resetAllState() {
   state.drawer = null;
   state.modal = null;
   state.statsMetric = null;
+  state.ingestRawExpanded = true;
+  state.openChartMoveMetric = null;
+  state.openChartMovePos = null;
   state.openMenuPos = null;
   state.openConversationInsightKey = null;
   state.openConversationInsightPos = null;
@@ -4693,6 +4850,7 @@ async function saveChartsPng() {
 async function importFile(file) {
   state.importStatus = { title: "Preparing import", detail: `${file.name} (${formatNumber(file.size)} bytes)`, progress: 1 };
   state.raw = "";
+  state.ingestRawExpanded = false;
   state.sockets = [];
   state.anomalies = [];
   state.selectedId = null;
@@ -4722,6 +4880,7 @@ async function importFile(file) {
 
   state.raw = result.raw;
   state.sockets = result.sockets;
+  state.ingestRawExpanded = result.raw.length <= INGEST_RAW_EAGER_LIMIT;
   setSourceName(result.sourceName);
   rememberFilterHistory(state.preImportFilters);
   state.importStatus = null;
@@ -4784,6 +4943,7 @@ async function copyTextToClipboard(text) {
 }
 
 function bindEvents() {
+  bindSmartChartTooltips();
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
     const action = event.currentTarget.dataset.action;
     if (action === "parse") {
@@ -4806,13 +4966,18 @@ function bindEvents() {
       toast("Capture command updated", "The ss command builder was updated. Existing pasted text is unchanged.");
       renderKeepingWorkspacePosition();
     }
-    if (action === "sample") { state.raw = SAMPLE; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
+    if (action === "sample") { state.raw = SAMPLE; state.ingestRawExpanded = true; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
     if (action === "toggleSsOptions") {
       state.showSsOptions = !state.showSsOptions;
       renderKeepingWorkspacePosition();
     }
+    if (action === "showRawInput") {
+      state.ingestRawExpanded = true;
+      renderKeepingWorkspacePosition();
+    }
     if (action === "sample10m") {
       state.raw = generateTenMinuteSample();
+      state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
       setSourceName("10-minute synthetic sample");
       state.selectedId = null;
       setActiveInvestigation(state, null);
@@ -4823,7 +4988,7 @@ function bindEvents() {
       toast("10-minute sample loaded", "600 timestamped snapshots, one per second, are ready for analysis.");
       render();
     }
-    if (action === "clear") { state.raw = ""; markAnalysisDirty({ raw: true }); render(); }
+    if (action === "clear") { state.raw = ""; state.ingestRawExpanded = true; markAnalysisDirty({ raw: true }); render(); }
     if (action === "resetAll") {
       resetAllState();
       toast("Workspace reset", "All loaded data, filters, zoom, and UI selections have been cleared.");
@@ -5462,6 +5627,41 @@ function bindEvents() {
       const to = event.currentTarget.dataset.colKey;
       if (moveTableColumn(from, to)) render();
     });
+  });
+  document.querySelectorAll("[data-chart-move-menu]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const metric = event.currentTarget.dataset.chartMoveMenu;
+    if (state.openChartMoveMetric === metric) {
+      state.openChartMoveMetric = null;
+      state.openChartMovePos = null;
+    } else {
+      positionChartMoveMenu(event.currentTarget, metric);
+    }
+    renderKeepingWorkspacePosition();
+  }));
+  document.querySelectorAll(".chart-move-menu").forEach(menu => menu.addEventListener("click", event => {
+    event.stopPropagation();
+  }));
+  document.querySelectorAll("[data-chart-move]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const metric = event.currentTarget.dataset.chartMove;
+    const direction = event.currentTarget.dataset.chartMoveDir;
+    state.openChartMoveMetric = null;
+    state.openChartMovePos = null;
+    if (moveVisibleChartMetric(metric, direction)) renderKeepingWorkspacePosition();
+  }));
+  document.querySelectorAll("[data-percentile-row]").forEach(row => {
+    const showCrosshair = () => {
+      showPercentileTableCrosshair(
+        Number(row.dataset.percentileRow || 0),
+        row.dataset.percentileLabel || "",
+        Number(row.dataset.percentileValue || 0)
+      );
+    };
+    row.addEventListener("mouseenter", showCrosshair);
+    row.addEventListener("focus", showCrosshair);
+    row.addEventListener("mouseleave", clearPercentileTableCrosshair);
+    row.addEventListener("blur", clearPercentileTableCrosshair);
   });
   document.querySelectorAll("[data-move-chart]").forEach(btn => btn.addEventListener("click", event => {
     const metric = event.currentTarget.dataset.moveChart;
