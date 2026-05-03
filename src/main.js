@@ -1814,6 +1814,101 @@ function buildServiceMap() {
   };
 }
 
+function serviceMapConnectivityOrder(map) {
+  const baseSort = nodes => nodes.map((node, index) => ({ ...node, _mapOrder: index }));
+  let processes = baseSort(map.processes);
+  let locals = baseSort(map.locals);
+  let peers = baseSort(map.peers);
+  const averageRank = (ids, rank) => {
+    const values = ids.map(id => rank.get(id)).filter(Number.isFinite);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : Number.POSITIVE_INFINITY;
+  };
+  const sortByBarycenter = (nodes, connectedIds) => nodes.sort((a, b) =>
+    averageRank(connectedIds(a), processRank) - averageRank(connectedIds(b), processRank)
+    || riskRank(b.risk) - riskRank(a.risk)
+    || b.anomalies - a.anomalies
+    || b.count - a.count
+    || a._mapOrder - b._mapOrder
+  );
+
+  let processRank = new Map(processes.map((node, index) => [node.id, index]));
+  let localRank = new Map(locals.map((node, index) => [node.id, index]));
+  let peerRank = new Map(peers.map((node, index) => [node.id, index]));
+
+  locals = sortByBarycenter(locals, node => map.edges.filter(edge => edge.mid === node.id).map(edge => edge.from));
+  localRank = new Map(locals.map((node, index) => [node.id, index]));
+  peers.sort((a, b) =>
+    averageRank(map.edges.filter(edge => edge.to === a.id).map(edge => edge.mid), localRank)
+    - averageRank(map.edges.filter(edge => edge.to === b.id).map(edge => edge.mid), localRank)
+    || riskRank(b.risk) - riskRank(a.risk)
+    || b.anomalies - a.anomalies
+    || b.count - a.count
+    || a._mapOrder - b._mapOrder
+  );
+  peerRank = new Map(peers.map((node, index) => [node.id, index]));
+  locals.sort((a, b) =>
+    averageRank(map.edges.filter(edge => edge.mid === a.id).map(edge => edge.to), peerRank)
+    - averageRank(map.edges.filter(edge => edge.mid === b.id).map(edge => edge.to), peerRank)
+    || averageRank(map.edges.filter(edge => edge.mid === a.id).map(edge => edge.from), processRank)
+    - averageRank(map.edges.filter(edge => edge.mid === b.id).map(edge => edge.from), processRank)
+    || riskRank(b.risk) - riskRank(a.risk)
+    || b.anomalies - a.anomalies
+    || b.count - a.count
+    || a._mapOrder - b._mapOrder
+  );
+  localRank = new Map(locals.map((node, index) => [node.id, index]));
+  processes.sort((a, b) =>
+    averageRank(map.edges.filter(edge => edge.from === a.id).map(edge => edge.mid), localRank)
+    - averageRank(map.edges.filter(edge => edge.from === b.id).map(edge => edge.mid), localRank)
+    || riskRank(b.risk) - riskRank(a.risk)
+    || b.anomalies - a.anomalies
+    || b.count - a.count
+    || a._mapOrder - b._mapOrder
+  );
+
+  const clean = nodes => nodes.map(({ _mapOrder, ...node }) => node);
+  return { processes: clean(processes), locals: clean(locals), peers: clean(peers) };
+}
+
+function buildServiceMapRoutes(edges, positions) {
+  const sideEdges = new Map();
+  const add = (nodeId, side, edge, otherY) => {
+    const key = `${nodeId}|${side}`;
+    if (!sideEdges.has(key)) sideEdges.set(key, []);
+    sideEdges.get(key).push({ edge, otherY });
+  };
+  for (const edge of edges) {
+    const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
+    add(edge.from, "right", edge, b.y);
+    add(edge.mid, "left", edge, a.y);
+    add(edge.mid, "right", edge, c.y);
+    add(edge.to, "left", edge, b.y);
+  }
+  const offsets = new Map();
+  for (const [key, items] of sideEdges) {
+    const sorted = items.sort((a, b) => a.otherY - b.otherY || a.edge.id.localeCompare(b.edge.id));
+    const step = Math.min(8, Math.max(4, 22 / Math.max(1, sorted.length - 1 || 1)));
+    sorted.forEach((item, index) => {
+      offsets.set(`${item.edge.id}|${key}`, (index - (sorted.length - 1) / 2) * step);
+    });
+  }
+  const offset = (edge, nodeId, side) => offsets.get(`${edge.id}|${nodeId}|${side}`) || 0;
+  return new Map(edges.map(edge => {
+    const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
+    const p1 = { x: a.x + 146, y: a.y + offset(edge, edge.from, "right") };
+    const p2 = { x: b.x - 146, y: b.y + offset(edge, edge.mid, "left") };
+    const p3 = { x: b.x + 146, y: b.y + offset(edge, edge.mid, "right") };
+    const p4 = { x: c.x - 146, y: c.y + offset(edge, edge.to, "left") };
+    const bend1 = Math.max(70, (p2.x - p1.x) * .42);
+    const bend2 = Math.max(70, (p4.x - p3.x) * .42);
+    const d = [
+      `M ${p1.x} ${p1.y} C ${p1.x + bend1} ${p1.y}, ${p2.x - bend1} ${p2.y}, ${p2.x} ${p2.y}`,
+      `M ${p3.x} ${p3.y} C ${p3.x + bend2} ${p3.y}, ${p4.x - bend2} ${p4.y}, ${p4.x} ${p4.y}`
+    ].join(" ");
+    return [edge.id, { d }];
+  }));
+}
+
 function evaluateAlertRules() {
   state.alertEvents = evaluateAlertRuleEvents({
     rules: state.alertRules,
@@ -2812,12 +2907,13 @@ function parseEndpointAddress(endpoint = "") {
 
 function renderServiceMap() {
   const map = buildServiceMap();
-  const allNodes = [...map.processes, ...map.locals, ...map.peers];
+  const ordered = serviceMapConnectivityOrder(map);
+  const allNodes = [...ordered.processes, ...ordered.locals, ...ordered.peers];
   if (!allNodes.length) return `<div class="empty">No service map is available for the current filters.</div>`;
   const lanes = [
-    { key: "processes", title: "Processes", x: 160, nodes: map.processes },
-    { key: "locals", title: "Local sockets", x: 520, nodes: map.locals },
-    { key: "peers", title: "Peers", x: 920, nodes: map.peers }
+    { key: "processes", title: "Processes", x: 160, nodes: ordered.processes },
+    { key: "locals", title: "Local sockets", x: 520, nodes: ordered.locals },
+    { key: "peers", title: "Peers", x: 920, nodes: ordered.peers }
   ];
   const height = Math.max(420, Math.max(...lanes.map(lane => lane.nodes.length)) * 66 + 112);
   const positions = {};
@@ -2826,6 +2922,7 @@ function renderServiceMap() {
   }));
   const groupBands = serviceMapGroupBands(lanes, positions);
   const visibleEdges = map.edges.filter(edge => positions[edge.from] && positions[edge.mid] && positions[edge.to]).slice(0, 160);
+  const routes = buildServiceMapRoutes(visibleEdges, positions);
   const selectedEdge = visibleEdges.find(edge => edge.id === state.selectedMapEdgeId) || null;
   const hotPaths = [...map.edges].sort((a, b) =>
     riskRank(b.risk) - riskRank(a.risk) ||
@@ -2863,10 +2960,9 @@ function renderServiceMap() {
             <text x="${band.x + 14}" y="${band.labelY}">${escapeHtml(band.group.name)}</text>
           </g>`).join("")}
           ${visibleEdges.map(edge => {
-            const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
             const color = edge.risk === "critical" ? "#ff5c77" : edge.risk === "high" ? "#ff9f43" : edge.risk === "medium" ? "#ffd166" : "#39d6d6";
             const width = Math.min(5, 1.5 + Math.log10(edge.weight + 1));
-            const d = `M ${a.x + 146} ${a.y} C ${a.x + 228} ${a.y}, ${b.x - 178} ${b.y}, ${b.x - 146} ${b.y} S ${c.x - 210} ${c.y}, ${c.x - 146} ${c.y}`;
+            const d = routes.get(edge.id)?.d || "";
             return `<g class="map-link-wrap ${edge.id === state.selectedMapEdgeId ? "selected" : ""} ${edge.risk}" data-map-edge="${escapeHtml(edge.id)}" style="--link-color:${color};--link-width:${width}px;--link-hover-width:${Math.max(width + 2, 5.5)}px">
               <path class="map-link-hit" d="${d}"/>
               <path class="map-link" d="${d}"/>
