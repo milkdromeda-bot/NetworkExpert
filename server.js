@@ -5,7 +5,8 @@ import { isIP } from "node:net";
 import { reverse } from "node:dns/promises";
 
 const root = process.cwd();
-const port = Number(process.env.PORT || 4173);
+const cliPortArg = process.argv.find(arg => arg.startsWith("--port="));
+const port = Number(cliPortArg?.split("=")[1] || process.env.PORT || 4173);
 const ipIntelCache = new Map();
 
 const types = {

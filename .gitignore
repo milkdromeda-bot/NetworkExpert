@@ -12,3 +12,5 @@ build/
 .cache/
 .DS_Store
 Thumbs.db
+.networkexpert-server.pid
+.networkexpert-server.log

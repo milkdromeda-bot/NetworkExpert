@@ -2719,22 +2719,53 @@ function gridOptionSets() {
 
 function renderGridControls(total) {
   const { states, families, srcIps, dstIps, srcPorts, dstPorts, processes } = gridOptionSets();
+  const anomaliesOnly = state.table.filters.onlyAnomalies;
   return `<div class="grid-controls-shell">
     <div class="grid-controls">
-      <select id="riskFilter">${["all", "critical", "high", "medium", "low"].map(v => `<option value="${v}" ${state.table.filters.risk === v ? "selected" : ""}>risk ${v}</option>`).join("")}</select>
-      <select id="stateFilter"><option value="all">all states</option>${states.map(v => `<option ${state.table.filters.state === v ? "selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select>
-      <select id="familyFilter"><option value="all">all protocols</option>${families.map(v => `<option ${state.table.filters.family === v ? "selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select>
-      <input id="processFilter" list="processOptions" placeholder="process" value="${escapeHtml(state.table.filters.process)}" />
-      <input id="srcIpFilter" list="srcIpOptions" placeholder="source IP" value="${escapeHtml(state.table.filters.srcIp)}" />
-      <input id="dstIpFilter" list="dstIpOptions" placeholder="destination IP" value="${escapeHtml(state.table.filters.dstIp)}" />
-      <input id="srcPortFilter" list="srcPortOptions" placeholder="source port" value="${escapeHtml(state.table.filters.srcPort)}" />
-      <input id="dstPortFilter" list="dstPortOptions" placeholder="destination port" value="${escapeHtml(state.table.filters.dstPort)}" />
-      <input id="minRecvQ" type="number" min="0" placeholder="Recv-Q min (bytes)" value="${escapeHtml(state.table.filters.minRecvQ)}" />
-      <input id="minSendQ" type="number" min="0" placeholder="Send-Q min (bytes)" value="${escapeHtml(state.table.filters.minSendQ)}" />
-      <input id="minRtt" type="number" min="0" placeholder="RTT min (ms)" value="${escapeHtml(state.table.filters.minRtt)}" />
-      <label class="check inline"><input id="onlyAnomalies" type="checkbox" ${state.table.filters.onlyAnomalies ? "checked" : ""}/> anomalies</label>
-      <button data-action="clearFilterHistory">Clear history</button>
-      <span class="hint">${formatNumber(total)} filtered row(s)</span>
+      <section class="filter-cluster filter-cluster--scope">
+        <span class="filter-cluster-title">Scope</span>
+        <div class="filter-cluster-grid filter-cluster-grid--scope">
+          <select id="riskFilter">${["all", "critical", "high", "medium", "low"].map(v => `<option value="${v}" ${state.table.filters.risk === v ? "selected" : ""}>risk ${v}</option>`).join("")}</select>
+          <select id="stateFilter"><option value="all">all states</option>${states.map(v => `<option ${state.table.filters.state === v ? "selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select>
+          <select id="familyFilter"><option value="all">all protocols</option>${families.map(v => `<option ${state.table.filters.family === v ? "selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select>
+          <input id="processFilter" list="processOptions" placeholder="process" value="${escapeHtml(state.table.filters.process)}" />
+        </div>
+      </section>
+
+      <section class="filter-cluster filter-cluster--metrics">
+        <span class="filter-cluster-title">Flow health</span>
+        <div class="filter-cluster-grid filter-cluster-grid--metrics">
+          <input id="minRtt" type="number" min="0" placeholder="RTT min (ms)" value="${escapeHtml(state.table.filters.minRtt)}" />
+          <input id="minRecvQ" type="number" min="0" placeholder="Recv-Q min" value="${escapeHtml(state.table.filters.minRecvQ)}" />
+          <input id="minSendQ" type="number" min="0" placeholder="Send-Q min" value="${escapeHtml(state.table.filters.minSendQ)}" />
+        </div>
+      </section>
+
+      <aside class="filter-side-actions">
+        <label class="filter-toggle ${anomaliesOnly ? "active" : ""}">
+          <input id="onlyAnomalies" type="checkbox" ${anomaliesOnly ? "checked" : ""}/>
+          <span class="filter-toggle-mark" aria-hidden="true"></span>
+          <span>anomalies only</span>
+        </label>
+        <button class="filter-history-button" data-action="clearFilterHistory">${icons.clear}<span>Clear history</span></button>
+        <span class="grid-controls-count">${formatNumber(total)} filtered row(s)</span>
+      </aside>
+
+      <section class="filter-cluster filter-cluster--endpoint">
+        <span class="filter-cluster-title">Source endpoint</span>
+        <div class="filter-cluster-grid filter-cluster-grid--endpoint">
+          <input id="srcIpFilter" list="srcIpOptions" placeholder="source IP" value="${escapeHtml(state.table.filters.srcIp)}" />
+          <input id="srcPortFilter" list="srcPortOptions" placeholder="port" value="${escapeHtml(state.table.filters.srcPort)}" />
+        </div>
+      </section>
+
+      <section class="filter-cluster filter-cluster--endpoint">
+        <span class="filter-cluster-title">Destination endpoint</span>
+        <div class="filter-cluster-grid filter-cluster-grid--endpoint">
+          <input id="dstIpFilter" list="dstIpOptions" placeholder="destination IP" value="${escapeHtml(state.table.filters.dstIp)}" />
+          <input id="dstPortFilter" list="dstPortOptions" placeholder="port" value="${escapeHtml(state.table.filters.dstPort)}" />
+        </div>
+      </section>
     </div>
     ${renderDatalist("processOptions", processes)}
     ${renderDatalist("srcIpOptions", [...srcIps, ...state.filterHistory.map(h => h.srcIp)])}

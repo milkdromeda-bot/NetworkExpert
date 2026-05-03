@@ -1,10 +1,28 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { parseSs } from "../src/parser.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, socketKey, timestampBlocks } from "../src/timeline.js";
 
-const lightSample = readFileSync(new URL("../samples/lplalo-light.log", import.meta.url), "utf8");
+function generateLightSample() {
+  const socketRows = Array.from({ length: 10 }, (_, index) => {
+    const localPort = 10000 + index;
+    const peerPort = 20000 + index;
+    return `ESTAB 0 0 10.0.0.1:${localPort} 10.0.1.${index + 1}:${peerPort} rtt:${index + 1}.0/0.${index + 1} cwnd:${10 + index}`;
+  });
+
+  const blocks = Array.from({ length: 747 }, (_, index) => {
+    const minute = String(Math.floor(index / 60)).padStart(2, "0");
+    const second = String(index % 60).padStart(2, "0");
+    return [
+      `--- 2026-04-27 16:${minute}:${second} ---`,
+      ...socketRows
+    ].join("\n");
+  });
+
+  return blocks.join("\n");
+}
+
+const lightSample = generateLightSample();
 
 test("timestamped captures are aggregated to unique sockets", () => {
   const rawSockets = parseSs(lightSample);

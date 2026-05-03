@@ -5,14 +5,21 @@ Local JavaScript interface for analyzing `ss` output from Ubuntu and iproute2.
 ## Run
 
 ```powershell
-$env:Path = "C:\Users\annev\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;$env:Path"
-npm start
+.\scripts\start-server.ps1
 ```
 
-If `npm` is blocked on this machine, run directly:
+To restart a server previously launched from another thread or terminal:
 
 ```powershell
-& "C:\Users\annev\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" server.js
+.\scripts\restart-server.ps1
+```
+
+To run validations with the bundled Node runtime even when `node` or `npm` are not on `PATH`:
+
+```powershell
+.\scripts\check.ps1
+.\scripts\test.ps1
+.\scripts\verify.ps1
 ```
 
 Then open `http://localhost:4173` or the active port shown by the server.
