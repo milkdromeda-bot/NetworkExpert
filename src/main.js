@@ -294,6 +294,7 @@ let state = {
   statsMetric: null,
   helpColumn: null,
   ssOptionHelpKey: "-i",
+  showSsOptions: false,
   openMenuPos: null,
   openConversationInsightKey: null,
   openConversationInsightPos: null,
@@ -2134,22 +2135,22 @@ function renderIngestPage() {
         <button class="mega" data-action="parse">${icons.play} Parse now</button>
       </div>
     </section>
-    <section class="ingest-grid">
+    <section class="ingest-grid ${state.showSsOptions ? "options-open" : ""}">
       <div class="panel">
         <div class="panel-head"><div class="panel-title">ss stats to parse</div><span class="status-pill">${escapeHtml(state.sourceName)}</span></div>
         <div class="panel-body">
           <textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>
-          <div class="toolbar" style="margin-top:10px">
+          <div class="toolbar import-actions" style="margin-top:10px">
             <button class="primary" data-action="parse">${icons.play} Analyze</button>
-          <button data-action="sample">${icons.sample} Sample</button>
-          <button data-action="sample10m">${icons.chart} 10-min sample</button>
-          <button data-action="clear" class="danger">${icons.clear} Clear</button>
+            <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}"><i class="ri-command-line"></i> ss options</button>
+            <button data-action="sample10m">${icons.chart} 10-min sample</button>
+            <button data-action="clear" class="danger">${icons.clear} Clear</button>
           </div>
           <p class="hint">The file is read locally by the browser. For large logs, use the Analysis page: pagination, filters, sorting, columns, and grouping.</p>
           ${state.importStatus ? `<div class="import-status"><strong>${escapeHtml(state.importStatus.title)}</strong><span>${escapeHtml(state.importStatus.detail)}</span><progress value="${state.importStatus.progress}" max="100"></progress></div>` : ""}
         </div>
       </div>
-      <div class="panel">
+      ${state.showSsOptions ? `<div class="panel ss-options-panel">
         <div class="panel-head"><div class="panel-title">Command and options</div></div>
         <div class="panel-body">
           <div class="command-row">
@@ -2165,7 +2166,7 @@ function renderIngestPage() {
             ${selectedOption ? renderSsOptionDetail(selectedOption) : ""}
           </div>
         </div>
-      </div>
+      </div>` : ""}
     </section>
   `;
 }
@@ -4730,6 +4731,10 @@ function bindEvents() {
       render();
     }
     if (action === "sample") { state.raw = SAMPLE; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
+    if (action === "toggleSsOptions") {
+      state.showSsOptions = !state.showSsOptions;
+      renderKeepingWorkspacePosition();
+    }
     if (action === "sample10m") {
       state.raw = generateTenMinuteSample();
       setSourceName("10-minute synthetic sample");
