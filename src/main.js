@@ -1,4 +1,4 @@
-import { FIELD_DOCS, SAMPLE, SS_OPTIONS, generateTenMinuteSample, prefsDefault } from "./data.js";
+import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateTenMinuteSample, prefsDefault } from "./data.js";
 import { metricValue, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { importSocketFile } from "./importer.js?v=20260425-2";
@@ -3216,7 +3216,30 @@ function renderFieldDocCard(key, text) {
   const body = sentences.length > 1
     ? `<p>${escapeHtml(sentences[0])}</p><ul>${sentences.slice(1).map(sentence => `<li>${escapeHtml(sentence)}</li>`).join("")}</ul>`
     : `<p>${escapeHtml(text)}</p>`;
-  return `<article class="field-card field-doc-card"><strong>${escapeHtml(key)}</strong>${body}</article>`;
+  return `<article class="field-card field-doc-card"><strong>${escapeHtml(key)}</strong>${body}${renderFieldHealth(key)}</article>`;
+}
+
+function renderFieldHealth(key) {
+  const guidance = FIELD_GUIDANCE[key];
+  if (!guidance) return "";
+  const thresholdRefs = guidance.thresholds || (guidance.metric ? [{ label: metricLabel(guidance.metric), metric: guidance.metric }] : []);
+  const thresholdRows = thresholdRefs
+    .map(ref => {
+      const t = thresholdFor(ref.metric);
+      if (!Number.isFinite(t.warn) && !Number.isFinite(t.danger)) return "";
+      const op = t.inverse ? "<=" : ">=";
+      return `<span class="field-threshold-row">
+        <b>${escapeHtml(ref.label || metricLabel(ref.metric))}</b>
+        ${Number.isFinite(t.warn) ? `<em class="warn">Warn ${op} ${escapeHtml(formatMetricValue(ref.metric, t.warn))}</em>` : ""}
+        ${Number.isFinite(t.danger) ? `<em class="danger">Critical ${op} ${escapeHtml(formatMetricValue(ref.metric, t.danger))}</em>` : ""}
+      </span>`;
+    })
+    .filter(Boolean)
+    .join("");
+  return `<div class="field-health">
+    ${guidance.typical ? `<span class="field-typical"><b>Typical</b><em>${escapeHtml(guidance.typical)}</em></span>` : ""}
+    ${thresholdRows ? `<div class="field-thresholds">${thresholdRows}</div>` : ""}
+  </div>`;
 }
 
 function renderRightPane() {

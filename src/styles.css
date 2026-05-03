@@ -2884,6 +2884,64 @@ th:focus-within .column-tooltip,
 .field-doc-card li + li {
   margin-top: 4px;
 }
+.field-health {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(113, 143, 173, .18);
+}
+.field-typical,
+.field-threshold-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.field-typical b,
+.field-threshold-row b {
+  color: #7ee7f0;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.field-typical em {
+  color: var(--soft);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+}
+.field-thresholds {
+  display: grid;
+  gap: 5px;
+}
+.field-threshold-row {
+  grid-template-columns: 98px repeat(2, minmax(104px, max-content));
+  align-items: center;
+}
+.field-threshold-row em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid rgba(113, 143, 173, .24);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+}
+.field-threshold-row em.warn {
+  border-color: rgba(255, 159, 67, .42);
+  color: #ffc078;
+  background: rgba(255, 159, 67, .08);
+}
+.field-threshold-row em.danger {
+  border-color: rgba(255, 92, 119, .48);
+  color: #ff9caf;
+  background: rgba(255, 92, 119, .1);
+}
 .usecase-grid {
   display: grid;
   gap: 12px;

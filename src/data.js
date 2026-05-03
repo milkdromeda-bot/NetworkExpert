@@ -76,6 +76,67 @@ export const FIELD_DOCS = {
   class_id: "net_cls class or SO_PRIORITY."
 };
 
+export const FIELD_GUIDANCE = {
+  ato: {
+    typical: "Common steady value around 40 ms; higher values matter most on small-message or request/response flows.",
+    metric: "ato"
+  },
+  wscale: {
+    typical: "Usually negotiated between 0 and 14. Pairs such as 7:7 or 8:9 are common on high-throughput paths."
+  },
+  rto: {
+    typical: "Often a few hundred ms on healthy paths, but it is intentionally path and jitter dependent.",
+    metric: "rto"
+  },
+  backoff: {
+    typical: "Expected value is 0 during normal operation.",
+    metric: "backoff"
+  },
+  rtt: {
+    typical: "LAN is often below 1 ms; same-region services often sit around 1-20 ms; WAN is workload and distance dependent.",
+    metric: "rtt"
+  },
+  cwnd: {
+    typical: "Healthy active flows often keep more than 10 segments in flight; very small values cap throughput.",
+    metric: "cwnd"
+  },
+  ssthresh: {
+    typical: "Context-dependent. A low single-digit value after loss suggests recent congestion recovery."
+  },
+  pacing_rate: {
+    typical: "Workload and path dependent. Interpret as a trend against delivery_rate, Send-Q, cwnd, and RTO."
+  },
+  rcv_space: {
+    typical: "Auto-tuned by TCP. Interpret with Recv-Q, skmem.r, application read behavior, and workload bursts."
+  },
+  mss: {
+    typical: "Common Ethernet values are about 1460 bytes for IPv4 and 1440-1448 bytes with extra encapsulation."
+  },
+  pmtu: {
+    typical: "1500 bytes is common Ethernet MTU; around 9000 indicates jumbo frames; unexpectedly low values deserve path MTU checks."
+  },
+  lastsnd: {
+    typical: "Near 0 on actively sending flows. Large values usually mean the flow is idle or blocked elsewhere."
+  },
+  lastrcv: {
+    typical: "Near 0 on actively receiving flows. Large values usually mean peer silence or an idle flow."
+  },
+  lastack: {
+    typical: "Near 0 on active ACK exchange. Large values can support a stall hypothesis when queues are also rising."
+  },
+  skmem: {
+    typical: "Most useful as r/t pressure and d drops. Compare current allocation with rb/tb limits.",
+    thresholds: [
+      { label: "Receive memory", metric: "skmem.r" },
+      { label: "Transmit memory", metric: "skmem.t" },
+      { label: "Drops", metric: "skmem.d" }
+    ]
+  },
+  timer: {
+    typical: "keepalive and timewait can be normal. retransmission/persist timers deserve closer correlation with RTO and queues."
+  }
+};
+
 export const SAMPLE = `State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
 LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("nginx",pid=1234,fd=6)) ino:991 sk:1 cgroup:/system.slice/nginx.service skmem:(r0,rb212992,t0,tb212992,f0,w0,o0,bl0,d0)
 ESTAB 0 524288 10.0.0.5:443 203.0.113.22:55144 users:(("nginx",pid=1234,fd=32)) timer:(on,1.2sec,3) cubic wscale:7:7 rto:1200 backoff:2 rtt:260/80 ato:40 mss:1448 cwnd:4 pmtu:1500 ssthresh:7 bytes_acked:10485760 bytes_received:524288 segs_out:9234 segs_in:4012 send 128000bps lastsnd:4400 lastrcv:30 lastack:4400 pacing_rate 256000bps/1200000bps skmem:(r0,rb212992,t262144,tb425984,f4096,w262144,o0,bl0,d2)
