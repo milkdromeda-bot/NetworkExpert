@@ -377,11 +377,12 @@ const icons = {
   clear: `<i class="ri-eraser-line"></i>`,
   brain: `<i class="ri-brain-line"></i>`,
   columns: `<i class="ri-table-line"></i>`,
-    copy: `<i class="ri-file-copy-line"></i>`,
-    focus: `<i class="ri-focus-3-line"></i>`,
-    saveDisk: `<i class="ri-save-3-line"></i>`,
-    menu: `<i class="ri-menu-3-line"></i>`,
-    first: `<i class="ri-skip-left-line"></i>`,
+  copy: `<i class="ri-file-copy-line"></i>`,
+  focus: `<i class="ri-focus-3-line"></i>`,
+  saveDisk: `<i class="ri-save-3-line"></i>`,
+  report: `<i class="ri-file-pdf-line"></i>`,
+  menu: `<i class="ri-menu-3-line"></i>`,
+  first: `<i class="ri-skip-left-line"></i>`,
   previous: `<i class="ri-arrow-left-s-line"></i>`,
   next: `<i class="ri-arrow-right-s-line"></i>`,
   last: `<i class="ri-skip-right-line"></i>`,
@@ -2204,6 +2205,7 @@ function renderAnalysisPage() {
           <div class="toolbar">
             <button data-action="toggleDeepAnalysis" class="${state.prefs.deepAnalysis ? "primary" : ""}" title="Run advanced advisor in the background">${icons.brain} Deep analysis</button>
             <button data-action="setBaseline" title="Use current parsed sockets as before baseline"><i class="ri-scales-3-line"></i> Set baseline</button>
+            <button data-action="exportReport" title="Open incident report for printing or saving as PDF">${icons.report} Incident report</button>
             <input id="searchInput" placeholder='Filter: state:ESTAB risk>=high port:443 process:nginx rtt>100' value="${escapeHtml(state.table.filters.text)}" />
             <button class="icon" data-action="details" title="Socket details">${icons.activity}</button>
           </div>
@@ -2273,6 +2275,7 @@ function renderChartsPage() {
           <div class="chart-tool-group">
             <button data-action="thresholds">${icons.threshold} Thresholds</button>
             <button data-action="saveCharts">${icons.save} Export PNG</button>
+            <button data-action="exportReport">${icons.report} Incident report</button>
           </div>
           <div class="chart-timezone-group">
             <label>Time zone ${renderChartInfo("Time zone", "Controls how timestamps are displayed on chart axes, crosshair labels, and date-time zoom fields. The underlying samples are unchanged.", "Use UTC for server-side logs and incident correlation across machines. Use local time when matching an operator timeline, application logs, or monitoring dashboards configured in that zone.")}</label>
@@ -4847,6 +4850,474 @@ async function saveChartsPng() {
   toast("Charts exported", "PNG export has been generated.");
 }
 
+function reportChartWindowLabel(rows = visibleHistory()) {
+  if (!rows.length) return `No visible timeline (${resolvedTimeZone()})`;
+  return `${timeLabel(rows[0]?.t || 0, rows[0]?.epochMs)} -> ${timeLabel(rows[rows.length - 1]?.t || 0, rows[rows.length - 1]?.epochMs)} (${resolvedTimeZone()})`;
+}
+
+function reportDefaultChartMetrics(limit = 4) {
+  const selected = selectedSocket();
+  const anomalyMetrics = (selected
+    ? state.anomalies.filter(item => item.socketId === selected.id)
+    : reportRelevantAnomalies()).map(item => item.metric).filter(Boolean);
+  const preferred = [
+    state.prefs.graphMetric,
+    ...anomalyMetrics,
+    "skmem.d",
+    "sendQ",
+    "recvQ",
+    "rtt",
+    "rto",
+    "rx_bps",
+    "tx_bps"
+  ];
+  return [...new Set(preferred.filter(Boolean))].slice(0, limit);
+}
+
+function reportChartDataUrl(svg) {
+  if (!svg) return "";
+  const clone = svg.cloneNode(true);
+  clone.querySelectorAll("[data-crosshair-layer]").forEach(layer => { layer.innerHTML = ""; });
+  clone.querySelectorAll(".zoom-capture").forEach(node => node.remove());
+  const viewBox = (clone.getAttribute("viewBox") || "0 0 720 320").split(/\s+/).map(Number);
+  const width = Math.round(svg.clientWidth || Number(clone.getAttribute("width")) || viewBox[2] || 720);
+  const height = Math.round(svg.clientHeight || Number(clone.getAttribute("height")) || viewBox[3] || 320);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(width));
+  clone.setAttribute("height", String(height));
+  const xml = new XMLSerializer().serializeToString(clone);
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
+}
+
+function buildReportChartSvg(metric, width = 760, height = 280) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  drawChartInto(svg, metric, state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle, true);
+  return svg;
+}
+
+function captureIncidentReportCharts(limit = 5) {
+  const captures = [];
+  const seen = new Set();
+  const pushCapture = (metric, title, svg, context, hero = false) => {
+    if (!metric || !svg || seen.has(metric) || captures.length >= limit) return;
+    const image = reportChartDataUrl(svg);
+    if (!image) return;
+    seen.add(metric);
+    captures.push({
+      metric,
+      title,
+      image,
+      context,
+      hero
+    });
+  };
+
+  if (state.view === "charts") {
+    const heroSvg = document.querySelector("#chart");
+    const heroMetric = heroSvg?.dataset.metric || state.prefs.graphMetric;
+    if (heroSvg) {
+      pushCapture(
+        heroMetric,
+        `${metricLabel(heroMetric)} overview`,
+        heroSvg,
+        `Current visible chart window • ${reportChartWindowLabel()}`,
+        true
+      );
+    }
+    document.querySelectorAll("[data-chart-card]").forEach(card => {
+      if (captures.length >= limit) return;
+      const metric = card.dataset.chartCard;
+      const svg = card.querySelector("[data-mini-chart]");
+      pushCapture(metric, metricLabel(metric), svg, `Chart card • ${reportChartWindowLabel()}`);
+    });
+  }
+
+  reportDefaultChartMetrics(limit).forEach(metric => {
+    if (captures.length >= limit || seen.has(metric)) return;
+    pushCapture(
+      metric,
+      `${metricLabel(metric)} snapshot`,
+      buildReportChartSvg(metric),
+      `Generated from current filtered history • ${reportChartWindowLabel()}`
+    );
+  });
+
+  return captures;
+}
+
+function reportVisibleSockets() {
+  return sortedFilteredSockets();
+}
+
+function reportMetricSeries(metric, sockets = reportVisibleSockets()) {
+  return sockets
+    .map(socket => metric === "tx_bps" || metric === "rx_bps"
+      ? socketBandwidth(socket, metric)
+      : metricValue(socket, metric))
+    .filter(value => Number.isFinite(value));
+}
+
+function reportMetricSummary(metric, sockets = reportVisibleSockets()) {
+  const values = reportMetricSeries(metric, sockets).sort((a, b) => a - b);
+  if (!values.length) return null;
+  return {
+    count: values.length,
+    p50: percentile(values, 50),
+    p90: percentile(values, 90),
+    p99: percentile(values, 99),
+    max: values[values.length - 1]
+  };
+}
+
+function reportFilterTokens() {
+  const filters = state.table.filters || {};
+  const tokens = [];
+  if (filters.text) tokens.push(`query:${filters.text}`);
+  if (filters.risk && filters.risk !== "all") tokens.push(`risk:${filters.risk}`);
+  if (filters.state && filters.state !== "all") tokens.push(`state:${filters.state}`);
+  if (filters.family && filters.family !== "all") tokens.push(`protocol:${filters.family}`);
+  if (filters.process) tokens.push(`process:${filters.process}`);
+  if (filters.srcIp) tokens.push(`src ip:${filters.srcIp}`);
+  if (filters.dstIp) tokens.push(`dst ip:${filters.dstIp}`);
+  if (filters.srcPort) tokens.push(`src port:${filters.srcPort}`);
+  if (filters.dstPort) tokens.push(`dst port:${filters.dstPort}`);
+  if (filters.minRecvQ) tokens.push(`Recv-Q >= ${filters.minRecvQ}`);
+  if (filters.minSendQ) tokens.push(`Send-Q >= ${filters.minSendQ}`);
+  if (filters.minRtt) tokens.push(`RTT >= ${filters.minRtt} ms`);
+  if (filters.onlyAnomalies) tokens.push("anomalies only");
+  return tokens;
+}
+
+function reportRelevantAnomalies(sockets = reportVisibleSockets()) {
+  const ids = new Set(sockets.map(socket => socket.id));
+  return state.anomalies
+    .filter(item => ids.has(item.socketId))
+    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || a.title.localeCompare(b.title));
+}
+
+function reportTopSockets(sockets = reportVisibleSockets(), limit = 12) {
+  return sockets.slice(0, limit);
+}
+
+function reportPercentileTable(sockets = reportVisibleSockets()) {
+  const metrics = ["rtt", "rto", "sendQ", "recvQ", "skmem.d", "tx_bps", "rx_bps"];
+  return metrics
+    .map(metric => ({ metric, stats: reportMetricSummary(metric, sockets) }))
+    .filter(row => row.stats);
+}
+
+function reportFindings(limit = 5) {
+  return (state.advisorFindings || []).slice(0, limit);
+}
+
+function buildIncidentReportHtml(chartCaptures = []) {
+  const sockets = reportVisibleSockets();
+  const selected = selectedSocket();
+  const anomalies = reportRelevantAnomalies(sockets);
+  const topSockets = reportTopSockets(sockets, 10);
+  const percentiles = reportPercentileTable(sockets);
+  const findings = reportFindings(5);
+  const filters = reportFilterTokens();
+  const comparison = state.baseline ? buildComparison() : null;
+  const now = new Date();
+  const selectedAnomalies = selected ? state.anomalies.filter(item => item.socketId === selected.id) : [];
+  const topMetric = selectedAnomalies[0]?.metric ? metricLabel(selectedAnomalies[0].metric) : "none";
+  const summaryCards = [
+    ["Source", state.sourceName],
+    ["Visible sockets", formatNumber(sockets.length)],
+    ["Relevant anomalies", formatNumber(anomalies.length)],
+    ["Critical sockets", formatNumber(sockets.filter(socket => socket.risk === "critical").length)],
+    ["Generated", now.toLocaleString(resolvedNumberLocale(), { timeZone: resolvedTimeZone() })],
+    ["Profile", `${linuxProfileLabel()} / ${accessRoleLabel()}`]
+  ];
+  const reportCss = `
+    :root { color-scheme: light; --ink:#142033; --muted:#536273; --line:#d7e0ea; --panel:#f6f9fc; --accent:#0d6d9f; --danger:#b42338; --warn:#b26a00; --good:#147a52; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; color:var(--ink); background:#eef3f8; }
+    .report-shell { max-width:1180px; margin:0 auto; padding:24px; }
+    .report-actions { display:flex; gap:10px; justify-content:flex-end; margin-bottom:18px; }
+    .report-actions button { border:1px solid #b8c7d8; background:white; color:var(--ink); border-radius:8px; min-height:38px; padding:0 14px; cursor:pointer; font-weight:700; }
+    .report-card, .report-table-wrap { background:white; border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 24px rgba(9, 30, 66, .06); }
+    .report-header { padding:22px; display:grid; gap:14px; }
+    .report-kicker { color:var(--accent); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .report-header h1 { margin:0; font-size:30px; }
+    .report-header p { margin:0; color:var(--muted); line-height:1.5; }
+    .report-meta { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+    .report-meta article { padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--panel); display:grid; gap:6px; }
+    .report-meta span { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+    .report-meta strong { font-size:20px; }
+    .report-grid { display:grid; gap:16px; margin-top:16px; }
+    .report-section { padding:18px 20px; display:grid; gap:14px; }
+    .report-section h2 { margin:0; font-size:21px; }
+    .report-section h3 { margin:0; font-size:16px; }
+    .report-summary-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+    .report-summary-grid article { padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--panel); display:grid; gap:5px; }
+    .report-summary-grid span { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+    .report-summary-grid strong { font-size:20px; }
+    .report-code { margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-family:Consolas, monospace; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .token-row { display:flex; flex-wrap:wrap; gap:8px; }
+    .token { display:inline-flex; align-items:center; min-height:28px; padding:4px 10px; border:1px solid var(--line); border-radius:999px; background:var(--panel); color:var(--ink); font-size:12px; }
+    .report-columns { display:grid; grid-template-columns:1.1fr .9fr; gap:14px; }
+    .report-list { display:grid; gap:10px; }
+    .report-list article { padding:12px 14px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .report-list article.critical { border-left-color:var(--danger); }
+    .report-list article.high { border-left-color:#d97706; }
+    .report-list article.medium { border-left-color:var(--warn); }
+    .report-list article.low { border-left-color:var(--good); }
+    .report-list header { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+    .report-list p { margin:6px 0 0; color:var(--muted); line-height:1.45; }
+    .report-chart-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
+    .report-chart-card { padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--panel); display:grid; gap:10px; break-inside:avoid; }
+    .report-chart-card.hero { grid-column:1 / -1; }
+    .report-chart-card header { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+    .report-chart-card figure { margin:0; display:grid; gap:8px; }
+    .report-chart-card img { width:100%; border:1px solid var(--line); border-radius:10px; background:#050910; }
+    .report-chart-card figcaption { color:var(--muted); font-size:12px; line-height:1.45; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; font-size:13px; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+    tr:last-child td, tr:last-child th { border-bottom:0; }
+    .severity { font-weight:800; text-transform:uppercase; }
+    .severity.critical { color:var(--danger); }
+    .severity.high { color:#d97706; }
+    .severity.medium { color:var(--warn); }
+    .severity.low { color:var(--good); }
+    .flow { font-family:Consolas, monospace; font-size:12px; }
+    .small { color:var(--muted); font-size:12px; }
+    .report-footer { padding:18px 20px; color:var(--muted); font-size:12px; line-height:1.5; }
+    @media print {
+      body { background:white; }
+      .report-shell { max-width:none; padding:0; }
+      .report-actions { display:none; }
+      .report-card, .report-table-wrap { box-shadow:none; break-inside:avoid; }
+      .report-grid { gap:12px; }
+      @page { size:A4 portrait; margin:12mm; }
+    }
+    @media (max-width: 980px) {
+      .report-meta,
+      .report-summary-grid,
+      .report-columns,
+      .report-chart-grid { grid-template-columns:1fr; }
+      .report-chart-card.hero { grid-column:auto; }
+    }
+  `;
+  const html = `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8"/>
+        <title>NetworkExpert Incident Report - ${escapeHtml(state.sourceName)}</title>
+        <style>${reportCss}</style>
+      </head>
+      <body>
+        <div class="report-shell">
+          <div class="report-actions">
+            <button onclick="window.print()">Print / Save as PDF</button>
+            <button onclick="window.close()">Close</button>
+          </div>
+          <section class="report-card report-header">
+            <span class="report-kicker">Network incident report</span>
+            <div>
+              <h1>${escapeHtml(state.sourceName)}</h1>
+              <p>Prepared from the current NetworkExpert workspace. This report reflects the current parsed sockets, active filters, anomaly set, visible chart evidence, and optional baseline comparison.</p>
+            </div>
+            <div class="report-meta">
+              ${summaryCards.map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`).join("")}
+            </div>
+          </section>
+
+          <div class="report-grid">
+            <section class="report-card report-section">
+              <h2>Scope and Context</h2>
+              <div class="report-summary-grid">
+                <article><span>Active tab</span><strong>${escapeHtml(state.activeTab || "sockets")}</strong></article>
+                <article><span>Timezone</span><strong>${escapeHtml(resolvedTimeZone())}</strong></article>
+                <article><span>Filtered sockets in report</span><strong>${escapeHtml(formatNumber(sockets.length))}</strong></article>
+              </div>
+              <div>
+                <h3>Capture command</h3>
+                <pre class="report-code">${escapeHtml(state.command || "n/a")}</pre>
+              </div>
+              <div>
+                <h3>Applied filters</h3>
+                ${filters.length ? `<div class="token-row">${filters.map(token => `<span class="token">${escapeHtml(token)}</span>`).join("")}</div>` : `<p class="small">No table filter is currently applied.</p>`}
+              </div>
+              ${selected ? `<div>
+                <h3>Active investigation</h3>
+                <p><strong>${escapeHtml(selected.local)} -> ${escapeHtml(selected.peer)}</strong></p>
+                <p class="small">${escapeHtml(state.activeContextReason || "Selected context")} / ${escapeHtml(selected.family)} / ${escapeHtml(selected.state)} / ${escapeHtml(selected.details.process ? `${selected.details.process.name}:${selected.details.process.pid}` : "unknown process")}</p>
+                <div class="token-row">
+                  <span class="token">risk ${escapeHtml(selected.risk)}</span>
+                  <span class="token">RTT ${escapeHtml(formatMetricValue("rtt", metricValue(selected, "rtt")))}</span>
+                  <span class="token">RTO ${escapeHtml(formatMetricValue("rto", metricValue(selected, "rto")))}</span>
+                  <span class="token">Send-Q ${escapeHtml(formatMetricValue("sendQ", selected.sendQ))}</span>
+                  <span class="token">Recv-Q ${escapeHtml(formatMetricValue("recvQ", selected.recvQ))}</span>
+                  <span class="token">Top anomaly metric ${escapeHtml(topMetric)}</span>
+                </div>
+              </div>` : ""}
+            </section>
+
+            <section class="report-card report-section">
+              <h2>Priority Findings</h2>
+              <div class="report-columns">
+                <div>
+                  <h3>Top anomalies in current scope</h3>
+                  ${anomalies.length ? `<div class="report-list">
+                    ${anomalies.slice(0, 8).map(item => {
+                      const socket = state.sockets.find(socketItem => socketItem.id === item.socketId);
+                      return `<article class="${escapeHtml(item.severity)}">
+                        <header>
+                          <strong>${escapeHtml(item.title)}</strong>
+                          <span class="severity ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
+                        </header>
+                        <div class="small">${escapeHtml(metricLabel(item.metric || "socket"))}</div>
+                        ${socket ? `<div class="flow">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</div>` : ""}
+                        <p>${escapeHtml(item.detail)}</p>
+                      </article>`;
+                    }).join("")}
+                  </div>` : `<p class="small">No anomaly is currently in scope.</p>`}
+                </div>
+                <div>
+                  <h3>Advisor recommendations</h3>
+                  ${findings.length ? `<div class="report-list">
+                    ${findings.map(item => `<article class="${escapeHtml(item.severity)}">
+                      <header>
+                        <strong>${escapeHtml(item.title)}</strong>
+                        <span class="severity ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
+                      </header>
+                      <p>${escapeHtml(item.summary)}</p>
+                    </article>`).join("")}
+                  </div>` : `<p class="small">No prioritized advisor finding is available yet.</p>`}
+                </div>
+              </div>
+            </section>
+
+            ${chartCaptures.length ? `<section class="report-card report-section">
+              <h2>Chart Evidence</h2>
+              <div class="report-chart-grid">
+                ${chartCaptures.map(item => `<article class="report-chart-card ${item.hero ? "hero" : ""}">
+                  <header>
+                    <h3>${escapeHtml(item.title)}</h3>
+                    <span class="token">${escapeHtml(metricLabel(item.metric))}</span>
+                  </header>
+                  <figure>
+                    <img src="${item.image}" alt="${escapeHtml(item.title)}"/>
+                    <figcaption>${escapeHtml(item.context)}</figcaption>
+                  </figure>
+                </article>`).join("")}
+              </div>
+            </section>` : ""}
+
+            <section class="report-card report-section">
+              <h2>Top Flows</h2>
+              <div class="report-table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Risk</th><th>Flow</th><th>Process</th><th>RTT</th><th>RTO</th><th>Send-Q</th><th>Recv-Q</th><th>Drops</th><th>TX</th><th>RX</th></tr>
+                  </thead>
+                  <tbody>
+                    ${topSockets.map(socket => `<tr>
+                      <td><span class="severity ${escapeHtml(socket.risk)}">${escapeHtml(socket.risk)}</span></td>
+                      <td class="flow">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</td>
+                      <td>${escapeHtml(socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "-")}</td>
+                      <td>${escapeHtml(formatMetricValue("rtt", metricValue(socket, "rtt")))}</td>
+                      <td>${escapeHtml(formatMetricValue("rto", metricValue(socket, "rto")))}</td>
+                      <td>${escapeHtml(formatMetricValue("sendQ", socket.sendQ))}</td>
+                      <td>${escapeHtml(formatMetricValue("recvQ", socket.recvQ))}</td>
+                      <td>${escapeHtml(formatMetricValue("skmem.d", metricValue(socket, "skmem.d")))}</td>
+                      <td>${escapeHtml(formatMetricValue("tx_bps", socketBandwidth(socket, "tx_bps")))}</td>
+                      <td>${escapeHtml(formatMetricValue("rx_bps", socketBandwidth(socket, "rx_bps")))}</td>
+                    </tr>`).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="report-card report-section">
+              <h2>Distribution Summary</h2>
+              <div class="report-table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Metric</th><th>Samples</th><th>P50</th><th>P90</th><th>P99</th><th>Max</th></tr>
+                  </thead>
+                  <tbody>
+                    ${percentiles.map(row => `<tr>
+                      <td>${escapeHtml(metricLabel(row.metric))}</td>
+                      <td>${escapeHtml(formatNumber(row.stats.count))}</td>
+                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.p50))}</td>
+                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.p90))}</td>
+                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.p99))}</td>
+                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.max))}</td>
+                    </tr>`).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            ${comparison ? `<section class="report-card report-section">
+              <h2>Baseline Comparison</h2>
+              <div class="report-summary-grid">
+                <article><span>Before</span><strong>${escapeHtml(formatNumber(comparison.summary.before))}</strong></article>
+                <article><span>After</span><strong>${escapeHtml(formatNumber(comparison.summary.after))}</strong></article>
+                <article><span>New / Gone</span><strong>${escapeHtml(`${formatNumber(comparison.summary.added)} / ${formatNumber(comparison.summary.removed)}`)}</strong></article>
+                <article><span>Worse</span><strong>${escapeHtml(formatNumber(comparison.summary.worsened))}</strong></article>
+                <article><span>Improved</span><strong>${escapeHtml(formatNumber(comparison.summary.improved))}</strong></article>
+                <article><span>Baseline source</span><strong>${escapeHtml(state.baseline.sourceName)}</strong></article>
+              </div>
+              <div class="report-table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Status</th><th>Flow</th><th>Risk</th><th>Send-Q delta</th><th>Recv-Q delta</th><th>RTT delta</th><th>RTO delta</th><th>Drops delta</th></tr>
+                  </thead>
+                  <tbody>
+                    ${comparison.rows.slice(0, 10).map(row => {
+                      const current = row.after || row.before;
+                      return `<tr>
+                        <td><span class="severity ${escapeHtml(row.status === "worse" ? "critical" : row.status === "better" ? "low" : "medium")}">${escapeHtml(row.status)}</span></td>
+                        <td class="flow">${escapeHtml(current.local)} -> ${escapeHtml(current.peer)}</td>
+                        <td>${escapeHtml(row.before?.risk || "-")} -> ${escapeHtml(row.after?.risk || "-")}</td>
+                        <td>${escapeHtml(formatMetricValue("sendQ", row.deltas.sendQ))}</td>
+                        <td>${escapeHtml(formatMetricValue("recvQ", row.deltas.recvQ))}</td>
+                        <td>${escapeHtml(formatMetricValue("rtt", row.deltas.rtt))}</td>
+                        <td>${escapeHtml(formatMetricValue("rto", row.deltas.rto))}</td>
+                        <td>${escapeHtml(formatMetricValue("skmem.d", row.deltas.drops))}</td>
+                      </tr>`;
+                    }).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </section>` : ""}
+          </div>
+
+          <section class="report-card report-footer">
+            <strong>Analyst notes</strong>
+            <p>This report is generated from the current browser workspace. For strict incident evidence, keep the raw capture file, the exact ss collection command, timestamps, and any before/after capture used as baseline. Pay special attention to RTT/RTO tails, Send-Q/Recv-Q growth, socket drops, and whether one peer or one process dominates the anomaly set.</p>
+          </section>
+        </div>
+      </body>
+    </html>
+  `;
+  return html;
+}
+
+function openIncidentReport() {
+  if (!state.sockets.length) {
+    toast("No data to export", "Import or parse a capture before generating an incident report.", "warn");
+    return;
+  }
+  const chartCaptures = captureIncidentReportCharts();
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) {
+    toast("Popup blocked", "Allow popups for this app to open the printable incident report.", "danger");
+    return;
+  }
+  reportWindow.document.open();
+  reportWindow.document.write(buildIncidentReportHtml(chartCaptures));
+  reportWindow.document.close();
+}
+
 async function importFile(file) {
   state.importStatus = { title: "Preparing import", detail: `${file.name} (${formatNumber(file.size)} bytes)`, progress: 1 };
   state.raw = "";
@@ -4989,6 +5460,7 @@ function bindEvents() {
       render();
     }
     if (action === "clear") { state.raw = ""; state.ingestRawExpanded = true; markAnalysisDirty({ raw: true }); render(); }
+    if (action === "exportReport") { openIncidentReport(); }
     if (action === "resetAll") {
       resetAllState();
       toast("Workspace reset", "All loaded data, filters, zoom, and UI selections have been cleared.");
