@@ -2127,7 +2127,7 @@ function renderIngestPage() {
     <section class="ingest-hero">
       <div>
         <h2>Import an ss collection</h2>
-        <p>Paste output or open a file, then analyze.</p>
+        <p>Paste captured output or open a file. Analysis reads the text exactly as captured.</p>
       </div>
       <div class="hero-actions">
         <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
@@ -2141,8 +2141,8 @@ function renderIngestPage() {
         <div class="panel-body">
           <textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>
           <div class="toolbar import-actions" style="margin-top:10px">
-            <button class="primary" data-action="parse">${icons.play} Analyze</button>
-            <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}"><i class="ri-command-line"></i> ss options</button>
+            <button class="primary" data-action="parse">${icons.play} Analyze pasted text</button>
+            <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}"><i class="ri-command-line"></i> Capture options</button>
             <button data-action="sample10m">${icons.chart} 10-min sample</button>
             <button data-action="clear" class="danger">${icons.clear} Clear</button>
           </div>
@@ -2151,14 +2151,18 @@ function renderIngestPage() {
         </div>
       </div>
       ${state.showSsOptions ? `<div class="panel ss-options-panel">
-        <div class="panel-head"><div class="panel-title">Command and options</div></div>
+        <div class="panel-head"><div class="panel-title">Capture command builder</div></div>
         <div class="panel-body">
+          <div class="capture-flow-card">
+            <strong><i class="ri-route-line"></i> Collection first, parsing second</strong>
+            <span>These checkboxes only build the <code>ss</code> command used before import. <b>Analyze pasted text</b> parses the text already in the box; it does not re-run <code>ss</code> or reinterpret missing fields.</span>
+          </div>
           <div class="command-row">
             <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
-            <button class="icon primary" data-action="parse" title="Analyze">${icons.play}</button>
+            <button class="primary" data-action="applyCommand" title="Apply capture command"><i class="ri-check-line"></i> Apply command</button>
           </div>
           <div class="chips">${active.map(renderSsOptionChip).join("") || `<span class="chip">no option detected</span>`}</div>
-          <p class="hint">Compact flags such as ss -plunt are decomposed option by option.</p>
+          <p class="hint">Compact flags such as ss -plunt are decomposed option by option. If an option was not used when collecting, the corresponding metrics may simply be absent from the pasted data.</p>
           <div class="ss-option-card-layout">
             <div class="option-grid" aria-label="ss option toggles">
               ${featuredOptions.map(option => renderSsOptionControl(option, coverage, selectedOption?.key)).join("")}
@@ -4715,9 +4719,7 @@ function bindEvents() {
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", event => {
     const action = event.currentTarget.dataset.action;
     if (action === "parse") {
-      const commandInput = document.querySelector("#commandInput");
       const rawInput = document.querySelector("#rawInput");
-      state.command = commandInput ? commandInput.value : state.command;
       state.raw = rawInput ? rawInput.value : state.raw;
       setActiveInvestigation(state, null);
       resetDerivedCaches({ raw: true });
@@ -4729,6 +4731,12 @@ function bindEvents() {
       state.view = "analysis";
       state.activeTab = "advisor";
       render();
+    }
+    if (action === "applyCommand") {
+      const commandInput = document.querySelector("#commandInput");
+      state.command = commandInput ? commandInput.value : state.command;
+      toast("Capture command updated", "The ss command builder was updated. Existing pasted text is unchanged.");
+      renderKeepingWorkspacePosition();
     }
     if (action === "sample") { state.raw = SAMPLE; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
     if (action === "toggleSsOptions") {
