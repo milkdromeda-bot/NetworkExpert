@@ -1,7 +1,7 @@
 export function parseAdvancedSearch(query) {
   const text = String(query || "").trim();
   if (!text) return [];
-  return text.match(/"[^"]+"|\S+/g)?.map(raw => {
+  return text.match(/[^\s"]+:"[^"]+"|"[^"]+"|\S+/g)?.map(raw => {
     const token = raw.replace(/^"|"$/g, "");
     const match = token.match(/^([a-zA-Z_.-]+)(>=|<=|!=|=|:|>|<)(.+)$/);
     if (!match) return { type: "plain", value: token.toLowerCase() };
