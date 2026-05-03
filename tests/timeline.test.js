@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseSs } from "../src/parser.js";
-import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, socketKey, timestampBlocks } from "../src/timeline.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots, socketKey, timestampBlocks } from "../src/timeline.js";
 
 function generateLightSample() {
   const socketRows = Array.from({ length: 10 }, (_, index) => {
@@ -160,4 +160,54 @@ test("progress aggregation keeps the latest socket values", () => {
   assert.equal(socket.snapshotCount, 2);
   assert.equal(socket.details.values.rtt.avg, 9);
   assert.equal(socket.details.values.cwnd, 12);
+});
+
+test("socket history stays bound to the exact peer instead of reusing another conversation", () => {
+  const raw = [
+    "--- 2026-04-29 08:27:23 ---",
+    "ESTAB 0 0 192.168.145.205:20002 192.168.145.204:57067 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d25) bytes_acked:100 bytes_received:200",
+    "ESTAB 0 0 192.168.145.205:20002 192.168.145.115:53559 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d0) bytes_acked:10 bytes_received:20",
+    "--- 2026-04-29 08:27:24 ---",
+    "ESTAB 0 0 192.168.145.205:20002 192.168.145.115:53559 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d0) bytes_acked:11 bytes_received:21"
+  ].join("\n");
+
+  const snapshots = parsedTimestampSnapshots(raw);
+  const [selectedSocket] = aggregateTimestampedSockets(raw)
+    .filter(socket => socket.peer === "192.168.145.204:57067");
+
+  const rows = buildSocketHistoryFromSnapshots(snapshots, selectedSocket);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]["skmem.d"], 25);
+  assert.equal(rows[0].socketPresent, true);
+});
+
+test("socket history aligns the latest row with the selected socket values", () => {
+  const raw = [
+    "--- 2026-04-29 08:27:23 ---",
+    "ESTAB 0 0 192.168.145.205:20002 192.168.145.204:57067 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d0) rtt:0.1/0.01 bytes_acked:100 bytes_received:200",
+    "--- 2026-04-29 08:27:24 ---",
+    "ESTAB 0 0 192.168.145.205:20002 192.168.145.204:57067 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d0) rtt:0.1/0.01 bytes_acked:110 bytes_received:210"
+  ].join("\n");
+
+  const snapshots = parsedTimestampSnapshots(raw);
+  const [aggregatedSocket] = aggregateTimestampedSockets(raw);
+  const selectedSocket = {
+    ...aggregatedSocket,
+    details: {
+      ...aggregatedSocket.details,
+      skmem: { ...aggregatedSocket.details.skmem, d: 25 },
+      values: {
+        ...aggregatedSocket.details.values,
+        rtt: { avg: 0.8, var: 0.1 }
+      }
+    }
+  };
+
+  const rows = buildSocketHistoryFromSnapshots(snapshots, selectedSocket);
+  const latest = rows.at(-1);
+
+  assert.equal(latest.epochMs, selectedSocket.lastSeenMs);
+  assert.equal(latest["skmem.d"], 25);
+  assert.equal(latest.rtt, 0.8);
 });

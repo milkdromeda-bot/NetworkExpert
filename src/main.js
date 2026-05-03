@@ -7,7 +7,7 @@ import { defaultAlertRules, evaluateAlertRules as evaluateAlertRuleEvents, loadA
 import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTemplateProfile, applyDashboardPreset as applyDashboardPresetProfile, applyDashboardProfile as applySavedDashboardProfile, dashboardSnapshot as createDashboardSnapshot } from "./profiles.js";
 import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot } from "./compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
-import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 import { applyContextAction, setActiveInvestigation } from "./navigation.js";
 import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
@@ -802,35 +802,7 @@ function buildHistoryFromTimestampedSnapshots() {
   if (!snapshots.length) return [];
   const selected = state.sockets.find(s => s.id === state.selectedId) || state.sockets[0];
   if (!selected) return [];
-  const key = socketKey(selected);
-  const start = snapshots[0].epochMs;
-  const rows = snapshots.map(block => {
-    const exact = block.sockets.find(s => socketKey(s) === key) || block.sockets.find(s => s.local === selected.local || s.peer === selected.peer);
-    return {
-      t: Math.max(0, Math.round((block.epochMs - start) / 1000)),
-      epochMs: block.epochMs,
-      socketPresent: Boolean(exact),
-      rtt: metricValue(exact, "rtt"),
-      rttvar: metricValue(exact, "rttvar"),
-      rto: metricValue(exact, "rto"),
-      sendQ: metricValue(exact, "sendQ"),
-      recvQ: metricValue(exact, "recvQ"),
-      cwnd: metricValue(exact, "cwnd"),
-      ato: metricValue(exact, "ato"),
-      "skmem.r": metricValue(exact, "skmem.r"),
-      "skmem.t": metricValue(exact, "skmem.t"),
-      "skmem.d": metricValue(exact, "skmem.d"),
-      pacing_rate: metricValue(exact, "pacing_rate"),
-      delivery_rate: metricValue(exact, "delivery_rate"),
-      bytes_acked: metricValue(exact, "bytes_acked"),
-      bytes_received: metricValue(exact, "bytes_received"),
-      segs_out: metricValue(exact, "segs_out"),
-      segs_in: metricValue(exact, "segs_in"),
-      backoff: metricValue(exact, "backoff"),
-      retrans: exact?.details.timer?.retrans || 0
-    };
-  }).filter(row => Object.values(row).some(value => value > 0));
-  return addBandwidthDerivatives(rows);
+  return addBandwidthDerivatives(buildSocketHistoryFromSnapshots(snapshots, selected));
 }
 
 function timestampBlocks() {
@@ -2038,6 +2010,19 @@ function render() {
 
 function selectedSocket() {
   return state.activeContextId ? state.sockets.find(socket => socket.id === state.activeContextId) || null : null;
+}
+
+function syncChartHistoryToSelection() {
+  buildHistory();
+  state.cache.visibleHistoryKey = "";
+  state.cache.visibleHistoryRows = null;
+}
+
+function focusSocket(socketId, reason = "Selected by user") {
+  if (!socketId) return;
+  state.selectedId = socketId;
+  setActiveInvestigation(state, socketId, reason);
+  syncChartHistoryToSelection();
 }
 
 function renderInvestigationContext() {
@@ -4231,7 +4216,7 @@ function chartResolutionLabel() {
 function visibleHistory() {
   const rows = state.history.length ? state.history : [];
   if (rows.length <= 2) return rows;
-  const cacheKey = `${state.dataVersion}|${rows.length}|${state.chartZoom.start}|${state.chartZoom.end}`;
+  const cacheKey = `${state.dataVersion}|${state.selectedId}|${rows.length}|${rows[0]?.epochMs || 0}|${rows[rows.length - 1]?.epochMs || 0}|${state.chartZoom.start}|${state.chartZoom.end}`;
   if (state.cache.visibleHistoryKey === cacheKey && state.cache.visibleHistoryRows) return state.cache.visibleHistoryRows;
   const start = Math.floor(state.chartZoom.start * (rows.length - 1));
   const end = Math.max(start + 1, Math.ceil(state.chartZoom.end * (rows.length - 1)));
@@ -5152,7 +5137,9 @@ function bindEvents() {
     const action = event.currentTarget.dataset.contextAction;
     const socket = selectedSocket();
     const suggestedMetric = socket ? state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric : null;
+    const previousSelectedId = state.selectedId;
     applyContextAction(state, action, socket, { chartMetrics: chartMetricList(), suggestedMetric });
+    if (action !== "clear" && state.selectedId && state.selectedId !== previousSelectedId) syncChartHistoryToSelection();
     renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-pref-tab]").forEach(btn => btn.addEventListener("click", event => {
@@ -5213,8 +5200,7 @@ function bindEvents() {
     const socket = state.sockets.find(item => item.id === event.currentTarget.dataset.socketId);
     if (!socket) return;
     const action = event.currentTarget.dataset.mapEdgeAction;
-    state.selectedId = socket.id;
-    setActiveInvestigation(state, socket.id, "Chosen from map link");
+    focusSocket(socket.id, "Chosen from map link");
     if (action === "details") {
       state.drawer = "details";
     }
@@ -5307,8 +5293,7 @@ function bindEvents() {
     if (!socket) return;
     const action = event.currentTarget.dataset.conversationAction;
     const metric = event.currentTarget.dataset.metric || "rtt";
-    state.selectedId = socket.id;
-    setActiveInvestigation(state, socket.id, "Chosen from conversation action");
+    focusSocket(socket.id, "Chosen from conversation action");
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
     if (action === "chart") {
@@ -5337,8 +5322,7 @@ function bindEvents() {
     const socket = state.sockets.find(s => s.id === event.currentTarget.dataset.socketId);
     if (!socket) return;
     const action = event.currentTarget.dataset.rowAction;
-    state.selectedId = socket.id;
-    setActiveInvestigation(state, socket.id, "Chosen from row action");
+    focusSocket(socket.id, "Chosen from row action");
     state.openMenuId = null;
     state.openMenuPos = null;
     if (action === "chart") {
@@ -5363,8 +5347,7 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-socket]").forEach(row => row.addEventListener("click", event => {
-    state.selectedId = event.currentTarget.dataset.socket;
-    setActiveInvestigation(state, state.selectedId, "Chosen by clicking a row");
+    focusSocket(event.currentTarget.dataset.socket, "Chosen by clicking a row");
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
     renderKeepingWorkspacePosition();
@@ -5506,8 +5489,7 @@ function bindEvents() {
     renderKeepingModalPosition();
   }));
   document.querySelectorAll("[data-jump]").forEach(btn => btn.addEventListener("click", event => {
-    state.selectedId = event.currentTarget.dataset.jump;
-    setActiveInvestigation(state, state.selectedId, "Chosen from navigation jump");
+    focusSocket(event.currentTarget.dataset.jump, "Chosen from navigation jump");
     state.activeTab = "sockets";
     render();
   }));

@@ -1,4 +1,4 @@
-import { parseSs, parseTimestampLine } from "./parser.js";
+import { metricValue, parseSs, parseTimestampLine } from "./parser.js";
 
 export function socketKey(socket) {
   return `${socket.local}|${socket.peer}|${socket.state}`;
@@ -76,4 +76,64 @@ export function aggregateTimestampedSockets(raw = "") {
     }
   }
   return withStableSocketIds([...byKey.values()]);
+}
+
+export function buildSocketHistoryFromSnapshots(snapshots = [], selectedSocket = null) {
+  if (!snapshots.length || !selectedSocket) return [];
+  const key = socketKey(selectedSocket);
+  const start = snapshots[0].epochMs;
+  const rows = snapshots.map(block => {
+    const exact = block.sockets.find(socket => socketKey(socket) === key)
+      || block.sockets.find(socket => socket.local === selectedSocket.local && socket.peer === selectedSocket.peer);
+    return {
+      t: Math.max(0, Math.round((block.epochMs - start) / 1000)),
+      epochMs: block.epochMs,
+      socketPresent: Boolean(exact),
+      rtt: metricValue(exact, "rtt"),
+      rttvar: metricValue(exact, "rttvar"),
+      rto: metricValue(exact, "rto"),
+      sendQ: metricValue(exact, "sendQ"),
+      recvQ: metricValue(exact, "recvQ"),
+      cwnd: metricValue(exact, "cwnd"),
+      ato: metricValue(exact, "ato"),
+      "skmem.r": metricValue(exact, "skmem.r"),
+      "skmem.t": metricValue(exact, "skmem.t"),
+      "skmem.d": metricValue(exact, "skmem.d"),
+      pacing_rate: metricValue(exact, "pacing_rate"),
+      delivery_rate: metricValue(exact, "delivery_rate"),
+      bytes_acked: metricValue(exact, "bytes_acked"),
+      bytes_received: metricValue(exact, "bytes_received"),
+      segs_out: metricValue(exact, "segs_out"),
+      segs_in: metricValue(exact, "segs_in"),
+      backoff: metricValue(exact, "backoff"),
+      retrans: exact?.details.timer?.retrans || 0
+    };
+  }).filter(row => {
+    if (row.socketPresent) return true;
+    return Object.entries(row).some(([metric, value]) => !["t", "epochMs", "socketPresent"].includes(metric) && value > 0);
+  });
+
+  const latestRow = rows.findLast(row => row.epochMs === selectedSocket.lastSeenMs && row.socketPresent !== false);
+  if (latestRow) {
+    latestRow.rtt = metricValue(selectedSocket, "rtt");
+    latestRow.rttvar = metricValue(selectedSocket, "rttvar");
+    latestRow.rto = metricValue(selectedSocket, "rto");
+    latestRow.sendQ = metricValue(selectedSocket, "sendQ");
+    latestRow.recvQ = metricValue(selectedSocket, "recvQ");
+    latestRow.cwnd = metricValue(selectedSocket, "cwnd");
+    latestRow.ato = metricValue(selectedSocket, "ato");
+    latestRow["skmem.r"] = metricValue(selectedSocket, "skmem.r");
+    latestRow["skmem.t"] = metricValue(selectedSocket, "skmem.t");
+    latestRow["skmem.d"] = metricValue(selectedSocket, "skmem.d");
+    latestRow.pacing_rate = metricValue(selectedSocket, "pacing_rate");
+    latestRow.delivery_rate = metricValue(selectedSocket, "delivery_rate");
+    latestRow.bytes_acked = metricValue(selectedSocket, "bytes_acked");
+    latestRow.bytes_received = metricValue(selectedSocket, "bytes_received");
+    latestRow.segs_out = metricValue(selectedSocket, "segs_out");
+    latestRow.segs_in = metricValue(selectedSocket, "segs_in");
+    latestRow.backoff = metricValue(selectedSocket, "backoff");
+    latestRow.retrans = selectedSocket?.details.timer?.retrans || 0;
+  }
+
+  return rows;
 }
