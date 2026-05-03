@@ -2857,6 +2857,42 @@ th:focus-within .column-tooltip,
 .anomaly.low { border-left-color: var(--green); }
 .anomaly strong, .field-card strong, .guide-card strong { display: block; font-size: 13px; margin-bottom: 4px; }
 .anomaly p, .field-card p, .guide-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.guide-command-card {
+  display: grid;
+  gap: 8px;
+}
+.guide-command-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.guide-command-head strong {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.copy-command-button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-color: rgba(137, 244, 255, .38);
+  color: #dff9ff;
+  background:
+    radial-gradient(circle at 24% 16%, rgba(137, 244, 255, .22), transparent 34%),
+    linear-gradient(180deg, #17263a, #09111b);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .22);
+}
+.copy-command-button:hover,
+.copy-command-button:focus {
+  border-color: rgba(137, 244, 255, .78);
+  box-shadow: 0 0 0 3px rgba(57, 214, 214, .12), 0 10px 24px rgba(0, 0, 0, .28);
+}
+.copy-command-button.copied {
+  border-color: rgba(71, 255, 160, .58);
+  color: #b8ffd8;
+  background:
+    radial-gradient(circle at 24% 16%, rgba(71, 255, 160, .22), transparent 34%),
+    linear-gradient(180deg, #123226, #07140f);
+}
 .field-directory {
   display: grid;
   grid-template-columns: repeat(2, minmax(280px, 1fr));

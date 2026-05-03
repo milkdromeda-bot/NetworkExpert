@@ -299,6 +299,7 @@ let state = {
   openConversationInsightKey: null,
   openConversationInsightPos: null,
   selectedMapEdgeId: null,
+  copiedGuideCommand: "",
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
   correlation: { x: "rtt", y: "sendQ" },
@@ -3454,11 +3455,25 @@ function renderGuide() {
       <article class="guide-card system-context"><strong>${escapeHtml(linuxProfileLabel())} / ${escapeHtml(accessRoleLabel())} / ${escapeHtml(ubuntuProfileLabel())}</strong><p>${escapeHtml(ACCESS_ROLES[state.prefs.accessRole]?.note || ACCESS_ROLES.analyst.note)}</p><p>${escapeHtml(LINUX_PROFILES[state.prefs.linuxProfile]?.note || LINUX_PROFILES.lxc.note)}</p></article>
       ${tab === "best" ? renderGuideBestPractices() : ""}
       ${tab === "cases" ? renderGuideUseCases() : ""}
-      ${tab === "commands" ? commands.map(([title, cmd]) => `<article class="guide-card"><strong>${escapeHtml(title)}</strong><pre class="code">${escapeHtml(cmd)}</pre></article>`).join("") : ""}
+      ${tab === "commands" ? commands.map(([title, cmd], index) => renderGuideCommandCard(title, cmd, index)).join("") : ""}
       ${tab === "fields" ? renderFields() : ""}
       ${tab === "refs" ? renderGuideReferences() : ""}
     </div>
   </div>`;
+}
+
+function renderGuideCommandCard(title, command, index) {
+  const key = `guide-command-${index}`;
+  const copied = state.copiedGuideCommand === key;
+  return `<article class="guide-card guide-command-card" data-guide-command-card>
+    <header class="guide-command-head">
+      <strong>${escapeHtml(title)}</strong>
+      <button class="copy-command-button ${copied ? "copied" : ""}" data-action="copyGuideCommand" data-command-key="${escapeHtml(key)}" title="Copy command to clipboard" aria-label="Copy ${escapeHtml(title)} command">
+        ${copied ? `<i class="ri-check-line"></i> Copied` : `${icons.copy} Copy`}
+      </button>
+    </header>
+    <pre class="code">${escapeHtml(command)}</pre>
+  </article>`;
 }
 
 function renderGuideBestPractices() {
@@ -4733,8 +4748,27 @@ function toast(title, text, type = "") {
   setTimeout(() => el.remove(), 5200);
 }
 
+async function copyTextToClipboard(text) {
+  const value = String(text || "");
+  if (!value) return false;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const ok = document.execCommand("copy");
+  textarea.remove();
+  return ok;
+}
+
 function bindEvents() {
-  document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", event => {
+  document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
     const action = event.currentTarget.dataset.action;
     if (action === "parse") {
       const rawInput = document.querySelector("#rawInput");
@@ -4807,8 +4841,35 @@ function bindEvents() {
     }
     if (action === "copyAdvisorCommands") {
       const finding = state.advisorFindings.find(item => item.id === event.currentTarget.dataset.findingId);
-      navigator.clipboard?.writeText((finding?.commands || []).join("\n"));
+      await copyTextToClipboard((finding?.commands || []).join("\n"));
       toast("Advisor commands copied", "Suggested command line evidence has been copied.");
+    }
+    if (action === "copyGuideCommand") {
+      const card = event.currentTarget.closest("[data-guide-command-card]");
+      const command = card?.querySelector("pre")?.textContent || "";
+      let ok = false;
+      try {
+        ok = await copyTextToClipboard(command);
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        toast("Copy failed", "The command could not be copied by the browser.", "danger");
+        return;
+      }
+      const key = event.currentTarget.dataset.commandKey || "";
+      state.copiedGuideCommand = key;
+      event.currentTarget.classList.add("copied");
+      event.currentTarget.innerHTML = `<i class="ri-check-line"></i> Copied`;
+      toast("Command copied", "The command line is now in the clipboard.");
+      setTimeout(() => {
+        if (state.copiedGuideCommand === key) state.copiedGuideCommand = "";
+        const button = [...document.querySelectorAll("[data-command-key]")].find(item => item.dataset.commandKey === key);
+        if (button) {
+          button.classList.remove("copied");
+          button.innerHTML = `${icons.copy} Copy`;
+        }
+      }, 2200);
     }
     if (action === "addAlertRule") {
       const name = document.querySelector("#alertRuleName")?.value.trim() || "";
