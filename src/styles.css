@@ -800,11 +800,6 @@ button.mega i {
   border-color: transparent;
   box-shadow: 0 8px 22px rgba(57, 214, 214, .22);
 }
-.chip.hot i {
-  margin-left: 3px;
-  font-size: 12px;
-  color: rgba(4, 17, 23, .72);
-}
 .ss-option-card-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(440px, .95fr);
@@ -834,13 +829,22 @@ button.mega i {
 .ss-option-row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-height: 38px;
   padding: 5px 7px;
   align-self: start;
+  cursor: pointer;
+  outline: none;
   transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.ss-option-row:hover,
+.ss-option-row:focus {
+  border-color: rgba(57, 214, 214, .52);
+  background:
+    linear-gradient(180deg, rgba(57, 214, 214, .07), rgba(57, 214, 214, .01)),
+    #08111a;
 }
 .ss-option-row.selected {
   border-color: rgba(57, 214, 214, .78);
@@ -880,20 +884,6 @@ button.mega i {
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.ss-option-info {
-  width: 28px;
-  min-width: 28px;
-  min-height: 26px;
-  padding: 0;
-  border-radius: 7px;
-  background:
-    radial-gradient(circle at 32% 12%, rgba(137, 244, 255, .2), transparent 35%),
-    linear-gradient(180deg, #16263a, #09111b);
-}
-.ss-option-info i {
-  font-size: 16px;
-  color: #9df5ff;
 }
 .ss-option-detail-card {
   min-width: 0;

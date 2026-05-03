@@ -636,7 +636,7 @@ function renderSsOptionChip(option) {
   const intel = ssOptionIntel(option.short, option.long, option.desc, option.group);
   return `
     <span class="ss-option-chip-wrap" title="${escapeHtml(`${key}: ${intel.role}. ${option.desc}`)}">
-      <span class="chip hot">${escapeHtml(key)} <i class="ri-information-line"></i></span>
+      <span class="chip hot">${escapeHtml(key)}</span>
     </span>
   `;
 }
@@ -647,14 +647,11 @@ function renderSsOptionControl(option, coverage, selectedKey) {
   const intel = ssOptionIntel(short, long, desc, group);
   const active = coverage.find(c => c.short === short && c.long === long)?.active;
   return `
-    <div class="check ss-option-row ${key === selectedKey ? "selected" : ""}">
+    <div class="check ss-option-row ${key === selectedKey ? "selected" : ""}" data-ss-option-help="${escapeHtml(key)}" role="button" tabindex="0" title="${escapeHtml(`Show ${key} details`)}">
       <label class="ss-option-check">
         <input type="checkbox" data-opt="${escapeHtml(key)}" ${active ? "checked" : ""}/>
         <span class="ss-option-code"><b>${escapeHtml(key)}</b><small>${escapeHtml(intel.role)}</small></span>
       </label>
-      <button type="button" class="ss-option-info" data-ss-option-help="${escapeHtml(key)}" aria-label="${escapeHtml(`Explain ${key}`)}" title="${escapeHtml(`Show ${key} details`)}">
-        <i class="ri-information-line"></i>
-      </button>
     </div>
   `;
 }
@@ -5419,6 +5416,11 @@ function bindEvents() {
     button.addEventListener("click", showHelp);
     button.addEventListener("mouseenter", showHelp);
     button.addEventListener("focus", showHelp);
+    button.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      showHelp(event);
+    });
   });
   for (const [id, key] of [["metricSelect", "graphMetric"], ["styleSelect", "graphStyle"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = e.target.value; savePrefs(); render(); });
