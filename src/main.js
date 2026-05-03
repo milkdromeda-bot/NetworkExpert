@@ -10,7 +10,7 @@ import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 import { applyContextAction, setActiveInvestigation } from "./navigation.js";
 import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
-import { deleteTopologyGroup, endpointHost, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
+import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -1624,15 +1624,15 @@ function serviceMapGroupBands(lanes, positions) {
       if (!run) return;
       const ys = run.nodes.map(node => positions[node.id]?.y).filter(Number.isFinite);
       if (ys.length) {
-        const top = Math.min(...ys) - 50;
-        const bottom = Math.max(...ys) + 36;
+        const top = Math.min(...ys) - 60;
+        const bottom = Math.max(...ys) + 42;
         bands.push({
           group: run.group,
           x: lane.x - 166,
           y: top,
           width: 332,
           height: bottom - top,
-          labelY: top + 22
+          labelY: top + 26
         });
       }
       run = null;
@@ -2917,11 +2917,9 @@ function renderServiceMap() {
     { key: "locals", title: "Local sockets", x: 520, nodes: ordered.locals },
     { key: "peers", title: "Peers", x: 920, nodes: ordered.peers }
   ];
-  const height = Math.max(420, Math.max(...lanes.map(lane => lane.nodes.length)) * 66 + 112);
-  const positions = {};
-  lanes.forEach(lane => lane.nodes.forEach((node, index) => {
-    positions[node.id] = { x: lane.x, y: 96 + index * 66 };
-  }));
+  const positions = layoutTopologyLanePositions(lanes);
+  const maxY = Math.max(...Object.values(positions).map(position => position.y));
+  const height = Math.max(420, maxY + 104);
   const groupBands = serviceMapGroupBands(lanes, positions);
   const visibleEdges = map.edges.filter(edge => positions[edge.from] && positions[edge.mid] && positions[edge.to]).slice(0, 160);
   const routes = buildServiceMapRoutes(visibleEdges, positions);

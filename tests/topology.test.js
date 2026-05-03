@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deleteTopologyGroup, endpointHost, endpointMatchesPattern, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "../src/topology.js";
+import { deleteTopologyGroup, endpointHost, endpointMatchesPattern, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "../src/topology.js";
 
 test("topologyScopeKey scopes profiles by recording source name", () => {
   assert.equal(topologyScopeKey(" LPLALO-light.log "), "lplalo-light.log");
@@ -79,4 +79,42 @@ test("deleteTopologyGroup removes only one topology group", () => {
   });
 
   assert.deepEqual(deleteTopologyGroup(profile, "a").groups.map(group => group.id), ["b"]);
+});
+
+test("layoutTopologyLanePositions reserves space before a topology group after an ungrouped node", () => {
+  const group = { id: "lps", name: "LPs" };
+  const positions = layoutTopologyLanePositions([
+    {
+      key: "peers",
+      x: 920,
+      nodes: [
+        { id: "distribution" },
+        { id: "lp-1", topologyGroup: group },
+        { id: "lp-2", topologyGroup: group }
+      ]
+    }
+  ]);
+
+  assert.equal(positions.distribution.y, 96);
+  assert.equal(positions["lp-1"].y, 190);
+  assert.equal(positions["lp-2"].y, 256);
+});
+
+test("layoutTopologyLanePositions does not add extra space inside one topology group", () => {
+  const group = { id: "lps", name: "LPs" };
+  const positions = layoutTopologyLanePositions([
+    {
+      key: "peers",
+      x: 920,
+      nodes: [
+        { id: "lp-1", topologyGroup: group },
+        { id: "lp-2", topologyGroup: group },
+        { id: "distribution" }
+      ]
+    }
+  ]);
+
+  assert.equal(positions["lp-1"].y, 96);
+  assert.equal(positions["lp-2"].y, 162);
+  assert.equal(positions.distribution.y, 228);
 });

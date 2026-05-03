@@ -52,6 +52,24 @@ export function topologyGroupForEndpoint(profile, endpoint) {
   return null;
 }
 
+export function layoutTopologyLanePositions(lanes, { startY = 96, nodeGap = 66, groupEntryGap = 28 } = {}) {
+  const positions = {};
+  for (const lane of lanes) {
+    let y = startY;
+    let previousGroupId = "";
+    lane.nodes.forEach((node, index) => {
+      const groupId = node.topologyGroup?.id || "";
+      if (index > 0) {
+        y += nodeGap;
+        if (groupId && groupId !== previousGroupId) y += groupEntryGap;
+      }
+      positions[node.id] = { x: lane.x, y };
+      previousGroupId = groupId;
+    });
+  }
+  return positions;
+}
+
 export function upsertTopologyGroup(profile, fields, now = Date.now()) {
   const normalized = normalizeTopologyProfile(profile);
   const id = String(fields?.id || `topology-${now}`).trim();
