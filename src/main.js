@@ -2831,6 +2831,13 @@ function renderServiceMap() {
       <div class="service-map-canvas">
         ${renderMapLegend()}
         <svg viewBox="0 0 1100 ${height}" role="img" aria-label="Service dependency map">
+          <defs>
+            <linearGradient id="editButtonGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#42e7f2"/>
+              <stop offset="48%" stop-color="#1586c5"/>
+              <stop offset="100%" stop-color="#12315f"/>
+            </linearGradient>
+          </defs>
           ${lanes.map(lane => `<text x="${lane.x}" y="28" class="map-lane-title">${escapeHtml(lane.title)}</text>`).join("")}
           ${groupBands.map(band => `<g class="map-group-band ${escapeHtml(band.group.color)}">
             <rect x="${band.x}" y="${band.y}" width="${band.width}" height="${band.height}" rx="14"/>
@@ -2851,13 +2858,17 @@ function renderServiceMap() {
             const p = positions[node.id];
             const fill = node.risk === "critical" ? "#4b1420" : node.risk === "high" ? "#3b220b" : node.risk === "medium" ? "#2b270b" : "#071d24";
             const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
-            const aliasAction = node.endpoint ? `data-map-alias="${escapeHtml(node.endpoint)}"` : "";
             const subtitle = nodeSubtitle(node);
-            return `<g class="map-node ${node.endpoint ? "editable" : ""}" ${aliasAction}>
+            return `<g class="map-node ${node.endpoint ? "has-edit" : ""}">
               <rect x="${p.x - 146}" y="${p.y - 24}" width="292" height="48" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
               <text x="${p.x - 134}" y="${subtitle ? p.y - 3 : p.y + 5}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 30))}</text>
               ${subtitle ? `<text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(subtitle)}</text>` : ""}
-              ${node.endpoint ? `<text x="${p.x + 112}" y="${p.y + 5}" class="map-node-edit">edit</text>` : ""}
+              ${node.endpoint ? `<g class="map-node-edit-action" data-map-alias="${escapeHtml(node.endpoint)}" role="button" tabindex="0" aria-label="Edit ${escapeHtml(node.endpoint)} label">
+                <rect x="${p.x + 84}" y="${p.y - 16}" width="48" height="32" rx="10"/>
+                <path d="M ${p.x + 94} ${p.y + 5} L ${p.x + 94} ${p.y + 9} L ${p.x + 98} ${p.y + 9} L ${p.x + 109} ${p.y - 2} L ${p.x + 105} ${p.y - 6} Z"/>
+                <path d="M ${p.x + 103} ${p.y - 8} L ${p.x + 107} ${p.y - 12} L ${p.x + 113} ${p.y - 6} L ${p.x + 109} ${p.y - 2} Z"/>
+                <text x="${p.x + 114}" y="${p.y + 4}">Edit</text>
+              </g>` : ""}
               <circle cx="${p.x + 134}" cy="${p.y}" r="5" fill="${stroke}"/>
               <title>${escapeHtml(mapNodeTitle(node))}</title>
             </g>`;
@@ -4932,11 +4943,20 @@ function bindEvents() {
     state.activeTab = event.currentTarget.dataset.tab;
     render();
   }));
-  document.querySelectorAll("[data-map-alias]").forEach(node => node.addEventListener("click", event => {
-    event.stopPropagation();
-    state.aliasEditKey = event.currentTarget.dataset.mapAlias;
+  const openMapAliasEditor = target => {
+    state.aliasEditKey = target.dataset.mapAlias;
     state.modal = "serviceAliases";
     render();
+  };
+  document.querySelectorAll("[data-map-alias]").forEach(node => node.addEventListener("click", event => {
+    event.stopPropagation();
+    openMapAliasEditor(event.currentTarget);
+  }));
+  document.querySelectorAll("[data-map-alias]").forEach(node => node.addEventListener("keydown", event => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    openMapAliasEditor(event.currentTarget);
   }));
   document.querySelectorAll("[data-map-edge]").forEach(edge => edge.addEventListener("click", event => {
     event.stopPropagation();
