@@ -503,6 +503,147 @@ function commandCoverage(command) {
   }));
 }
 
+const SS_OPTION_INTEL = {
+  "-H": {
+    role: "Output hygiene",
+    adds: "Removes table headers so repeated captures stay clean.",
+    use: "Recommended for timestamped logs and scripted captures.",
+    missing: "Headers can be parsed, but they add noise in large files."
+  },
+  "-O": {
+    role: "Parser stability",
+    adds: "Keeps each socket on one physical line.",
+    use: "Recommended when exporting to this tool or any log processor.",
+    missing: "Wrapped records are slower to scan and easier to misread."
+  },
+  "-n": {
+    role: "Performance and identity",
+    adds: "Keeps numeric IPs and ports without DNS or service-name lookups.",
+    use: "Essential for large captures and repeatable topology labels.",
+    missing: "Name resolution can slow the command and hide exact endpoints."
+  },
+  "-t": {
+    role: "Protocol scope",
+    adds: "Restricts the collection to TCP sockets.",
+    use: "Use for latency, RTT, RTO, congestion, retransmission, and queue analysis.",
+    missing: "Other protocol families may add volume without useful TCP metrics."
+  },
+  "-a": {
+    role: "Inventory scope",
+    adds: "Includes listening and non-listening sockets.",
+    use: "Useful when you want both active flows and exposed services.",
+    missing: "Some listener or inactive context may be absent."
+  },
+  "-A": {
+    role: "Socket table selection",
+    adds: "Selects one or more kernel socket tables, for example all, tcp, udp, unix.",
+    use: "Use with all when you need a broad inventory before filtering.",
+    missing: "The default table selection may be narrower than expected."
+  },
+  "-e": {
+    role: "Kernel identity",
+    adds: "Adds uid, inode, socket cookie, cgroup hints, and other extended fields.",
+    use: "Useful for correlating rows to processes, containers, and repeated snapshots.",
+    missing: "Ownership and stable socket identity become weaker."
+  },
+  "-m": {
+    role: "Memory pressure",
+    adds: "Adds skmem receive/transmit buffers, backlog, queued bytes, and drops.",
+    use: "Essential for socket drops, buffer pressure, and queue diagnostics.",
+    missing: "Drop and memory charts cannot be trusted or may be unavailable."
+  },
+  "-p": {
+    role: "Process ownership",
+    adds: "Adds process name, PID, and file descriptor when permitted.",
+    use: "Use whenever you need to map sockets to applications.",
+    missing: "Processes may appear as unknown, weakening conversation diagnosis."
+  },
+  "-i": {
+    role: "TCP intelligence",
+    adds: "Adds RTT, RTT variance, RTO, cwnd, pacing, delivery rate, retransmission, and TCP internals.",
+    use: "Essential for most expert charts and latency/root-cause analysis.",
+    missing: "The tool can still count sockets, but many expert metrics disappear."
+  },
+  "--tos": {
+    role: "QoS classification",
+    adds: "Adds ToS, traffic class, class_id, and priority when available.",
+    use: "Useful when routes or packet treatment differ by QoS class.",
+    missing: "QoS mismatches are harder to see."
+  },
+  "--cgroup": {
+    role: "Container and service context",
+    adds: "Adds cgroup v2 paths for service, container, or slice attribution.",
+    use: "Useful in Kubernetes, systemd, containers, and multi-service hosts.",
+    missing: "Topology and process grouping rely more on manual labels."
+  },
+  "--inet-sockopt": {
+    role: "Socket option detail",
+    adds: "Adds inet-level socket options that can explain unusual behavior.",
+    use: "Useful when comparing hosts or investigating policy/config differences.",
+    missing: "Low-level option mismatches may stay invisible."
+  }
+};
+
+function ssOptionKey(short, long) {
+  return short || long;
+}
+
+function ssOptionIntel(short, long, desc, group) {
+  const key = ssOptionKey(short, long);
+  return SS_OPTION_INTEL[key] || SS_OPTION_INTEL[long] || SS_OPTION_INTEL[short] || {
+    role: `${group || "ss"} option`,
+    adds: desc,
+    use: "Enable when this field is needed for the current investigation.",
+    missing: "The related context may be unavailable in analysis."
+  };
+}
+
+function renderSsOptionTooltip({ short = "", long = "", desc = "", group = "" }) {
+  const key = ssOptionKey(short, long);
+  const intel = ssOptionIntel(short, long, desc, group);
+  return `
+    <span class="ss-option-tooltip" role="tooltip">
+      <span class="ss-option-kicker">ss option intelligence</span>
+      <strong>${escapeHtml(key)}${long && long !== key ? ` <small>${escapeHtml(long)}</small>` : ""}</strong>
+      <span class="ss-option-role">${escapeHtml(intel.role)}</span>
+      <span>${escapeHtml(desc)}</span>
+      <dl>
+        <dt>What it adds</dt><dd>${escapeHtml(intel.adds)}</dd>
+        <dt>Use it when</dt><dd>${escapeHtml(intel.use)}</dd>
+        <dt>If missing</dt><dd>${escapeHtml(intel.missing)}</dd>
+      </dl>
+    </span>
+  `;
+}
+
+function renderSsOptionChip(option) {
+  const key = ssOptionKey(option.short, option.long);
+  return `
+    <span class="ss-option-chip-wrap" tabindex="0" aria-label="${escapeHtml(`${key} option help`)}">
+      <span class="chip hot">${escapeHtml(key)} <i class="ri-information-line"></i></span>
+      ${renderSsOptionTooltip(option)}
+    </span>
+  `;
+}
+
+function renderSsOptionControl(option, coverage) {
+  const [short, long, desc, group] = option;
+  const key = ssOptionKey(short, long);
+  const active = coverage.find(c => c.short === short && c.long === long)?.active;
+  return `
+    <div class="check ss-option-row">
+      <label class="ss-option-check">
+        <input type="checkbox" data-opt="${escapeHtml(key)}" ${active ? "checked" : ""}/>
+        <span class="ss-option-code">${escapeHtml(key)}</span>
+      </label>
+      <button type="button" class="ss-option-info" aria-label="${escapeHtml(`Explain ${key}`)}">
+        <i class="ri-information-line"></i>
+      </button>
+      ${renderSsOptionTooltip({ short, long, desc, group })}
+    </div>
+  `;
+}
+
 function resetDerivedCaches({ raw = false } = {}) {
   state.dataVersion += 1;
   state.cache.filteredKey = "";
@@ -1904,10 +2045,10 @@ function renderIngestPage() {
             <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
             <button class="icon primary" data-action="parse" title="Analyze">${icons.play}</button>
           </div>
-          <div class="chips">${active.map(o => `<span class="chip hot">${escapeHtml(o.short || o.long)}</span>`).join("") || `<span class="chip">no option detected</span>`}</div>
+          <div class="chips">${active.map(renderSsOptionChip).join("") || `<span class="chip">no option detected</span>`}</div>
           <p class="hint">Compact flags such as ss -plunt are decomposed option by option.</p>
           <div class="option-grid">
-            ${SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1])).map(([short, long, desc]) => `<label class="check"><input type="checkbox" data-opt="${escapeHtml(short || long)}" ${coverage.find(c => c.short === short && c.long === long)?.active ? "checked" : ""}/> <span>${escapeHtml(short || long)}</span></label>`).join("")}
+            ${SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1])).map(option => renderSsOptionControl(option, coverage)).join("")}
           </div>
         </div>
       </div>
