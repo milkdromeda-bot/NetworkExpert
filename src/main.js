@@ -618,10 +618,10 @@ function renderSsOptionTooltip({ short = "", long = "", desc = "", group = "" })
 
 function renderSsOptionChip(option) {
   const key = ssOptionKey(option.short, option.long);
+  const intel = ssOptionIntel(option.short, option.long, option.desc, option.group);
   return `
-    <span class="ss-option-chip-wrap" tabindex="0" aria-label="${escapeHtml(`${key} option help`)}">
+    <span class="ss-option-chip-wrap" title="${escapeHtml(`${key}: ${intel.role}. ${option.desc}`)}">
       <span class="chip hot">${escapeHtml(key)} <i class="ri-information-line"></i></span>
-      ${renderSsOptionTooltip(option)}
     </span>
   `;
 }

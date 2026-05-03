@@ -635,6 +635,9 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
 .view-guide .workspace {
   grid-column: 2 / span 3;
 }
+.view-ingest .workspace {
+  overflow-x: hidden;
+}
 .section {
   margin-bottom: 16px;
   border-bottom: 1px solid rgba(38, 50, 65, 0.65);
@@ -688,11 +691,17 @@ button.mega i {
 }
 .ingest-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
   gap: 14px;
+  align-items: start;
+}
+.ingest-grid > .panel {
+  min-width: 0;
+  overflow: hidden;
 }
 .raw-large {
   min-height: min(58vh, 560px);
+  max-width: 100%;
 }
 .section h2, .panel-title {
   margin: 0 0 10px;
@@ -721,11 +730,12 @@ button.mega i {
   accent-color: var(--cyan);
 }
 .command-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.command-row input { min-width: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .ss-option-chip-wrap {
-  position: relative;
   display: inline-flex;
   outline: none;
+  max-width: 100%;
 }
 .chip {
   border: 1px solid rgba(113, 143, 173, .3);
@@ -748,7 +758,7 @@ button.mega i {
   font-size: 12px;
   color: rgba(4, 17, 23, .72);
 }
-.option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.option-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 7px; }
 .check {
   display: flex;
   align-items: center;
@@ -774,6 +784,7 @@ button.mega i {
   gap: 8px;
   align-items: center;
   padding: 6px 8px;
+  align-self: start;
 }
 .ss-option-check {
   display: flex;
@@ -803,53 +814,37 @@ button.mega i {
   color: #9df5ff;
 }
 .ss-option-tooltip {
-  position: absolute;
-  z-index: 80;
-  right: 0;
-  top: calc(100% + 8px);
-  width: min(390px, calc(100vw - 48px));
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: 100%;
+  max-height: 0;
   display: grid;
-  gap: 8px;
-  padding: 13px 14px 14px;
-  border: 1px solid rgba(57, 214, 214, .72);
-  border-top: 3px solid var(--cyan);
+  gap: 0;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 0 solid rgba(57, 214, 214, .72);
   border-radius: 8px;
   background:
     radial-gradient(circle at 10% 0%, rgba(57, 214, 214, .12), transparent 26%),
     linear-gradient(180deg, #121b29, #080d14 82%);
   color: var(--soft);
-  box-shadow: 0 22px 70px rgba(0, 0, 0, .56), 0 0 0 1px rgba(57, 214, 214, .08) inset;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .34), 0 0 0 1px rgba(57, 214, 214, .08) inset;
   opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition: opacity .14s ease, transform .14s ease;
-}
-.ss-option-chip-wrap .ss-option-tooltip {
-  left: 0;
-  right: auto;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity .16s ease, max-height .18s ease, padding .18s ease, border-width .18s ease, gap .18s ease;
 }
 .ss-option-tooltip::before {
-  content: "";
-  position: absolute;
-  top: -9px;
-  right: 18px;
-  width: 14px;
-  height: 14px;
-  border-left: 1px solid rgba(57, 214, 214, .72);
-  border-top: 1px solid rgba(57, 214, 214, .72);
-  background: #121b29;
-  transform: rotate(45deg);
-}
-.ss-option-chip-wrap .ss-option-tooltip::before {
-  left: 18px;
-  right: auto;
+  display: none;
 }
 .ss-option-row:hover .ss-option-tooltip,
-.ss-option-row:focus-within .ss-option-tooltip,
-.ss-option-chip-wrap:hover .ss-option-tooltip,
-.ss-option-chip-wrap:focus-within .ss-option-tooltip {
+.ss-option-row:focus-within .ss-option-tooltip {
+  max-height: 360px;
+  gap: 8px;
+  padding: 12px;
+  border-width: 1px;
+  border-top-width: 3px;
   opacity: 1;
-  transform: translateY(0);
 }
 .ss-option-kicker {
   color: var(--cyan);
@@ -953,7 +948,7 @@ button.mega i {
   min-height: 34px;
   padding: 7px 10px;
 }
-.panel-body { padding: 12px; }
+.panel-body { min-width: 0; padding: 12px; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .table-wrap { overflow: auto; max-height: 460px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
