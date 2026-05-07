@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check": "node --check server.js && node --check src/main.js && node --check src/importer.js && node --check src/parser.js && node --check src/timeline.js && node --check src/navigation.js && node --check src/analysis.js && node --check src/alerts.js && node --check src/compare.js && node --check src/profiles.js && node --check src/search.js && node --check src/ip-intel.js && node --check src/aliases.js && node --check src/topology.js",
+    "check": "node --check server.js && node --check src/main.js && node --check src/importer.js && node --check src/parser.js && node --check src/timeline.js && node --check src/navigation.js && node --check src/analysis.js && node --check src/alerts.js && node --check src/compare.js && node --check src/profiles.js && node --check src/executive-summary.js && node --check src/ss-command.js && node --check src/search.js && node --check src/ip-intel.js && node --check src/aliases.js && node --check src/topology.js",
     "test": "node --test tests/*.test.js",
     "verify": "npm run check && npm test"
   },
@@ -21,3 +21,5 @@
   ],
   "license": "MIT"
 }
+
+

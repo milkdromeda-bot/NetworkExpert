@@ -13,6 +13,8 @@ import { detectTailLatencyLens } from "./tail-latency.js";
 import { applyContextAction, setActiveInvestigation } from "./navigation.js";
 import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
+import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
+import { commandCoverage, toggleCommandOption } from "./ss-command.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -509,14 +511,6 @@ function tokenizeCommand(command) {
     }
   }
   return parsed;
-}
-
-function commandCoverage(command) {
-  const tokens = new Set(tokenizeCommand(command).map(t => t.split("=")[0]));
-  return SS_OPTIONS.map(([short, long, desc, group]) => ({
-    short, long, desc, group,
-    active: Boolean((short && tokens.has(short)) || (long && tokens.has(long)))
-  }));
 }
 
 const SS_OPTION_INTEL = {
@@ -2267,7 +2261,7 @@ function renderGuidedChecklistPanel(socket = selectedSocket()) {
   const items = guidedChecklistItems(socket);
   if (!items.length) return "";
   const collapsed = state.prefs.guidedChecklistCollapsed !== false;
-  const summary = `${items.length} next step${items.length > 1 ? "s" : ""} • ${items[0].severity} • ${items[0].title}`;
+  const summary = `${items.length} next step${items.length > 1 ? "s" : ""} - ${items[0].severity} - ${items[0].title}`;
   return `<div class="guided-checklist ${collapsed ? "collapsed" : "expanded"}" aria-label="Next best step checklist">
     <div class="guided-checklist-head">
       <div class="guided-checklist-title">
@@ -2280,7 +2274,7 @@ function renderGuidedChecklistPanel(socket = selectedSocket()) {
         <button class="icon" data-action="toggleGuidedChecklist" aria-expanded="${collapsed ? "false" : "true"}" title="${collapsed ? "Expand guided checklist" : "Collapse guided checklist"}">${collapsed ? icons.down : icons.up}</button>
       </div>
     </div>
-    <div class="guided-checklist-grid" ${collapsed ? "hidden" : ""}>
+    <div class="guided-checklist-grid">
       ${items.map(item => `<article class="guided-checklist-card ${item.severity}">
         <header>
           <span class="risk ${item.severity}">${escapeHtml(item.severity)}</span>
@@ -2296,6 +2290,82 @@ function renderGuidedChecklistPanel(socket = selectedSocket()) {
   </div>`;
 }
 
+function executiveSummarySignal() {
+  const rows = sortedFilteredSockets();
+  const focusSocket = pickExecutiveFocusSocket(selectedSocket(), rows.length ? rows : state.sockets);
+  const summary = buildExecutiveSummary({
+    focusSocket,
+    anomalies: focusSocket ? state.anomalies.filter(item => item.socketId === focusSocket.id) : state.anomalies,
+    advisorFindings: state.advisorFindings || [],
+    microburst: microburstSummary(),
+    tailLatency: tailLatencyLens(),
+    checklistItems: focusSocket ? guidedChecklistItems(focusSocket) : [],
+    formatMicroburstWindow,
+    formatTailLatencyWindow,
+    formatMetricValue
+  });
+  if (!summary) return null;
+  const process = focusSocket?.details?.process ? `${focusSocket.details.process.name}:${focusSocket.details.process.pid}` : "unknown process";
+  return { ...summary, process };
+}
+
+function renderExecutiveSummary() {
+  const rows = sortedFilteredSockets();
+  const summary = executiveSummarySignal();
+  if (!summary) return "";
+  const focusSocket = summary.focusSocket;
+  const visibleAnomalies = focusSocket
+    ? state.anomalies.filter(item => item.socketId === focusSocket.id).length
+    : state.anomalies.length;
+  const criticalCount = state.anomalies.filter(item => item.severity === "critical").length;
+  const checklist = focusSocket ? guidedChecklistItems(focusSocket) : [];
+  const cards = [
+    {
+      label: "Dominant signal",
+      value: summary.title,
+      detail: summary.summary,
+      tone: summary.severity
+    },
+    {
+      label: "Focus flow",
+      value: focusSocket ? `${focusSocket.local} -> ${focusSocket.peer}` : "No selected flow",
+      detail: focusSocket ? `${focusSocket.family} / ${focusSocket.state} / ${summary.process}` : "Select a row to anchor the investigation on one socket.",
+      tone: focusSocket?.risk || "low"
+    },
+    {
+      label: "Visible scope",
+      value: `${formatNumber(rows.length)} socket${rows.length > 1 ? "s" : ""}`,
+      detail: `${formatNumber(visibleAnomalies)} anomaly signal(s) on the current focus${criticalCount ? ` - ${formatNumber(criticalCount)} critical globally` : ""}.`,
+      tone: criticalCount ? "critical" : summary.severity
+    },
+    {
+      label: "Next best step",
+      value: checklist[0]?.actionLabel || "Open charts or advisor",
+      detail: summary.next,
+      tone: checklist[0]?.severity || summary.severity
+    }
+  ];
+  return `<section class="executive-summary ${summary.severity}" aria-label="Incident snapshot">
+    <div class="executive-summary-head">
+      <div>
+        <span class="tooltip-kicker">Incident snapshot</span>
+        <h2>${escapeHtml(summary.headline)}</h2>
+        <p>${escapeHtml(summary.summary)}</p>
+      </div>
+      <div class="executive-summary-badge ${summary.severity}">
+        <span>${escapeHtml(summary.severity)}</span>
+        <strong>${escapeHtml(summary.title)}</strong>
+      </div>
+    </div>
+    <div class="executive-summary-grid">
+      ${cards.map(card => `<article class="executive-summary-card ${card.tone}">
+        <span>${escapeHtml(card.label)}</span>
+        <strong>${escapeHtml(card.value)}</strong>
+        <small>${escapeHtml(card.detail)}</small>
+      </article>`).join("")}
+    </div>
+  </section>`;
+}
 function renderKeepingWorkspacePosition() {
   const workspace = document.querySelector(".workspace");
   const scrollTop = workspace?.scrollTop || 0;
@@ -6542,16 +6612,15 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-opt]").forEach(input => input.addEventListener("change", event => {
+    event.stopPropagation();
     const opt = event.currentTarget.dataset.opt;
-    const tokens = tokenizeCommand(state.command);
-    const set = new Set(tokens);
-    event.currentTarget.checked ? set.add(opt) : set.delete(opt);
     state.ssOptionHelpKey = opt;
-    state.command = `ss ${Array.from(set).join(" ")}`.replace(/\s+/g, " ").trim();
+    state.command = toggleCommandOption(state.command, opt, event.currentTarget.checked);
     render();
   }));
   document.querySelectorAll("[data-ss-option-help]").forEach(button => {
     const showHelp = event => {
+      if (event.target?.closest("input[data-opt]")) return;
       event.stopPropagation();
       state.ssOptionHelpKey = event.currentTarget.dataset.ssOptionHelp;
       renderKeepingWorkspacePosition();
@@ -6627,4 +6696,9 @@ function bindEvents() {
 }
 
 render();
+
+
+
+
+
 

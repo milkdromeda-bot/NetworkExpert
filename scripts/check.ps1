@@ -28,3 +28,5 @@ foreach ($file in $files) {
 }
 
 Write-Host "Syntax check OK"
+
+

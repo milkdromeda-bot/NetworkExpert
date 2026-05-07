@@ -6,6 +6,7 @@ import { analyzeSocket, riskForSocket } from "../src/analysis.js";
 import { dashboardSnapshot, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../src/profiles.js";
 import { parseSs, metricValue } from "../src/parser.js";
 import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../src/search.js";
+import { toggleCommandOption } from "../src/ss-command.js";
 import { withStableSocketIds } from "../src/timeline.js";
 
 function socketFrom(line, bandwidth = {}) {
@@ -334,3 +335,16 @@ test("apply analysis template opens conversations for non-kubernetes templates",
   applyAnalysisTemplate(state, "web", ["risk", "state", "local", "peer", "process", "recvQ", "sendQ", "rtt", "rto", "family", "cwnd", "skmem.t", "skmem.d"], () => ["sendQ", "recvQ", "rtt", "rto", "tx_bps", "rx_bps", "cwnd", "skmem.d"]);
   assert.equal(state.activeTab, "conversations");
 });
+
+test("toggleCommandOption removes an active ss flag", () => {
+  assert.equal(toggleCommandOption("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all", "-H", false), "ss -O -n -t -e -p -m -i --tos --cgroup --inet-sockopt -a -A all");
+});
+
+test("toggleCommandOption adds a missing ss flag", () => {
+  assert.equal(toggleCommandOption("ss -H -n -a", "-p", true), "ss -H -n -a -p");
+});
+
+test("toggleCommandOption does not duplicate an already active flag", () => {
+  assert.equal(toggleCommandOption("ss -H -n -a", "-n", true), "ss -H -n -a");
+});
+
