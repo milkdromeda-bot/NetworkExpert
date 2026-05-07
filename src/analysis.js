@@ -14,6 +14,10 @@ export function analyzeSocket(socket) {
   const a = [];
   const v = socket.details.values;
   const m = socket.details.skmem;
+  const mss = Number(v.mss || 0);
+  const advmss = Number(v.advmss || 0);
+  const rcvmss = Number(v.rcvmss || 0);
+  const pmtu = Number(v.pmtu || 0);
   if (socket.details.timer?.retrans > 0) addAnomaly(a, socket, socket.details.timer.retrans > 2 ? "high" : "medium", "Active retransmissions", `${socket.details.timer.retrans} retransmission(s) on timer ${socket.details.timer.name}.`, "timer");
   if ((v.backoff || 0) > 0) addAnomaly(a, socket, v.backoff > 2 ? "critical" : "high", "TCP backoff", `Backoff ${v.backoff}; effective RTO grows exponentially.`, "backoff");
   if ((v.rto || 0) >= 1000) addAnomaly(a, socket, "high", "High RTO", `RTO ${v.rto} ms, a sign of a slow path or packet loss.`, "rto");
@@ -24,6 +28,17 @@ export function analyzeSocket(socket) {
   if ((m.d || 0) > 0) addAnomaly(a, socket, m.d > 10 ? "critical" : "high", "Socket drops", `${m.d} packet(s) dropped before demultiplexing.`, "skmem.d");
   if (m.rb && m.r && m.r / m.rb > 0.8) addAnomaly(a, socket, "high", "Receive buffer pressure", `r=${m.r}, rb=${m.rb}; more than 80% of the receive buffer is used.`, "skmem.r");
   if (m.tb && (m.t + (m.w || 0)) / m.tb > 0.8) addAnomaly(a, socket, "high", "Send buffer pressure", `t+w=${(m.t || 0) + (m.w || 0)}, tb=${m.tb}; transmit socket memory is close to the cap.`, "skmem.t");
+  if (socket.state === "ESTAB" && mss > 0 && mss <= 536 && (advmss >= 1200 || pmtu >= 1400)) {
+    const degraded = (socket.details.timer?.retrans || 0) > 0 || (v.backoff || 0) > 0 || (v.rto || 0) >= 1000 || socket.sendQ > 262144 || socket.recvQ > 131072;
+    addAnomaly(
+      a,
+      socket,
+      degraded ? "high" : "medium",
+      "Suspicious tiny MSS",
+      `mss=${mss}, rcvmss=${rcvmss || "n/a"}, advmss=${advmss || "n/a"}, pmtu=${pmtu || "n/a"}: this is much smaller than the apparent path MTU and may indicate MSS clamping, PMTU fallback, or peer/path negotiation issues.`,
+      "mss"
+    );
+  }
   if (socket.state === "LISTEN" && ["0.0.0.0", "::", "*"].includes(socket.localAddress.host)) addAnomaly(a, socket, "medium", "Globally exposed service", `${socket.local} listens on all interfaces.`, "listen");
   if (!socket.details.process && ["LISTEN", "ESTAB"].includes(socket.state)) addAnomaly(a, socket, "low", "Missing process owner", "Add -p or run with sudo to attribute the socket.", "process");
   return a;

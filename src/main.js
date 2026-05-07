@@ -1,4 +1,4 @@
-import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateTenMinuteSample, prefsDefault } from "./data.js";
+import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateMicroburstSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
 import { metricValue, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { importSocketFile } from "./importer.js?v=20260425-2";
@@ -8,6 +8,8 @@ import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTe
 import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot } from "./compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
+import { detectMicroburstWindow } from "./microburst.js";
+import { detectTailLatencyLens } from "./tail-latency.js";
 import { applyContextAction, setActiveInvestigation } from "./navigation.js";
 import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
@@ -319,7 +321,11 @@ let state = {
     optionKey: "",
     optionSets: null,
     visibleHistoryKey: "",
-    visibleHistoryRows: null
+    visibleHistoryRows: null,
+    microburstKey: "",
+    microburstSummary: null,
+    tailLatencyKey: "",
+    tailLatencySummary: null
   },
   thresholds: cloneThresholds(),
   table: {
@@ -672,6 +678,10 @@ function resetDerivedCaches({ raw = false } = {}) {
   state.cache.optionSets = null;
   state.cache.visibleHistoryKey = "";
   state.cache.visibleHistoryRows = null;
+  state.cache.microburstKey = "";
+  state.cache.microburstSummary = null;
+  state.cache.tailLatencyKey = "";
+  state.cache.tailLatencySummary = null;
   if (raw) {
     state.rawVersion += 1;
     state.cache.timestampRawVersion = -1;
@@ -929,6 +939,41 @@ function dropRateSeverity(summary) {
   return "medium";
 }
 
+function microburstSummary(rows = state.history) {
+  const historyRows = rows || [];
+  const key = `${state.selectedId || "none"}|${historyRows.length}|${historyRows[0]?.epochMs || 0}|${historyRows[historyRows.length - 1]?.epochMs || 0}|${state.dataVersion}`;
+  if (rows === state.history && state.cache.microburstKey === key) return state.cache.microburstSummary;
+  const summary = detectMicroburstWindow(historyRows, {
+    recvQ: thresholdFor("recvQ"),
+    skmemR: thresholdFor("skmem.r"),
+    dropRate: thresholdFor("skmem.d_rate")
+  });
+  if (rows === state.history) {
+    state.cache.microburstKey = key;
+    state.cache.microburstSummary = summary;
+  }
+  return summary;
+}
+
+function tailLatencyLens(rows = state.history) {
+  const historyRows = rows || [];
+  const key = `${state.selectedId || "none"}|${historyRows.length}|${historyRows[0]?.epochMs || 0}|${historyRows[historyRows.length - 1]?.epochMs || 0}|${state.dataVersion}`;
+  if (rows === state.history && state.cache.tailLatencyKey === key) return state.cache.tailLatencySummary;
+  const summary = detectTailLatencyLens(historyRows, {
+    rtt: thresholdFor("rtt"),
+    rttvar: thresholdFor("rttvar"),
+    rto: thresholdFor("rto"),
+    sendQ: thresholdFor("sendQ"),
+    recvQ: thresholdFor("recvQ"),
+    dropRate: thresholdFor("skmem.d_rate")
+  });
+  if (rows === state.history) {
+    state.cache.tailLatencyKey = key;
+    state.cache.tailLatencySummary = summary;
+  }
+  return summary;
+}
+
 function formatDurationCompact(seconds) {
   const value = Number(seconds || 0);
   if (!Number.isFinite(value)) return "unknown duration";
@@ -943,10 +988,42 @@ function formatDropCadence(summary) {
   return `1 drop every ${formatDurationCompact(summary.cadenceSeconds)}`;
 }
 
+function formatMicroburstWindow(summary) {
+  if (!summary) return "no microburst window";
+  return `${timeLabel(0, summary.startEpochMs)} -> ${timeLabel(0, summary.endEpochMs)} over ${formatDurationCompact(summary.durationSeconds)}`;
+}
+
+function formatTailLatencyWindow(summary) {
+  if (!summary) return "no tail window";
+  return `${timeLabel(0, summary.startEpochMs)} -> ${timeLabel(0, summary.endEpochMs)} over ${formatDurationCompact(summary.durationSeconds)}`;
+}
+
+function chartMicroburstBand(summary, data, pad, w, h, firstTime, lastTime) {
+  if (!summary || !data.length) return "";
+  const startTime = Math.max(firstTime, summary.startEpochMs || firstTime);
+  const endTime = Math.min(lastTime, summary.endEpochMs || lastTime);
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime || endTime < firstTime || startTime > lastTime) return "";
+  const timeSpan = Math.max(1, lastTime - firstTime);
+  const xFromTime = time => data.length > 1 && timeSpan > 1
+    ? pad.l + ((time - firstTime) / timeSpan) * (w - pad.l - pad.r)
+    : pad.l;
+  const left = Math.max(pad.l, Math.min(w - pad.r, xFromTime(startTime)));
+  const right = Math.max(left + 2, Math.min(w - pad.r, xFromTime(endTime)));
+  const labelX = Math.min(Math.max(left + 8, pad.l + 8), Math.max(pad.l + 8, right - 112));
+  return `
+    <rect x="${left}" y="${pad.t}" width="${Math.max(2, right - left)}" height="${h - pad.t - pad.b}" fill="#ffd84d" opacity=".12"/>
+    <line x1="${left}" x2="${left}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffd84d" stroke-width="1.5" stroke-dasharray="5 4" opacity=".9"/>
+    <line x1="${right}" x2="${right}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffd84d" stroke-width="1.5" stroke-dasharray="5 4" opacity=".9"/>
+    <rect x="${labelX}" y="${pad.t + 8}" width="108" height="22" rx="6" fill="#211804" stroke="#ffd84d"/>
+    <text x="${labelX + 10}" y="${pad.t + 23}" fill="#ffe58c" font-size="11" font-weight="700">MICROBURST</text>
+  `;
+}
+
 function addCollectionAnomalies() {
   const hasTimestamp = hasTimestampedRawData();
   const huge = state.sockets.length >= 5000;
   const dropRate = dropRateSummary();
+  const microburst = microburstSummary();
   if (!hasTimestamp && state.raw.trim()) {
     state.anomalies.push({
       socketId: state.selectedId,
@@ -963,6 +1040,15 @@ function addCollectionAnomalies() {
       title: "Socket drops are increasing",
       detail: `skmem.d increased by ${formatMetricValue("skmem.d", dropRate.totalDropDelta)} over ${formatDurationCompact(dropRate.observedSeconds)} (${formatDropCadence(dropRate)}, peak ${formatMetricValue("skmem.d_rate", dropRate.peakDropRate)}).`,
       metric: "skmem.d_rate"
+    });
+  }
+  if (microburst) {
+    state.anomalies.unshift({
+      socketId: state.selectedId,
+      severity: microburst.severity,
+      title: "Receive-side microburst detected",
+      detail: `${formatMicroburstWindow(microburst)}: RX peaked at ${formatMetricValue("rx_bps", microburst.peakRxBps)}, Recv-Q at ${formatMetricValue("recvQ", microburst.peakRecvQ)}, skmem.r at ${formatMetricValue("skmem.r", microburst.peakSkmemR)}, with ${formatMetricValue("skmem.d", microburst.dropDeltaTotal)} new drops (peak ${formatMetricValue("skmem.d_rate", microburst.peakDropRate)}).`,
+      metric: "rx_bps"
     });
   }
   if (huge) {
@@ -1082,6 +1168,7 @@ function buildAdvisorFindings() {
   const rxPressure = socketsWhere(socket => socket.details.skmem.rb && (socket.details.skmem.r || 0) / socket.details.skmem.rb > 0.75);
   const drops = socketsWhere(socket => metricValue(socket, "skmem.d") > 0);
   const dropRate = dropRateSummary();
+  const microburst = microburstSummary();
   const loss = socketsWhere(socket => metricValue(socket, "rto") >= thresholdFor("rto").warn || (socket.details.values.backoff || 0) > 0 || (socket.details.timer?.retrans || 0) > 0);
   const lowCwnd = socketsWhere(socket => socket.state === "ESTAB" && metricValue(socket, "cwnd") > 0 && metricValue(socket, "cwnd") <= thresholdFor("cwnd").warn);
   const missingProcess = socketsWhere(socket => ["ESTAB", "LISTEN"].includes(socket.state) && !socket.details.process);
@@ -1171,6 +1258,21 @@ function buildAdvisorFindings() {
       next: ["Enable the Socket drop rate chart", "Look for bursts aligned with RX bandwidth or Recv-Q", "Compare this cadence with incident timestamps"],
       mitigate: ["If cadence is bursty, reduce producer burst size or add backpressure", "If cadence is steady, investigate CPU/softirq and receive buffer pressure", "Validate host NIC/qdisc/softnet drops before tuning socket buffers"],
       commands: [envCommand("ss -tinpm"), envCommand("watch -n 1 'ss -tinpm | grep -A1 skmem'"), envCommand("ip -s link show", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true })]
+    }));
+  }
+
+  if (microburst && selected) {
+    findings.push(makeFinding({
+      id: "receive-microburst",
+      severity: microburst.severity,
+      title: "Receive-side microburst on the active flow",
+      pattern: `${formatMicroburstWindow(microburst)} with simultaneous RX bandwidth, Recv-Q, socket receive memory, and drop growth.`,
+      sockets: [selected],
+      confidence: microburst.dropDeltaTotal >= 1 ? "High" : "Medium",
+      why: `This is a classic short receive-pressure window: RX peaked at ${formatMetricValue("rx_bps", microburst.peakRxBps)}, Recv-Q at ${formatMetricValue("recvQ", microburst.peakRecvQ)}, skmem.r at ${formatMetricValue("skmem.r", microburst.peakSkmemR)}, and new drops reached ${formatMetricValue("skmem.d", microburst.dropDeltaTotal)}. That usually means burst absorption exceeded what the local reader path could drain in time.`,
+      next: ["Narrow the chart zoom around the detected window", "Enable Recv-Q, RX bandwidth, Socket drops, and Socket memory receive together", "Check whether the same process or peer repeats the pattern"],
+      mitigate: ["Reduce producer burst size or add backpressure", "Check local CPU, scheduler latency, and softirq pressure", "Tune receive buffers only after proving the consumer cannot drain bursts fast enough"],
+      commands: [envCommand("ss -tinpm state established"), envCommand("pidstat -druwt -p <pid> 1"), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true }), envCommand("ip -s link show", { host: true })]
     }));
   }
 
@@ -2071,7 +2173,127 @@ function renderInvestigationContext() {
       <b>${escapeHtml(topAnomaly.severity)}</b>
       <span>${escapeHtml(topAnomaly.title)}</span>
     </div>` : ""}
+    ${(state.view === "analysis" || state.view === "charts") ? renderGuidedChecklistPanel(socket) : ""}
   </section>`;
+}
+
+function guidedChecklistItems(socket = selectedSocket()) {
+  if (!socket) return [];
+  const lens = tailLatencyLens();
+  const burst = microburstSummary();
+  const anomalies = state.anomalies.filter(item => item.socketId === socket.id);
+  const v = socket.details.values;
+  const m = socket.details.skmem;
+  const recvPressure = socket.recvQ >= thresholdFor("recvQ").warn || (m.rb && m.r && m.r / m.rb > 0.75);
+  const sendPressure = socket.sendQ >= thresholdFor("sendQ").warn || (m.tb && (m.t + (m.w || 0)) / m.tb > 0.75);
+  const dropPressure = (m.d || 0) > 0 || anomalies.some(item => item.metric === "skmem.d");
+  const pathSignals = (socket.details.timer?.retrans || 0) > 0 || (v.backoff || 0) > 0 || (v.rto || 0) >= thresholdFor("rto").warn || anomalies.some(item => ["rto", "backoff", "timer", "mss"].includes(item.metric));
+  const items = [];
+
+  if (recvPressure) {
+    items.push({
+      id: "slow-consumer",
+      severity: socket.recvQ >= thresholdFor("recvQ").danger ? "critical" : "high",
+      title: "slow consumer probable",
+      why: socket.details.process
+        ? `Recv-Q and receive memory suggest ${socket.details.process.name}:${socket.details.process.pid} may not be draining data fast enough.`
+        : "Recv-Q and receive memory are rising in a way that usually points to a local reader stall or scheduler delay.",
+      next: "Open charts with the Microburst investigation preset and compare Recv-Q, RX bandwidth, skmem.r, and drops.",
+      action: "openChecklistCharts",
+      actionLabel: "Open microburst charts",
+      preset: "microburst"
+    });
+  }
+
+  if (burst || (recvPressure && dropPressure)) {
+    items.push({
+      id: "receive-pressure",
+      severity: burst?.severity || "high",
+      title: "receive-side pressure",
+      why: burst
+        ? `A short burst window was detected at ${formatMicroburstWindow(burst)} with queue, receive-memory, and drop growth together.`
+        : "Receive pressure is visible in the current socket, and drops suggest the kernel burst absorber is being stressed.",
+      next: "Keep the yellow microburst band in view and verify whether the same process or peer repeats it.",
+      action: "openChecklistCharts",
+      actionLabel: "Review burst window",
+      preset: "microburst"
+    });
+  }
+
+  if (lens?.suspicion === "path instability" || pathSignals) {
+    items.push({
+      id: "path-instability",
+      severity: lens?.severity || "high",
+      title: "path instability",
+      why: lens
+        ? `The tail-latency lens isolated ${formatTailLatencyWindow(lens)} as the worst short RTT/RTO window, which is more informative than the average latency.`
+        : "RTO, retransmission, backoff, or tiny-MSS symptoms suggest the path or negotiation is unstable.",
+      next: "Use the Tail latency preset, then zoom to the worst window and correlate RTT variance, RTO, Send-Q, and retransmission signals.",
+      action: lens ? "zoomTailWindow" : "openChecklistCharts",
+      actionLabel: lens ? "Zoom worst tail window" : "Open tail charts",
+      preset: "tail"
+    });
+  }
+
+  if (sendPressure || lens?.suspicion === "peer-side drain issue") {
+    items.push({
+      id: "peer-drain",
+      severity: socket.sendQ >= thresholdFor("sendQ").danger ? "critical" : "high",
+      title: "peer-side drain issue",
+      why: "Outbound data is not draining cleanly. This can be a slow peer, congested path, or TCP recovery rather than a purely local sender problem.",
+      next: "Compare Send-Q, TX bandwidth, RTO, and cwnd on the worst tail window before blaming application throughput.",
+      action: "openChecklistCharts",
+      actionLabel: "Open tail charts",
+      preset: "tail"
+    });
+  }
+
+  if ((recvPressure || sendPressure || dropPressure) && (pathSignals || burst || lens)) {
+    items.push({
+      id: "buffer-tuning",
+      severity: "medium",
+      title: "buffer tuning suspicious but not root cause",
+      why: "Queue and socket-memory pressure are visible, but the surrounding symptoms suggest an upstream bottleneck, tail spike, or burst pattern is the primary issue.",
+      next: "Do not jump straight to rmem/wmem tuning. Prove whether the root cause is local draining, peer-side slowness, or path instability first.",
+      action: "openChecklistAdvisor",
+      actionLabel: "Review advisor path"
+    });
+  }
+
+  return items.slice(0, 5);
+}
+
+function renderGuidedChecklistPanel(socket = selectedSocket()) {
+  const items = guidedChecklistItems(socket);
+  if (!items.length) return "";
+  const collapsed = state.prefs.guidedChecklistCollapsed !== false;
+  const summary = `${items.length} next step${items.length > 1 ? "s" : ""} • ${items[0].severity} • ${items[0].title}`;
+  return `<div class="guided-checklist ${collapsed ? "collapsed" : "expanded"}" aria-label="Next best step checklist">
+    <div class="guided-checklist-head">
+      <div class="guided-checklist-title">
+        <span class="tooltip-kicker">Guided checklist</span>
+        <strong>Next best step</strong>
+        <p class="hint">This panel turns the current socket evidence into concrete investigation moves, so you can avoid hopping between tabs without a hypothesis.</p>
+      </div>
+      <div class="guided-checklist-tools">
+        <span class="guided-checklist-summary">${escapeHtml(summary)}</span>
+        <button class="icon" data-action="toggleGuidedChecklist" aria-expanded="${collapsed ? "false" : "true"}" title="${collapsed ? "Expand guided checklist" : "Collapse guided checklist"}">${collapsed ? icons.down : icons.up}</button>
+      </div>
+    </div>
+    <div class="guided-checklist-grid" ${collapsed ? "hidden" : ""}>
+      ${items.map(item => `<article class="guided-checklist-card ${item.severity}">
+        <header>
+          <span class="risk ${item.severity}">${escapeHtml(item.severity)}</span>
+          <strong>${escapeHtml(item.title)}</strong>
+        </header>
+        <p>${escapeHtml(item.why)}</p>
+        <small>${escapeHtml(item.next)}</small>
+        <footer>
+          <button data-action="${item.action}" ${item.preset ? `data-dashboard-preset-jump="${escapeHtml(item.preset)}"` : ""}>${icons.focus} ${escapeHtml(item.actionLabel)}</button>
+        </footer>
+      </article>`).join("")}
+    </div>
+  </div>`;
 }
 
 function renderKeepingWorkspacePosition() {
@@ -2228,8 +2450,10 @@ function renderChartsPage() {
   const realTimeline = hasRealTimestampHistory();
   const orderedMetrics = orderedChartMetrics();
   const activeCorrelation = EXPERT_CORRELATIONS.find(item => item.x === state.correlation.x && item.y === state.correlation.y);
+  const microburst = microburstSummary();
   return html`
     ${renderDashboardStudio()}
+    ${renderTailLatencyLensPanel()}
     <section class="panel ${layout.stickyToolbar ? "sticky-chart-panel" : ""}">
       <div class="panel-head">
         <div class="panel-title">Socket charts ${selected ? escapeHtml(selected.local) : ""}</div>
@@ -2286,6 +2510,10 @@ function renderChartsPage() {
           <label class="chart-field"><span>Start time ${renderChartInfo("Start time", "Left boundary of the visible time window. It updates when you drag-zoom a chart and can also be edited manually for precise inspection.", "Use it to isolate an incident window, then compare several metrics under the same synchronized zoom.")}</span><input id="startTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("start")}"/></label>
           <label class="chart-field"><span>End time ${renderChartInfo("End time", "Right boundary of the visible time window. Together with Start time, it controls the synchronized zoom range for all charts.", "Narrow this around spikes in RTO, Send-Q, drops, TX/RX bandwidth collapse, or backoff to avoid averaging away short incidents.")}</span><input id="endTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("end")}"/></label>
         </div>
+        ${microburst ? `<div class="investigation-note ${microburst.severity}">
+          <b>${escapeHtml(microburst.severity)}</b>
+          <span>Microburst window ${escapeHtml(formatMicroburstWindow(microburst))} with RX peak ${escapeHtml(formatMetricValue("rx_bps", microburst.peakRxBps))}, Recv-Q ${escapeHtml(formatMetricValue("recvQ", microburst.peakRecvQ))}, skmem.r ${escapeHtml(formatMetricValue("skmem.r", microburst.peakSkmemR))}, and ${escapeHtml(formatMetricValue("skmem.d", microburst.dropDeltaTotal))} new drops.</span>
+        </div>` : ""}
         ${layout.mainChart ? `<svg id="chart" class="chart hero-chart ${layout.density}" role="img" aria-label="Main timeline chart"></svg>` : ""}
         ${layout.showLegend ? `<div class="chart-legend" id="mainChartLegend">${chartResolutionLabel()} - Shared zoom: ${layout.sharedZoom ? "on" : "off"} - Crosshair: ${layout.showCrosshair ? "on" : "off"} - Thresholds: ${layout.showThresholds ? "on" : "off"}</div>` : ""}
         <div class="metric-picks">
@@ -2366,6 +2594,49 @@ function renderDashboardStudio() {
         </article>`).join("") : `<span class="hint">No saved dashboard yet.</span>`}
       </div>
     </div>
+  </section>`;
+}
+
+function renderTailLatencyLensPanel() {
+  const lens = tailLatencyLens();
+  if (!hasRealTimestampHistory()) {
+    return `<section class="tail-latency-lens">
+      <article class="guide-card">
+        <strong>Tail latency lens</strong>
+        <p>Timestamped snapshots are required to isolate short tail windows. Re-import a sampled capture with timestamps to unlock P99/P99.9 and worst-window analysis.</p>
+      </article>
+    </section>`;
+  }
+  if (!lens) {
+    return `<section class="tail-latency-lens">
+      <article class="guide-card">
+        <strong>Tail latency lens</strong>
+        <p>No visible extreme window stands out above the current tail thresholds on this socket.</p>
+      </article>
+    </section>`;
+  }
+  const rttStats = lens.stats.rtt;
+  const rtoStats = lens.stats.rto;
+  return `<section class="tail-latency-lens">
+    <article class="tail-lens-card ${lens.severity}">
+      <div class="tail-lens-head">
+        <div>
+          <span class="tooltip-kicker">Tail latency lens</span>
+          <strong>${escapeHtml(lens.suspicion)}</strong>
+          <p class="hint">This lens prioritizes extremes and short worst windows instead of averages, so the investigation can jump directly to the sharpest RTT/RTO tail behavior.</p>
+        </div>
+        <div class="tail-lens-actions">
+          <span class="risk ${escapeHtml(lens.severity)}">${escapeHtml(lens.severity)}</span>
+          <button data-action="zoomTailWindow">${icons.zoomIn} Zoom worst window</button>
+        </div>
+      </div>
+      <div class="tail-lens-grid">
+        <article><span>Worst window</span><strong>${escapeHtml(formatTailLatencyWindow(lens))}</strong></article>
+        <article><span>RTT tail</span><strong>${escapeHtml(`${formatMetricValue("rtt", rttStats?.p99 || 0)} / ${formatMetricValue("rtt", rttStats?.p999 || 0)}`)}</strong><small>P99 / P99.9</small></article>
+        <article><span>RTO tail</span><strong>${escapeHtml(`${formatMetricValue("rto", rtoStats?.p99 || 0)} / ${formatMetricValue("rto", rtoStats?.p999 || 0)}`)}</strong><small>P99 / P99.9</small></article>
+        <article><span>Worst peaks</span><strong>${escapeHtml(`${formatMetricValue("rtt", lens.peaks.rtt)} RTT • ${formatMetricValue("rto", lens.peaks.rto)} RTO`)}</strong><small>${escapeHtml(`${formatMetricValue("recvQ", lens.peaks.recvQ)} Recv-Q • ${formatMetricValue("sendQ", lens.peaks.sendQ)} Send-Q`)}</small></article>
+      </div>
+    </article>
   </section>`;
 }
 
@@ -3567,7 +3838,21 @@ function renderGuideBestPractices() {
     ${isLxcProfile() ? `<article class="guide-card"><strong>2. LXC/LXD namespace rule</strong><p>${isAnalystRole() ? "Default analyst mode: run ss, ip route, and local checks inside the container. If symptoms point to host path loss, request host veth, bridge, qdisc, ethtool, and softnet evidence from ops/root." : "Ops/root mode: collect socket evidence with lxc exec, then collect route, veth, bridge, qdisc, ethtool, and softnet evidence on the LXD host."}</p></article>` : ""}
     <article class="guide-card"><strong>2. Keep collection overhead under control</strong><p>For thousands of sockets, prefer -n -H -O, filter by state/sport/dport/dev/cgroup, and increase the sampling interval. Avoid name resolution and expensive BPF details unless needed.</p></article>
     <article class="guide-card"><strong>3. Always timestamp snapshots</strong><p>Use date --iso-8601=ns or EPOCH_MS before every ss snapshot so queues, RTT, RTO, drops, and buffer pressure can be correlated over time.</p></article>
-    <article class="guide-card"><strong>4. Store raw evidence</strong><p>Write to .log, .gz, or .zip so you can re-run analysis offline and compare with application, host, and network telemetry.</p></article>`;
+    <article class="guide-card microburst-guide-card">
+      <strong>4. Microburst guide</strong>
+      <p>Microbursts are short receive-side pressure windows where RX bandwidth, Recv-Q, socket receive memory, and drops rise together. In Charts, NetworkExpert marks the detected window with yellow bands so you can align the burst across several metrics at once.</p>
+      <div class="guide-card-actions">
+        <button class="primary" data-action="sampleMicroburst">${icons.chart} Load microburst sample</button>
+      </div>
+    </article>
+    <article class="guide-card microburst-guide-card">
+      <strong>5. Tail latency guide</strong>
+      <p>Tail latency is about the extremes, not the average. Use it when short RTT or RTO spikes matter more than the median. The Tail latency lens highlights the worst short window, shows P95/P99/P99.9 behavior, and lets you jump straight to the sharpest degradation.</p>
+      <div class="guide-card-actions">
+        <button class="primary" data-action="sampleTailLatency">${icons.chart} Load tail latency sample</button>
+      </div>
+    </article>
+    <article class="guide-card"><strong>6. Store raw evidence</strong><p>Write to .log, .gz, or .zip so you can re-run analysis offline and compare with application, host, and network telemetry.</p></article>`;
 }
 
 function renderGuideUseCases() {
@@ -3850,6 +4135,7 @@ function renderChartStatsModal() {
   const rows = [
     ["Min", 0, stats.min],
     ["Median", 50, stats.p50],
+    ["P95", 95, stats.p95],
     ["P90", 90, stats.p90],
     ["P99", 99, stats.p99],
     ["P99.9", 99.9, stats.p999],
@@ -4222,6 +4508,7 @@ function chartStats(metric) {
     last: rows[rows.length - 1],
     min: values[0],
     p50: percentile(values, 50),
+    p95: percentile(values, 95),
     p90: percentile(values, 90),
     p99: percentile(values, 99),
     p999: percentile(values, 99.9),
@@ -4555,7 +4842,11 @@ function resetAllState() {
     optionKey: "",
     optionSets: null,
     visibleHistoryKey: "",
-    visibleHistoryRows: null
+    visibleHistoryRows: null,
+    microburstKey: "",
+    microburstSummary: null,
+    tailLatencyKey: "",
+    tailLatencySummary: null
   };
   state.rawVersion += 1;
   setZoom(0, 1);
@@ -4598,6 +4889,19 @@ function setZoomFromDateInputs() {
   setZoom((start - first) / (last - first), (end - first) / (last - first));
 }
 
+function zoomToTailLatencyWindow() {
+  const lens = tailLatencyLens();
+  if (!lens || !state.history.length) return false;
+  const first = state.history[0]?.epochMs || 0;
+  const last = state.history[state.history.length - 1]?.epochMs || first;
+  if (!Number.isFinite(first) || !Number.isFinite(last) || last <= first) return false;
+  const paddingMs = Math.max(1000, ((lens.endEpochMs - lens.startEpochMs) || 0) * 0.2);
+  const start = Math.max(first, lens.startEpochMs - paddingMs);
+  const end = Math.min(last, lens.endEpochMs + paddingMs);
+  setZoom((start - first) / (last - first), (end - first) / (last - first));
+  return true;
+}
+
 function drawChart() {
   const svg = document.querySelector("#chart");
   if (!svg) return;
@@ -4623,6 +4927,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const axisLabelX = Math.max(14, pad.l - tickWidth - 34);
   const firstTime = chartRowTime(data[0]);
   const lastTime = chartRowTime(data[data.length - 1]);
+  const microburst = microburstSummary();
   const x = (row, i) => {
     const timeSpan = Math.max(1, lastTime - firstTime);
     if (data.length > 1 && timeSpan > 1) return pad.l + ((chartRowTime(row) - firstTime) / timeSpan) * (w - pad.l - pad.r);
@@ -4650,6 +4955,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger);
   const warnY = showWarnLine ? y(t.warn) : 0;
   const dangerY = showDangerLine ? y(t.danger) : 0;
+  const microburstBand = chartMicroburstBand(microburst, data, pad, w, h, firstTime, lastTime);
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.dataset.metric = metric;
   svg.dataset.plotLeft = String(pad.l);
@@ -4662,6 +4968,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
     ${yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, v)}</text>`).join("")}
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${tick.label}</text>`).join("")}
+    ${microburstBand}
     ${showWarnLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${warnY}" y2="${warnY}" stroke="#ff9f43" stroke-dasharray="7 6"/><text x="${w - pad.r - 6}" y="${warnY - 6}" text-anchor="end" fill="#ff9f43" font-size="11">warn ${formatMetricValue(metric, t.warn)}</text>` : ""}
     ${showDangerLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${dangerY}" y2="${dangerY}" stroke="#ff5c77" stroke-dasharray="4 4"/><text x="${w - pad.r - 6}" y="${dangerY - 6}" text-anchor="end" fill="#ff5c77" font-size="11">danger ${formatMetricValue(metric, t.danger)}</text>` : ""}
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
@@ -4900,6 +5207,7 @@ function buildReportChartSvg(metric, width = 760, height = 280) {
 function captureIncidentReportCharts(limit = 5) {
   const captures = [];
   const seen = new Set();
+  const microburst = microburstSummary();
   const pushCapture = (metric, title, svg, context, hero = false) => {
     if (!metric || !svg || seen.has(metric) || captures.length >= limit) return;
     const image = reportChartDataUrl(svg);
@@ -4922,7 +5230,7 @@ function captureIncidentReportCharts(limit = 5) {
         heroMetric,
         `${metricLabel(heroMetric)} overview`,
         heroSvg,
-        `Current visible chart window • ${reportChartWindowLabel()}`,
+        `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} • ` : ""}Current visible chart window • ${reportChartWindowLabel()}`,
         true
       );
     }
@@ -4930,7 +5238,7 @@ function captureIncidentReportCharts(limit = 5) {
       if (captures.length >= limit) return;
       const metric = card.dataset.chartCard;
       const svg = card.querySelector("[data-mini-chart]");
-      pushCapture(metric, metricLabel(metric), svg, `Chart card • ${reportChartWindowLabel()}`);
+      pushCapture(metric, metricLabel(metric), svg, `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} • ` : ""}Chart card • ${reportChartWindowLabel()}`);
     });
   }
 
@@ -4940,7 +5248,7 @@ function captureIncidentReportCharts(limit = 5) {
       metric,
       `${metricLabel(metric)} snapshot`,
       buildReportChartSvg(metric),
-      `Generated from current filtered history • ${reportChartWindowLabel()}`
+      `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} • ` : ""}Generated from current filtered history • ${reportChartWindowLabel()}`
     );
   });
 
@@ -5015,6 +5323,7 @@ function reportFindings(limit = 5) {
 function buildIncidentReportHtml(chartCaptures = []) {
   const sockets = reportVisibleSockets();
   const selected = selectedSocket();
+  const microburst = microburstSummary();
   const anomalies = reportRelevantAnomalies(sockets);
   const topSockets = reportTopSockets(sockets, 10);
   const percentiles = reportPercentileTable(sockets);
@@ -5032,6 +5341,7 @@ function buildIncidentReportHtml(chartCaptures = []) {
     ["Generated", now.toLocaleString(resolvedNumberLocale(), { timeZone: resolvedTimeZone() })],
     ["Profile", `${linuxProfileLabel()} / ${accessRoleLabel()}`]
   ];
+  if (microburst) summaryCards.splice(4, 0, ["Microburst", microburst.severity]);
   const reportCss = `
     :root { color-scheme: light; --ink:#142033; --muted:#536273; --line:#d7e0ea; --panel:#f6f9fc; --accent:#0d6d9f; --danger:#b42338; --warn:#b26a00; --good:#147a52; }
     * { box-sizing:border-box; }
@@ -5193,6 +5503,19 @@ function buildIncidentReportHtml(chartCaptures = []) {
                 </div>
               </div>
             </section>
+
+            ${microburst ? `<section class="report-card report-section">
+              <h2>Microburst Detection</h2>
+              <div class="report-summary-grid">
+                <article><span>Window</span><strong>${escapeHtml(formatMicroburstWindow(microburst))}</strong></article>
+                <article><span>Peak RX</span><strong>${escapeHtml(formatMetricValue("rx_bps", microburst.peakRxBps))}</strong></article>
+                <article><span>Peak Recv-Q</span><strong>${escapeHtml(formatMetricValue("recvQ", microburst.peakRecvQ))}</strong></article>
+                <article><span>Peak skmem.r</span><strong>${escapeHtml(formatMetricValue("skmem.r", microburst.peakSkmemR))}</strong></article>
+                <article><span>New drops</span><strong>${escapeHtml(formatMetricValue("skmem.d", microburst.dropDeltaTotal))}</strong></article>
+                <article><span>Peak drop cadence</span><strong>${escapeHtml(formatMetricValue("skmem.d_rate", microburst.peakDropRate))}</strong></article>
+              </div>
+              <p class="small">A short receive-side pressure window was detected on the selected flow. The charts in this report include the same highlighted microburst band to keep the visual evidence aligned with the written summary.</p>
+            </section>` : ""}
 
             ${chartCaptures.length ? `<section class="report-card report-section">
               <h2>Chart Evidence</h2>
@@ -5446,6 +5769,11 @@ function bindEvents() {
       state.ingestRawExpanded = true;
       renderKeepingWorkspacePosition();
     }
+    if (action === "toggleGuidedChecklist") {
+      state.prefs.guidedChecklistCollapsed = !state.prefs.guidedChecklistCollapsed;
+      savePrefs();
+      renderKeepingWorkspacePosition();
+    }
     if (action === "sample10m") {
       state.raw = generateTenMinuteSample();
       state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
@@ -5459,8 +5787,56 @@ function bindEvents() {
       toast("10-minute sample loaded", "600 timestamped snapshots, one per second, are ready for analysis.");
       render();
     }
+    if (action === "sampleMicroburst") {
+      state.raw = generateMicroburstSample();
+      state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
+      setSourceName("microburst guide sample");
+      state.selectedId = null;
+      setActiveInvestigation(state, null);
+      state.drawer = null;
+      state.view = "charts";
+      setZoom(0, 1);
+      markAnalysisDirty({ raw: true });
+      recompute();
+      applyDashboardPresetProfile(state, "microburst", chartMetricList);
+      toast("Microburst sample loaded", "The guide sample opened in Charts with the Microburst investigation preset.");
+      render();
+    }
+    if (action === "sampleTailLatency") {
+      state.raw = generateTailLatencySample();
+      state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
+      setSourceName("tail latency guide sample");
+      state.selectedId = null;
+      setActiveInvestigation(state, null);
+      state.drawer = null;
+      state.view = "charts";
+      setZoom(0, 1);
+      markAnalysisDirty({ raw: true });
+      recompute();
+      applyDashboardPresetProfile(state, "tail", chartMetricList);
+      toast("Tail latency sample loaded", "The guide sample opened in Charts with the Tail latency preset.");
+      render();
+    }
     if (action === "clear") { state.raw = ""; state.ingestRawExpanded = true; markAnalysisDirty({ raw: true }); render(); }
     if (action === "exportReport") { openIncidentReport(); }
+    if (action === "zoomTailWindow") {
+      const preset = event.currentTarget.dataset.dashboardPresetJump;
+      state.view = "charts";
+      if (preset) applyDashboardPresetProfile(state, preset, chartMetricList);
+      if (zoomToTailLatencyWindow()) renderKeepingWorkspacePosition();
+      else toast("No tail window", "No significant tail-latency window is available on the current visible history.", "warn");
+    }
+    if (action === "openChecklistCharts") {
+      const preset = event.currentTarget.dataset.dashboardPresetJump;
+      state.view = "charts";
+      if (preset) applyDashboardPresetProfile(state, preset, chartMetricList);
+      renderKeepingWorkspacePosition();
+    }
+    if (action === "openChecklistAdvisor") {
+      state.view = "analysis";
+      state.activeTab = "advisor";
+      renderKeepingWorkspacePosition();
+    }
     if (action === "resetAll") {
       resetAllState();
       toast("Workspace reset", "All loaded data, filters, zoom, and UI selections have been cleared.");

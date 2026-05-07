@@ -166,11 +166,99 @@ export function generateTenMinuteSample() {
   return lines.join("\n");
 }
 
+export function generateMicroburstSample() {
+  const start = Date.parse("2026-05-07T09:14:00.000Z");
+  const lines = ["State Recv-Q Send-Q Local Address:Port Peer Address:Port Process"];
+  let primaryDrops = 0;
+  for (let i = 0; i < 180; i += 1) {
+    const ts = new Date(start + i * 1000).toISOString();
+    const warmup = i >= 44 && i <= 48;
+    const burst = i >= 49 && i <= 54;
+    const decay = i >= 55 && i <= 60;
+    const recvQ = burst
+      ? 180000 + (i - 49) * 98000
+      : decay
+        ? Math.max(18000, 520000 - (i - 55) * 92000)
+        : warmup
+          ? 42000 + (i - 44) * 22000
+          : Math.max(2000, 7000 + Math.round(Math.sin(i / 9) * 1800));
+    const skmemR = burst
+      ? 250000 + (i - 49) * 112000
+      : decay
+        ? Math.max(24000, 640000 - (i - 55) * 108000)
+        : warmup
+          ? 70000 + (i - 44) * 36000
+          : Math.max(12000, 24000 + Math.round(Math.cos(i / 11) * 3200));
+    const sendQ = burst ? 18000 + (i - 49) * 4000 : Math.max(3000, 9000 + Math.round(Math.sin(i / 7) * 2500));
+    const rxStep = burst ? 420000 : decay ? 140000 : warmup ? 90000 : 16000;
+    const txStep = burst ? 54000 : 22000;
+    const rtt = burst ? 2.4 + (i - 49) * 0.6 : decay ? 4.2 - (i - 55) * 0.35 : 0.8 + Math.sin(i / 12) * 0.08;
+    const rto = burst ? 240 + (i - 49) * 30 : decay ? 390 - (i - 55) * 26 : 190 + Math.round(Math.cos(i / 8) * 9);
+    const cwnd = burst ? Math.max(6, 18 - (i - 49) * 2) : 22 + Math.round(Math.sin(i / 13) * 2);
+    const dropDelta = burst ? [0, 2, 4, 7, 5, 2][i - 49] : 0;
+    primaryDrops += dropDelta;
+    const bytesReceived = 2_400_000 + i * 16_000 + (warmup ? (i - 43) * 54000 : 0) + (burst ? 270000 + (i - 49) * rxStep : decay ? 270000 + 6 * 420000 + (i - 55) * rxStep : 0);
+    const bytesAcked = 1_900_000 + i * txStep;
+    const rxPeer = `192.168.12.45:${57067}`;
+    lines.push(ts);
+    lines.push(`ESTAB ${Math.round(recvQ)} ${Math.round(sendQ)} 192.168.145.205:20002 ${rxPeer} users:(("java",pid=3450060,fd=286)) timer:(on,${Math.max(1, Math.round(rto / 1000))}sec,${dropDelta ? 1 : 0}) cubic wscale:7:7 rto:${Math.round(rto)} ${burst ? "backoff:1" : ""} rtt:${rtt.toFixed(3)}/${Math.max(0.08, rtt / 3).toFixed(3)} ato:40 mss:1448 pmtu:1500 cwnd:${Math.round(cwnd)} bytes_sent:${40000000 + i * 12000} bytes_retrans:${dropDelta ? 986 : 0} bytes_acked:${Math.round(bytesAcked)} bytes_received:${Math.round(bytesReceived)} segs_out:${119736 + i * 7} segs_in:${170954 + i * 19} data_segs_out:${33957 + i * 2} data_segs_in:${158547 + i * 13} delivery_rate ${Math.max(18_000_000, 4964571424 - (burst ? 600000000 : 0))}bps busy:${burst ? 820 : 120}ms retrans:${dropDelta ? "1/1" : "0/0"} dsack_dups:${dropDelta ? 1 : 0} rcv_rtt:${(8.7 + (burst ? 2.1 : 0)).toFixed(2)} rcv_space:${Math.round(Math.max(44098, skmemR / 8))} skmem:(r${Math.round(skmemR)},rb642855,t${Math.round(sendQ)},tb87040,f0,w${Math.round(sendQ / 2)},o0,bl${burst ? 4096 : 0},d${primaryDrops})`);
+    lines.push(`ESTAB ${Math.round(recvQ / 5)} ${Math.round(sendQ / 3)} 192.168.145.205:443 ${`192.168.10.18:${53111 + (i % 20)}`} users:(("nginx",pid=2011,fd=44)) timer:(keepalive,28sec,0) cubic wscale:7:7 rto:180 rtt:0.700/0.120 ato:40 mss:1448 pmtu:1500 cwnd:28 bytes_acked:${8200000 + i * 24000} bytes_received:${2100000 + i * 14000} segs_out:${78000 + i * 11} segs_in:${56000 + i * 8} send 22000000bps pacing_rate 22000000bps/48000000bps skmem:(r${Math.round(recvQ / 6)},rb262144,t${Math.round(sendQ / 4)},tb425984,f4096,w${Math.round(sendQ / 7)},o0,bl0,d0)`);
+  }
+  return lines.join("\n");
+}
+
+export function generateTailLatencySample() {
+  const start = Date.parse("2026-05-07T10:32:00.000Z");
+  const lines = ["State Recv-Q Send-Q Local Address:Port Peer Address:Port Process"];
+  for (let i = 0; i < 180; i += 1) {
+    const ts = new Date(start + i * 1000).toISOString();
+    const tailWarmup = i >= 66 && i <= 72;
+    const tailSpike = i >= 73 && i <= 79;
+    const tailRecovery = i >= 80 && i <= 86;
+    const rtt = tailSpike
+      ? 95 + (i - 73) * 42
+      : tailRecovery
+        ? Math.max(12, 310 - (i - 80) * 38)
+        : tailWarmup
+          ? 18 + (i - 66) * 10
+          : 0.9 + Math.sin(i / 10) * 0.12;
+    const rttVar = tailSpike
+      ? 44 + (i - 73) * 16
+      : tailRecovery
+        ? Math.max(4, 122 - (i - 80) * 17)
+        : tailWarmup
+          ? 6 + (i - 66) * 4
+          : 0.4 + Math.cos(i / 12) * 0.08;
+    const rto = tailSpike
+      ? 880 + (i - 73) * 330
+      : tailRecovery
+        ? Math.max(220, 2480 - (i - 80) * 260)
+        : tailWarmup
+          ? 280 + (i - 66) * 70
+          : 190 + Math.round(Math.sin(i / 7) * 8);
+    const sendQ = tailSpike ? 140000 + (i - 73) * 64000 : tailRecovery ? Math.max(12000, 520000 - (i - 80) * 70000) : Math.max(2000, 10000 + Math.round(Math.sin(i / 9) * 2400));
+    const recvQ = tailSpike ? 24000 + (i - 73) * 3500 : Math.max(1000, 4000 + Math.round(Math.cos(i / 11) * 900));
+    const backoff = tailSpike ? 1 : 0;
+    const retrans = tailSpike ? 1 : 0;
+    const cwnd = tailSpike ? Math.max(4, 16 - (i - 73)) : 22 + Math.round(Math.sin(i / 13) * 2);
+    const bytesAcked = 8_200_000 + i * 28_000;
+    const bytesReceived = 6_100_000 + i * 18_000;
+    const pacing = tailSpike ? Math.max(64_000_000, 480_000_000 - (i - 73) * 38_000_000) : 610_000_000 + Math.round(Math.sin(i / 6) * 20_000_000);
+    const delivery = tailSpike ? Math.max(22_000_000, 190_000_000 - (i - 73) * 23_000_000) : 420_000_000 + Math.round(Math.cos(i / 7) * 18_000_000);
+    const rtx = tailSpike && i % 2 === 0 ? 1200 + (i - 73) * 220 : 0;
+    lines.push(ts);
+    lines.push(`ESTAB ${Math.round(recvQ)} ${Math.round(sendQ)} 192.168.145.205:54475 [::ffff:160.43.172.2]:8228 users:(("java",pid=3450060,fd=286)) timer:(on,${Math.max(1, Math.round(rto / 1000))}sec,${retrans}) cubic wscale:11:9 rto:${Math.round(rto)} ${backoff ? `backoff:${backoff}` : ""} rtt:${rtt.toFixed(3)}/${rttVar.toFixed(3)} ato:40 mss:1448 pmtu:1500 cwnd:${Math.round(cwnd)} bytes_sent:${2674175 + i * 23000} bytes_retrans:${Math.round(rtx)} bytes_acked:${Math.round(bytesAcked)} bytes_received:${Math.round(bytesReceived)} segs_out:${8786 + i * 46} segs_in:${8729 + i * 42} data_segs_out:${5155 + i * 28} data_segs_in:${1292 + i * 18} send ${Math.round(pacing / 8)}bps lastsnd:${Math.max(20, 2005 - i)} lastrcv:${tailSpike ? 1900 - (i - 73) * 90 : 24 + (i % 9)} lastack:${tailSpike ? 1926 - (i - 73) * 88 : 26 + (i % 8)} pacing_rate ${Math.round(pacing)}bps delivery_rate ${Math.round(delivery)}bps delivered:${5155 + i * 24} app_limited busy:${tailSpike ? 624209 : 640 + i * 2}ms retrans:${retrans ? "0/2" : "0/0"} dsack_dups:${retrans ? 1 : 0} rcv_rtt:${tailSpike ? (207760 - (i - 73) * 21000).toFixed(0) : (76 + i * 0.2).toFixed(2)} rcv_space:${Math.round(69693 + (tailSpike ? 18000 : 0))} rcv_ssthresh:${Math.round(454144 + (tailSpike ? 40000 : 0))} minrtt:78.83 skmem:(r${Math.round(recvQ)},rb262144,t${Math.round(sendQ)},tb425984,f4096,w${Math.round(sendQ / 3)},o0,bl0,d0)`);
+    lines.push(`ESTAB ${Math.round(recvQ / 6)} ${Math.round(sendQ / 5)} 192.168.145.205:20002 192.168.145.204:57067 users:(("java",pid=3450061,fd=144)) timer:(keepalive,26sec,0) cubic wscale:7:7 rto:190 rtt:0.800/0.120 ato:40 mss:1448 pmtu:1500 cwnd:28 bytes_acked:${8200000 + i * 24000} bytes_received:${2100000 + i * 20000} segs_out:${78000 + i * 11} segs_in:${56000 + i * 8} send 22000000bps pacing_rate 22000000bps/48000000bps skmem:(r${Math.round(recvQ / 8)},rb262144,t${Math.round(sendQ / 8)},tb425984,f4096,w${Math.round(sendQ / 10)},o0,bl0,d0)`);
+  }
+  return lines.join("\n");
+}
+
 export const prefsDefault = {
   severityFloor: "low",
   autoToast: true,
   compactRows: false,
   deepAnalysis: true,
+  guidedChecklistCollapsed: true,
   graphMetric: "rtt",
   graphStyle: "line",
   graphWindow: 30,

@@ -11,11 +11,23 @@ export const DASHBOARD_PRESETS = {
     metrics: ["rtt", "rttvar", "rto", "ato", "backoff", "retrans", "cwnd", "pacing_rate"],
     layout: { columns: 3, density: "standard", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
   },
+  tail: {
+    name: "Tail latency",
+    description: "P99/P99.9-focused view for RTT, RTO, jitter, queues, and recovery spikes.",
+    metrics: ["rtt", "rttvar", "rto", "recvQ", "sendQ", "skmem.d_rate", "skmem.d", "rx_bps", "tx_bps"],
+    layout: { columns: 3, density: "compact", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
+  },
   drops: {
     name: "Drops and buffers",
     description: "Socket memory pressure, drops, queues, and receive/transmit buffer health.",
     metrics: ["skmem.d", "skmem.d_rate", "skmem.r", "skmem.t", "recvQ", "sendQ", "rx_bps", "tx_bps", "rto"],
     layout: { columns: 3, density: "standard", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
+  },
+  microburst: {
+    name: "Microburst investigation",
+    description: "Short receive-side pressure windows: RX bandwidth, Recv-Q, socket receive memory, and drops together.",
+    metrics: ["rx_bps", "recvQ", "skmem.r", "skmem.d", "skmem.d_rate", "bytes_received", "rtt", "rto"],
+    layout: { columns: 3, density: "compact", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
   },
   throughput: {
     name: "Throughput path",

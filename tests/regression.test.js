@@ -238,6 +238,26 @@ test("applyDashboardPreset filters metrics through the available metric list", (
   assert.equal(state.prefs.graphMetric, "rtt");
 });
 
+test("microburst dashboard preset prioritizes receive-side burst metrics", () => {
+  const state = profileState();
+
+  applyDashboardPreset(state, "microburst", () => ["rx_bps", "recvQ", "skmem.r", "skmem.d", "skmem.d_rate", "bytes_received", "rtt", "rto"]);
+
+  assert.deepEqual(state.chartMetrics, ["rx_bps", "recvQ", "skmem.r", "skmem.d", "skmem.d_rate", "bytes_received", "rtt", "rto"]);
+  assert.equal(state.prefs.graphMetric, "rx_bps");
+  assert.equal(state.prefs.chartLayout.density, "compact");
+});
+
+test("tail dashboard preset prioritizes tail metrics", () => {
+  const state = profileState();
+
+  applyDashboardPreset(state, "tail", () => ["rtt", "rttvar", "rto", "recvQ", "sendQ", "skmem.d_rate", "skmem.d", "rx_bps", "tx_bps"]);
+
+  assert.deepEqual(state.chartMetrics, ["rtt", "rttvar", "rto", "recvQ", "sendQ", "skmem.d_rate", "skmem.d", "rx_bps", "tx_bps"]);
+  assert.equal(state.prefs.graphMetric, "rtt");
+  assert.equal(state.prefs.chartLayout.density, "compact");
+});
+
 test("applyDashboardProfile falls back when saved metrics are unavailable", () => {
   const state = profileState();
 
