@@ -16,6 +16,10 @@ $files = @(
   "src/alerts.js",
   "src/compare.js",
   "src/profiles.js",
+  "src/executive-summary.js",
+  "src/ss-command.js",
+  "src/annotations.js",
+  "src/evidence-pack.js",
   "src/search.js",
   "src/ip-intel.js",
   "src/aliases.js",
@@ -28,5 +32,6 @@ foreach ($file in $files) {
 }
 
 Write-Host "Syntax check OK"
+
 
 

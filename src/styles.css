@@ -1488,7 +1488,7 @@ tr:hover, tr.selected { background: #101a27; }
   text-align: left;
   pointer-events: auto;
   transform: translateX(var(--tooltip-shift, 0));
-  z-index: 30;
+  z-index: 140;
 }
 .chart-tooltip::before {
   content: "";
@@ -3797,8 +3797,14 @@ th:focus-within .column-tooltip,
   margin-top: 14px;
 }
 .chart-grid > .chart-card {
+  position: relative;
+  overflow: visible;
   flex: 1 1 var(--chart-card-basis, 100%);
   min-width: min(100%, var(--chart-card-min, 280px));
+}
+.chart-grid > .chart-card:hover,
+.chart-grid > .chart-card:focus-within {
+  z-index: 24;
 }
 .chart-grid.cols-1 { --chart-card-basis: 100%; --chart-card-min: 280px; }
 .chart-grid.cols-2 { --chart-card-basis: calc((100% - 14px) / 2); --chart-card-min: 360px; }
@@ -4246,7 +4252,7 @@ th:focus-within .column-tooltip,
   background: rgba(0, 0, 0, .62);
   display: none;
   place-items: center;
-  z-index: 30;
+  z-index: 140;
 }
 .modal-backdrop.open { display: grid; }
 .modal {
@@ -4504,3 +4510,89 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .ss-options-panel .command-row { grid-template-columns: 1fr; }
 }
 
+
+.modal.annotation {
+  width: min(1180px, calc(100vw - 30px));
+}
+.modal.annotation .body {
+  overflow: auto;
+}
+.annotation-modal {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 16px;
+}
+.annotation-editor,
+.annotation-history {
+  display: grid;
+  gap: 14px;
+}
+.annotation-context {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(11, 20, 31, .72);
+}
+.annotation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.annotation-grid label,
+.annotation-note {
+  display: grid;
+  gap: 6px;
+}
+.annotation-grid span,
+.annotation-note span,
+.annotation-history-head strong {
+  color: #d9e8f7;
+}
+.annotation-actions {
+  justify-content: flex-end;
+}
+.annotation-history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.annotation-list {
+  display: grid;
+  gap: 10px;
+  max-height: 460px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.annotation-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(95, 121, 150, .35);
+  background: rgba(6, 12, 20, .86);
+}
+.annotation-item header,
+.annotation-item footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.annotation-item header span,
+.annotation-item small,
+.annotation-item p {
+  color: var(--muted);
+}
+.annotation-item p {
+  margin: 0;
+  line-height: 1.45;
+}
+@media (max-width: 980px) {
+  .annotation-modal,
+  .annotation-grid {
+    grid-template-columns: 1fr;
+  }
+}

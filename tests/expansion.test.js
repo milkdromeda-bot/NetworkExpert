@@ -6,7 +6,7 @@ import { analyzeSocket, riskForSocket } from "../src/analysis.js";
 import { dashboardSnapshot, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../src/profiles.js";
 import { parseSs, metricValue } from "../src/parser.js";
 import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../src/search.js";
-import { toggleCommandOption } from "../src/ss-command.js";
+import { commandCoverage, toggleCommandOption } from "../src/ss-command.js";
 import { withStableSocketIds } from "../src/timeline.js";
 
 function socketFrom(line, bandwidth = {}) {
@@ -348,3 +348,21 @@ test("toggleCommandOption does not duplicate an already active flag", () => {
   assert.equal(toggleCommandOption("ss -H -n -a", "-n", true), "ss -H -n -a");
 });
 
+
+test("command coverage detects compact and long ss options", () => {
+  const coverage = commandCoverage("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all", SS_OPTIONS);
+  const active = key => coverage.find(item => (item.short || item.long) === key)?.active;
+  assert.equal(active("-H"), true);
+  assert.equal(active("-O"), true);
+  assert.equal(active("-n"), true);
+  assert.equal(active("-t"), true);
+  assert.equal(active("-e"), true);
+  assert.equal(active("-p"), true);
+  assert.equal(active("-m"), true);
+  assert.equal(active("-i"), true);
+  assert.equal(active("--tos"), true);
+  assert.equal(active("--cgroup"), true);
+  assert.equal(active("--inet-sockopt"), true);
+  assert.equal(active("-a"), true);
+  assert.equal(active("-A"), true);
+});

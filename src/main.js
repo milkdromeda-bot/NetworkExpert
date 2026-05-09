@@ -15,6 +15,8 @@ import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStor
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
 import { commandCoverage, toggleCommandOption } from "./ss-command.js";
+import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
+import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -287,6 +289,7 @@ let state = {
   topologyDraftMatch: "",
   alertRules: loadAlertRules(),
   alertAcks: loadAlertAcks(),
+  annotations: loadAnnotations(),
   baseline: null,
   ipIntel: {},
   ipIntelRunning: false,
@@ -301,6 +304,7 @@ let state = {
   helpColumn: null,
   ssOptionHelpKey: "-i",
   showSsOptions: false,
+  annotationDraft: buildAnnotationDraft({ sourceName: "built-in sample" }),
   ingestRawExpanded: SAMPLE.length <= INGEST_RAW_EAGER_LIMIT,
   openChartMoveMetric: null,
   openChartMovePos: null,
@@ -388,6 +392,8 @@ const icons = {
   copy: `<i class="ri-file-copy-line"></i>`,
   focus: `<i class="ri-focus-3-line"></i>`,
   saveDisk: `<i class="ri-save-3-line"></i>`,
+  note: `<i class="ri-sticky-note-line"></i>`,
+  pack: `<i class="ri-folder-zip-line"></i>`,
   report: `<i class="ri-file-pdf-line"></i>`,
   menu: `<i class="ri-menu-3-line"></i>`,
   first: `<i class="ri-skip-left-line"></i>`,
@@ -414,6 +420,64 @@ function loadPrefs() {
 function savePrefs() {
   state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
   localStorage.setItem("networkExpertPrefs", JSON.stringify(state.prefs));
+}
+
+function loadAnnotations() {
+  try {
+    return normalizeAnnotations(JSON.parse(localStorage.getItem("networkExpertAnnotations") || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function saveAnnotations() {
+  state.annotations = normalizeAnnotations(state.annotations);
+  localStorage.setItem("networkExpertAnnotations", JSON.stringify(state.annotations));
+}
+
+function annotationSocketId() {
+  return selectedSocket()?.id || state.selectedId || "";
+}
+
+function currentSourceAnnotations(metric = null, socketId = annotationSocketId(), history = visibleHistory()) {
+  return annotationsForContext(state.annotations, {
+    sourceName: state.sourceName,
+    socketId,
+    metric,
+    history,
+    microburst: microburstSummary(),
+    tailLatency: tailLatencyLens()
+  });
+}
+
+function annotationAnchorOptions(history = visibleHistory()) {
+  return buildAnnotationAnchorOptions({
+    history,
+    microburst: microburstSummary(),
+    tailLatency: tailLatencyLens()
+  });
+}
+
+function annotationMetricChoices() {
+  const preferred = ["*", state.prefs.graphMetric, ...state.chartMetrics, ...reportDefaultChartMetrics(8)].filter(Boolean);
+  return [...new Set(preferred)].map(metric => ({
+    value: metric,
+    label: metric === "*" ? "Socket-wide (show on all charts)" : metricLabel(metric)
+  }));
+}
+
+function openAnnotationModal(metric = "*") {
+  const socketId = annotationSocketId();
+  if (!socketId) {
+    toast("No active socket", "Select a socket before adding an annotation.", "warn");
+    return;
+  }
+  state.annotationDraft = {
+    ...buildAnnotationDraft({ sourceName: state.sourceName, socketId, metric: metric || "*" }),
+    metric: metric || "*"
+  };
+  state.modal = "annotation";
+  render();
 }
 
 function loadFilterHistory() {
@@ -1013,6 +1077,41 @@ function chartMicroburstBand(summary, data, pad, w, h, firstTime, lastTime) {
   `;
 }
 
+
+function annotationColor(kind = "custom") {
+  return {
+    custom: "#7bdff6",
+    "burst-start": "#ffd84d",
+    failover: "#ff9f43",
+    "queue-reset": "#4cde8a",
+    "rtt-peak": "#ff5c77"
+  }[kind] || "#7bdff6";
+}
+
+function chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime) {
+  const annotations = currentSourceAnnotations(metric, annotationSocketId(), data)
+    .filter(item => item.resolvedEpochMs >= firstTime && item.resolvedEpochMs <= lastTime)
+    .slice(0, 6);
+  if (!annotations.length || !data.length) return "";
+  const timeSpan = Math.max(1, lastTime - firstTime);
+  const xFromTime = time => data.length > 1 && timeSpan > 1
+    ? pad.l + ((time - firstTime) / timeSpan) * (w - pad.l - pad.r)
+    : pad.l;
+  return annotations.map((item, index) => {
+    const x = Math.max(pad.l, Math.min(w - pad.r, xFromTime(item.resolvedEpochMs)));
+    const color = annotationColor(item.kind);
+    const label = item.label || annotationDefaultLabel(item.kind);
+    const width = Math.min(176, Math.max(72, label.length * 7 + 20));
+    const boxX = Math.min(Math.max(x + 8, pad.l + 8), Math.max(pad.l + 8, w - pad.r - width - 6));
+    const boxY = pad.t + 10 + (index % 3) * 26;
+    return `
+      <line x1="${x}" x2="${x}" y1="${pad.t}" y2="${h - pad.b}" stroke="${color}" stroke-width="1.6" stroke-dasharray="6 4" opacity=".92"/>
+      <circle cx="${x}" cy="${pad.t + 8}" r="4" fill="${color}"/>
+      <rect x="${boxX}" y="${boxY}" width="${width}" height="20" rx="6" fill="#081019" stroke="${color}"/>
+      <text x="${boxX + 8}" y="${boxY + 14}" fill="${color}" font-size="11" font-weight="700">${escapeHtml(label)}</text>
+    `;
+  }).join("");
+}
 function addCollectionAnomalies() {
   const hasTimestamp = hasTimestampedRawData();
   const huge = state.sockets.length >= 5000;
@@ -2161,6 +2260,7 @@ function renderInvestigationContext() {
       <button data-context-action="charts">${icons.chart} Charts</button>
       <button data-context-action="anomalies" class="${socketAnomalies.length ? "hot-action" : ""}">${icons.alert} Anomalies</button>
       <button data-context-action="conversations"><i class="ri-chat-3-line"></i> Conversations</button>
+      <button data-context-action="annotate">${icons.note} Annotate</button>
       <button class="icon" data-context-action="clear" title="Clear active context" aria-label="Clear active context">${icons.x}</button>
     </div>
     ${topAnomaly ? `<div class="investigation-note ${topAnomaly.severity}">
@@ -2423,7 +2523,7 @@ function renderIngestRawPreview() {
 }
 
 function renderIngestPage() {
-  const coverage = commandCoverage(state.command);
+  const coverage = commandCoverage(state.command, SS_OPTIONS);
   const active = coverage.filter(o => o.active);
   const best = ["-H", "-O", "-n", "-t", "-e", "-p", "-m", "-i", "--tos", "--cgroup", "--inet-sockopt", "-a", "-A"];
   const featuredOptions = SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1]));
@@ -2498,6 +2598,7 @@ function renderAnalysisPage() {
             <button data-action="toggleDeepAnalysis" class="${state.prefs.deepAnalysis ? "primary" : ""}" title="Run advanced advisor in the background">${icons.brain} Deep analysis</button>
             <button data-action="setBaseline" title="Use current parsed sockets as before baseline"><i class="ri-scales-3-line"></i> Set baseline</button>
             <button data-action="exportReport" title="Open incident report for printing or saving as PDF">${icons.report} Incident report</button>
+            <button data-action="exportEvidencePack" title="Download a structured evidence pack">${icons.pack} Evidence pack</button>
             <input id="searchInput" placeholder='Filter: state:ESTAB risk>=high port:443 process:nginx rtt>100' value="${escapeHtml(state.table.filters.text)}" />
             <button class="icon" data-action="details" title="Socket details">${icons.activity}</button>
           </div>
@@ -2569,7 +2670,9 @@ function renderChartsPage() {
           <div class="chart-tool-group">
             <button data-action="thresholds">${icons.threshold} Thresholds</button>
             <button data-action="saveCharts">${icons.save} Export PNG</button>
+            <button data-action="annotate">${icons.note} Annotate</button>
             <button data-action="exportReport">${icons.report} Incident report</button>
+            <button data-action="exportEvidencePack">${icons.pack} Evidence pack</button>
           </div>
           <div class="chart-timezone-group">
             <label>Time zone ${renderChartInfo("Time zone", "Controls how timestamps are displayed on chart axes, crosshair labels, and date-time zoom fields. The underlying samples are unchanged.", "Use UTC for server-side logs and incident correlation across machines. Use local time when matching an operator timeline, application logs, or monitoring dashboards configured in that zone.")}</label>
@@ -2600,6 +2703,7 @@ function renderChartsPage() {
           </div>
           <div class="col-tools">
             <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
+            <button class="mini" data-action="annotateMetric" data-annotation-metric="${m}" title="Annotate this chart">${icons.note}</button>
             ${renderChartMoveMenu(m)}
           </div>
         </div>
@@ -4162,7 +4266,8 @@ function renderModal() {
             : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
               : state.modal === "serviceAliases" ? "Service labels"
                 : state.modal === "topology" ? "Recording topology"
-              : "ss field documentation";
+                  : state.modal === "annotation" ? "Annotations"
+                    : "ss field documentation";
   const modalBody = state.modal === "columns" ? renderColumnChooser()
     : state.modal === "thresholds" ? renderThresholdConfig()
       : state.modal === "layout" ? renderLayoutPrefs()
@@ -4171,7 +4276,8 @@ function renderModal() {
             : state.modal === "chartStats" ? renderChartStatsModal()
               : state.modal === "serviceAliases" ? renderServiceAliasesModal()
                 : state.modal === "topology" ? renderTopologyModal()
-              : renderFields();
+                  : state.modal === "annotation" ? renderAnnotationModal()
+                    : renderFields();
   return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
     <section class="modal ${state.modal || ""}">
       <header><strong>${modalTitle}</strong><button class="icon" data-action="closeModal">${icons.x}</button></header>
@@ -4198,6 +4304,38 @@ function renderColumnHelpDetail() {
   </div>`;
 }
 
+function renderAnnotationModal() {
+  const socket = selectedSocket();
+  const socketId = annotationSocketId();
+  const items = currentSourceAnnotations(null, socketId, visibleHistory());
+  const types = annotationTypeList();
+  const anchors = annotationAnchorOptions();
+  const metrics = annotationMetricChoices();
+  const draft = state.annotationDraft || buildAnnotationDraft({ sourceName: state.sourceName, socketId, metric: state.prefs.graphMetric });
+  return `<div class="annotation-modal">
+    <section class="annotation-editor">
+      <div class="annotation-context">
+        <strong>${socket ? `${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}` : "No active socket"}</strong>
+        <span class="hint">Attach a note to the current socket, or target one metric so the marker appears only on the related charts.</span>
+      </div>
+      <div class="annotation-grid">
+        <label><span>Marker type</span><select id="annotationKind">${types.map(item => `<option value="${item.id}" ${draft.kind === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
+        <label><span>Target metric</span><select id="annotationMetric">${metrics.map(item => `<option value="${item.value}" ${draft.metric === item.value ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
+        <label><span>Anchor time</span><select id="annotationAnchor">${anchors.map(item => `<option value="${item.id}" ${draft.anchor === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
+        <label><span>Label</span><input id="annotationLabel" value="${escapeHtml(draft.label || annotationDefaultLabel(draft.kind))}" placeholder="Short label" /></label>
+      </div>
+      <label class="annotation-note"><span>Analyst note</span><textarea id="annotationNote" rows="4" placeholder="Optional context: failover, queue reset, peer switch, burst start...">${escapeHtml(draft.note || "")}</textarea></label>
+      <div class="toolbar annotation-actions">
+        <button class="primary" data-action="saveAnnotation">${icons.note} Save annotation</button>
+        <button data-action="closeModal">Cancel</button>
+      </div>
+    </section>
+    <section class="annotation-history">
+      <div class="annotation-history-head"><strong>Current annotations</strong><span class="hint">${items.length} item(s) on this socket and source</span></div>
+      ${items.length ? `<div class="annotation-list">${items.slice().reverse().map(item => `<article class="annotation-item"><header><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(annotationTypeLabel(item.kind))}</span></header><small>${escapeHtml(item.metric === "*" ? "all charts" : metricLabel(item.metric))} � ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</small>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}<footer><button data-action="deleteAnnotation" data-annotation-id="${escapeHtml(item.id)}">${icons.trash} Delete</button></footer></article>`).join("")}</div>` : `<div class="empty">No annotation yet for this socket.</div>`}
+    </section>
+  </div>`;
+}
 function renderChartStatsModal() {
   const metric = state.statsMetric || state.prefs.graphMetric;
   const stats = chartStats(metric);
@@ -5026,6 +5164,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const warnY = showWarnLine ? y(t.warn) : 0;
   const dangerY = showDangerLine ? y(t.danger) : 0;
   const microburstBand = chartMicroburstBand(microburst, data, pad, w, h, firstTime, lastTime);
+  const annotationOverlay = chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime);
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.dataset.metric = metric;
   svg.dataset.plotLeft = String(pad.l);
@@ -5039,6 +5178,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     ${yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, v)}</text>`).join("")}
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${tick.label}</text>`).join("")}
     ${microburstBand}
+    ${annotationOverlay}
     ${showWarnLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${warnY}" y2="${warnY}" stroke="#ff9f43" stroke-dasharray="7 6"/><text x="${w - pad.r - 6}" y="${warnY - 6}" text-anchor="end" fill="#ff9f43" font-size="11">warn ${formatMetricValue(metric, t.warn)}</text>` : ""}
     ${showDangerLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${dangerY}" y2="${dangerY}" stroke="#ff5c77" stroke-dasharray="4 4"/><text x="${w - pad.r - 6}" y="${dangerY - 6}" text-anchor="end" fill="#ff5c77" font-size="11">danger ${formatMetricValue(metric, t.danger)}</text>` : ""}
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
@@ -5390,6 +5530,10 @@ function reportFindings(limit = 5) {
   return (state.advisorFindings || []).slice(0, limit);
 }
 
+function reportAnnotations(socket = selectedSocket()) {
+  return currentSourceAnnotations(null, socket?.id || annotationSocketId(), visibleHistory());
+}
+
 function buildIncidentReportHtml(chartCaptures = []) {
   const sockets = reportVisibleSockets();
   const selected = selectedSocket();
@@ -5398,6 +5542,7 @@ function buildIncidentReportHtml(chartCaptures = []) {
   const topSockets = reportTopSockets(sockets, 10);
   const percentiles = reportPercentileTable(sockets);
   const findings = reportFindings(5);
+  const annotations = reportAnnotations(selected);
   const filters = reportFilterTokens();
   const comparison = state.baseline ? buildComparison() : null;
   const now = new Date();
@@ -5574,6 +5719,20 @@ function buildIncidentReportHtml(chartCaptures = []) {
               </div>
             </section>
 
+            ${annotations.length ? `<section class="report-card report-section">
+              <h2>Annotations</h2>
+              <div class="report-list">
+                ${annotations.map(item => `<article class="${escapeHtml(item.kind === "failover" ? "high" : item.kind === "rtt-peak" ? "medium" : "low")}">
+                  <header>
+                    <strong>${escapeHtml(item.label)}</strong>
+                    <span class="token">${escapeHtml(annotationTypeLabel(item.kind))}</span>
+                  </header>
+                  <div class="small">${escapeHtml(item.metric === "*" ? "Socket-wide" : metricLabel(item.metric))} � ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</div>
+                  ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
+                </article>`).join("")}
+              </div>
+            </section>` : ""}
+
             ${microburst ? `<section class="report-card report-section">
               <h2>Microburst Detection</h2>
               <div class="report-summary-grid">
@@ -5695,6 +5854,314 @@ function buildIncidentReportHtml(chartCaptures = []) {
   return html;
 }
 
+
+async function svgToPngBlob(svg, width = svg.clientWidth || 1280, height = svg.clientHeight || 320) {
+  const xml = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob([xml], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * 2));
+  canvas.height = Math.max(1, Math.round(height * 2));
+  const ctx = canvas.getContext("2d");
+  ctx.scale(2, 2);
+  ctx.fillStyle = "#05070b";
+  ctx.fillRect(0, 0, width, height);
+  const image = new Image();
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+    image.src = url;
+  });
+  ctx.drawImage(image, 0, 0, width, height);
+  URL.revokeObjectURL(url);
+  return await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function wrapPdfLines(text, font, size, maxWidth) {
+  const paragraphs = String(text || "").split(/\r?\n/);
+  const lines = [];
+  for (const paragraph of paragraphs) {
+    const words = String(paragraph || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      lines.push("");
+      continue;
+    }
+    let line = words.shift();
+    for (const word of words) {
+      const candidate = `${line} ${word}`;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) line = candidate;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+function drawPdfTextBlock(page, text, { x, y, width, size = 10, font, color, lineHeight = size * 1.35 }) {
+  const lines = wrapPdfLines(text, font, size, width);
+  let cursor = y;
+  for (const line of lines) {
+    if (line) page.drawText(line, { x, y: cursor, size, font, color, maxWidth: width });
+    cursor -= lineHeight;
+  }
+  return cursor;
+}
+
+function drawPdfSection(page, title, lines, x, y, width, fonts, colors) {
+  let cursor = y;
+  page.drawText(title, { x, y: cursor, size: 12, font: fonts.bold, color: colors.accent });
+  cursor -= 18;
+  for (const line of lines.filter(Boolean)) {
+    cursor = drawPdfTextBlock(page, line, { x, y: cursor, width, size: 10, font: fonts.regular, color: colors.ink, lineHeight: 13.5 }) - 5;
+  }
+  return cursor;
+}
+
+async function captureEvidenceChartAssets(captures = []) {
+  const assets = [];
+  for (let i = 0; i < captures.length; i += 1) {
+    const capture = captures[i];
+    const width = 1280;
+    const height = capture.hero ? 420 : 320;
+    const svg = buildReportChartSvg(capture.metric, width, height);
+    const pngBlob = await svgToPngBlob(svg, width, height);
+    const bytes = new Uint8Array(await pngBlob.arrayBuffer());
+    assets.push({
+      ...capture,
+      width,
+      height,
+      bytes,
+      fileName: `${String(i + 1).padStart(2, "0")}-${safeEvidenceFileName(capture.metric)}.png`
+    });
+  }
+  return assets;
+}
+
+async function buildIncidentReportPdf(chartAssets = []) {
+  if (typeof PDFLib === "undefined") throw new Error("PDF engine unavailable");
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const pdfDoc = await PDFDocument.create();
+  const fonts = {
+    regular: await pdfDoc.embedFont(StandardFonts.Helvetica),
+    bold: await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  };
+  const colors = {
+    ink: rgb(0.09, 0.14, 0.2),
+    muted: rgb(0.35, 0.41, 0.48),
+    accent: rgb(0.05, 0.43, 0.62),
+    line: rgb(0.83, 0.88, 0.92),
+    panel: rgb(0.96, 0.98, 0.99)
+  };
+  const selected = selectedSocket();
+  const visibleSockets = reportVisibleSockets();
+  const anomalies = reportRelevantAnomalies(visibleSockets);
+  const focusSocket = pickExecutiveFocusSocket(selected, visibleSockets);
+  const annotations = reportAnnotations(selected);
+  const microburst = microburstSummary();
+  const tailLatency = tailLatencyLens();
+  const checklistItems = focusSocket ? guidedChecklistItems(focusSocket) : [];
+  const snapshot = buildExecutiveSummary({
+    focusSocket,
+    anomalies,
+    advisorFindings: state.advisorFindings || [],
+    microburst,
+    tailLatency,
+    checklistItems,
+    formatMicroburstWindow,
+    formatTailLatencyWindow,
+    formatMetricValue
+  });
+  const generatedAt = new Date().toLocaleString(resolvedNumberLocale(), { timeZone: resolvedTimeZone() });
+  const page = pdfDoc.addPage([595.28, 841.89]);
+  const margin = 36;
+  const gutter = 18;
+  const contentWidth = page.getWidth() - margin * 2;
+  const columnWidth = (contentWidth - gutter) / 2;
+  let y = page.getHeight() - margin;
+
+  page.drawText("NetworkExpert Incident Snapshot", { x: margin, y, size: 11, font: fonts.bold, color: colors.accent });
+  y -= 24;
+  page.drawText(state.sourceName || "Current workspace", { x: margin, y, size: 22, font: fonts.bold, color: colors.ink });
+  y -= 18;
+  y = drawPdfTextBlock(page, "Portable incident evidence generated from the current workspace, including prioritized signals, focused context, and chart captures.", {
+    x: margin,
+    y,
+    width: contentWidth,
+    size: 10,
+    font: fonts.regular,
+    color: colors.muted,
+    lineHeight: 13
+  }) - 10;
+
+  const metaLines = [
+    `Generated: ${generatedAt}`,
+    `Timezone: ${resolvedTimeZone()}`,
+    `Visible sockets: ${formatNumber(visibleSockets.length)}`,
+    `Relevant anomalies: ${formatNumber(anomalies.length)}`,
+    `Critical sockets: ${formatNumber(visibleSockets.filter(socket => socket.risk === "critical").length)}`,
+    `Capture command: ${state.command || "n/a"}`
+  ];
+  y = drawPdfSection(page, "Incident frame", metaLines, margin, y, contentWidth, fonts, colors) - 8;
+
+  const leftLines = [];
+  if (snapshot) {
+    leftLines.push(`${snapshot.title} [${snapshot.severity}]`);
+    leftLines.push(snapshot.headline);
+    leftLines.push(snapshot.summary);
+    leftLines.push(`Next step: ${snapshot.next}`);
+  }
+  if (focusSocket) {
+    leftLines.push(`Focus flow: ${focusSocket.local} -> ${focusSocket.peer}`);
+    leftLines.push(`Focus process: ${focusSocket.details.process ? `${focusSocket.details.process.name}:${focusSocket.details.process.pid}` : "unknown process"}`);
+    leftLines.push(`Focus metrics: RTT ${formatMetricValue("rtt", metricValue(focusSocket, "rtt"))}, RTO ${formatMetricValue("rto", metricValue(focusSocket, "rto"))}, Send-Q ${formatMetricValue("sendQ", focusSocket.sendQ)}, Recv-Q ${formatMetricValue("recvQ", focusSocket.recvQ)}`);
+  }
+  if (microburst) leftLines.push(`Microburst: ${formatMicroburstWindow(microburst)} with RX ${formatMetricValue("rx_bps", microburst.peakRxBps)} and ${formatMetricValue("skmem.d", microburst.dropDeltaTotal)} new drops.`);
+  if (tailLatency) leftLines.push(`Tail lens: ${formatTailLatencyWindow(tailLatency)} with suspicion ${tailLatency.suspicion || "tail latency spike"}.`);
+  leftLines.push(`Filters: ${reportFilterTokens().join(", ") || "none"}`);
+
+  const rightLines = [];
+  if (anomalies.length) {
+    rightLines.push("Top anomalies:");
+    anomalies.slice(0, 5).forEach(item => {
+      const socket = state.sockets.find(socketItem => socketItem.id === item.socketId);
+      rightLines.push(`${item.severity.toUpperCase()} - ${item.title}${socket ? ` - ${socket.local} -> ${socket.peer}` : ""}`);
+    });
+  }
+  if (annotations.length) {
+    rightLines.push("Annotations:");
+    annotations.slice(0, 5).forEach(item => {
+      rightLines.push(`${item.label} - ${item.metric === "*" ? "socket-wide" : metricLabel(item.metric)} - ${timeLabel(0, item.resolvedEpochMs)}`);
+    });
+  }
+  if (!rightLines.length) rightLines.push("No annotations or scoped anomalies are currently attached to the active incident view.");
+
+  const leftBottom = drawPdfSection(page, "Snapshot and focus", leftLines, margin, y, columnWidth, fonts, colors);
+  const rightBottom = drawPdfSection(page, "Signals and analyst notes", rightLines, margin + columnWidth + gutter, y, columnWidth, fonts, colors);
+
+  let tableY = Math.min(leftBottom, rightBottom) - 8;
+  const topSockets = reportTopSockets(visibleSockets, 5);
+  if (topSockets.length && tableY > 190) {
+    page.drawText("Top flows in scope", { x: margin, y: tableY, size: 12, font: fonts.bold, color: colors.accent });
+    tableY -= 18;
+    const rows = [
+      ["Risk", "Flow", "Process", "RTT", "RTO", "Drops"],
+      ...topSockets.map(socket => [
+        socket.risk,
+        `${socket.local} -> ${socket.peer}`,
+        socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "-",
+        formatMetricValue("rtt", metricValue(socket, "rtt")),
+        formatMetricValue("rto", metricValue(socket, "rto")),
+        formatMetricValue("skmem.d", metricValue(socket, "skmem.d"))
+      ])
+    ];
+    const columns = [50, 205, 110, 55, 55, 48];
+    rows.forEach((row, rowIndex) => {
+      let x = margin;
+      if (rowIndex === 0) {
+        page.drawRectangle({ x, y: tableY - 4, width: contentWidth, height: 18, color: colors.panel, borderColor: colors.line, borderWidth: 1 });
+      }
+      row.forEach((value, index) => {
+        const cellFont = rowIndex === 0 ? fonts.bold : fonts.regular;
+        const cellSize = rowIndex === 0 ? 9 : 8.5;
+        const clipped = String(value).length > 34 ? `${String(value).slice(0, 31)}...` : String(value);
+        page.drawText(clipped, { x: x + 4, y: tableY + 2, size: cellSize, font: cellFont, color: rowIndex === 0 ? colors.ink : colors.muted, maxWidth: columns[index] - 8 });
+        x += columns[index];
+      });
+      tableY -= 18;
+    });
+  }
+
+  for (const asset of chartAssets) {
+    const chartPage = pdfDoc.addPage([841.89, 595.28]);
+    const pageMargin = 28;
+    const pageWidth = chartPage.getWidth() - pageMargin * 2;
+    const pageHeight = chartPage.getHeight() - pageMargin * 2;
+    let cursor = chartPage.getHeight() - pageMargin;
+    chartPage.drawText(asset.title, { x: pageMargin, y: cursor, size: 18, font: fonts.bold, color: colors.ink });
+    cursor -= 18;
+    cursor = drawPdfTextBlock(chartPage, asset.context || "Chart evidence from the current visible incident window.", {
+      x: pageMargin,
+      y: cursor,
+      width: pageWidth,
+      size: 10,
+      font: fonts.regular,
+      color: colors.muted,
+      lineHeight: 13
+    }) - 8;
+    const image = await pdfDoc.embedPng(asset.bytes);
+    const availableWidth = pageWidth;
+    const availableHeight = pageHeight - 64;
+    const scale = Math.min(availableWidth / image.width, availableHeight / image.height);
+    const drawWidth = image.width * scale;
+    const drawHeight = image.height * scale;
+    const imageX = pageMargin + (availableWidth - drawWidth) / 2;
+    const imageY = Math.max(pageMargin, cursor - drawHeight);
+    chartPage.drawRectangle({ x: imageX - 1, y: imageY - 1, width: drawWidth + 2, height: drawHeight + 2, borderColor: colors.line, borderWidth: 1 });
+    chartPage.drawImage(image, { x: imageX, y: imageY, width: drawWidth, height: drawHeight });
+    chartPage.drawText(metricLabel(asset.metric), { x: pageMargin, y: pageMargin + 8, size: 10, font: fonts.bold, color: colors.accent });
+  }
+
+  return await pdfDoc.save();
+}
+
+async function exportEvidencePack() {
+  if (!state.sockets.length) {
+    toast("No data to export", "Import or parse a capture before generating an evidence pack.", "warn");
+    return;
+  }
+  if (typeof JSZip === "undefined") {
+    toast("ZIP helper missing", "JSZip is not available in this browser session.", "danger");
+    return;
+  }
+  if (typeof PDFLib === "undefined") {
+    toast("PDF engine missing", "pdf-lib is not available in this browser session.", "danger");
+    return;
+  }
+  const zip = new JSZip();
+  const captures = captureIncidentReportCharts(6);
+  const chartAssets = await captureEvidenceChartAssets(captures);
+  const visibleSockets = reportVisibleSockets();
+  const anomalies = reportRelevantAnomalies(visibleSockets);
+  const socketLookup = Object.fromEntries(state.sockets.map(socket => [socket.id, socket]));
+  const annotations = reportAnnotations(selectedSocket());
+  const safeName = safeEvidenceFileName(state.sourceName || "networkexpert");
+  const pdfBytes = await buildIncidentReportPdf(chartAssets);
+  zip.file("incident-report.pdf", pdfBytes);
+  zip.file("incident-report.html", buildIncidentReportHtml(captures));
+  zip.file("anomalies.csv", buildAnomaliesCsv(anomalies, socketLookup, { metricLabel, formatMetricValue }));
+  zip.file("top-sockets.csv", buildTopSocketsCsv(reportTopSockets(visibleSockets, 50), { metricValue, socketBandwidth, formatMetricValue }));
+  zip.file("timeline.json", JSON.stringify(buildTimelinePayload(visibleHistory(), { sourceName: state.sourceName, timezone: resolvedTimeZone(), filters: reportFilterTokens(), annotations }), null, 2));
+  zip.file("annotations.json", JSON.stringify(annotations, null, 2));
+  zip.file("README.txt", buildEvidenceManifest({
+    sourceName: state.sourceName,
+    generatedAt: new Date().toLocaleString(resolvedNumberLocale(), { timeZone: resolvedTimeZone() }),
+    visibleSockets: visibleSockets.length,
+    anomalyCount: anomalies.length,
+    chartCount: chartAssets.length,
+    annotationCount: annotations.length
+  }));
+  const chartFolder = zip.folder("charts");
+  chartAssets.forEach(asset => {
+    chartFolder.file(asset.fileName, asset.bytes);
+  });
+  const blob = await zip.generateAsync({ type: "blob" });
+  downloadBlob(blob, `${safeName}-evidence-pack.zip`);
+  toast("Evidence pack exported", "ZIP downloaded with PDF report, HTML report, anomalies, sockets, timeline, annotations, and chart PNGs.");
+}
 function openIncidentReport() {
   if (!state.sockets.length) {
     toast("No data to export", "Import or parse a capture before generating an incident report.", "warn");
@@ -5889,6 +6356,28 @@ function bindEvents() {
     }
     if (action === "clear") { state.raw = ""; state.ingestRawExpanded = true; markAnalysisDirty({ raw: true }); render(); }
     if (action === "exportReport") { openIncidentReport(); }
+    if (action === "exportEvidencePack") { exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger")); }
+    if (action === "annotate") { openAnnotationModal(state.prefs.graphMetric); }
+    if (action === "annotateMetric") { openAnnotationModal(event.currentTarget.dataset.annotationMetric || state.prefs.graphMetric); }
+    if (action === "saveAnnotation") {
+      const anchors = annotationAnchorOptions();
+      const kind = document.querySelector("#annotationKind")?.value || "custom";
+      const metric = document.querySelector("#annotationMetric")?.value || "*";
+      const anchor = document.querySelector("#annotationAnchor")?.value || "visible-end";
+      const label = (document.querySelector("#annotationLabel")?.value || "").trim() || annotationDefaultLabel(kind);
+      const note = (document.querySelector("#annotationNote")?.value || "").trim();
+      const epochMs = anchors.find(item => item.id === anchor)?.epochMs || visibleHistory()[visibleHistory().length - 1]?.epochMs || Date.now();
+      state.annotations = [...state.annotations, { id: `annotation-${Date.now()}-${Math.random().toString(16).slice(2)}`, sourceName: state.sourceName, socketId: annotationSocketId(), metric, kind, label, note, anchor, epochMs, createdAt: Date.now() }];
+      saveAnnotations();
+      state.modal = null;
+      toast("Annotation saved", `${label} was attached to the current socket.`);
+      render();
+    }
+    if (action === "deleteAnnotation") {
+      state.annotations = state.annotations.filter(item => item.id !== event.currentTarget.dataset.annotationId);
+      saveAnnotations();
+      render();
+    }
     if (action === "zoomTailWindow") {
       const preset = event.currentTarget.dataset.dashboardPresetJump;
       state.view = "charts";
@@ -6219,6 +6708,10 @@ function bindEvents() {
   document.querySelectorAll("[data-context-action]").forEach(btn => btn.addEventListener("click", event => {
     const action = event.currentTarget.dataset.contextAction;
     const socket = selectedSocket();
+    if (action === "annotate") {
+      openAnnotationModal("*");
+      return;
+    }
     const suggestedMetric = socket ? state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric : null;
     const previousSelectedId = state.selectedId;
     applyContextAction(state, action, socket, { chartMetrics: chartMetricList(), suggestedMetric });
@@ -6611,22 +7104,28 @@ function bindEvents() {
     state.activeTab = "sockets";
     render();
   }));
-  document.querySelectorAll("[data-opt]").forEach(input => input.addEventListener("change", event => {
-    event.stopPropagation();
-    const opt = event.currentTarget.dataset.opt;
-    state.ssOptionHelpKey = opt;
-    state.command = toggleCommandOption(state.command, opt, event.currentTarget.checked);
-    render();
-  }));
+  document.querySelectorAll("[data-opt]").forEach(input => {
+    const stopOptionBubble = event => event.stopPropagation();
+    input.addEventListener("pointerdown", stopOptionBubble);
+    input.addEventListener("click", stopOptionBubble);
+    input.addEventListener("change", event => {
+      event.stopPropagation();
+      const opt = event.currentTarget.dataset.opt;
+      state.ssOptionHelpKey = opt;
+      state.command = toggleCommandOption(state.command, opt, event.currentTarget.checked);
+      renderKeepingWorkspacePosition();
+    });
+  });
   document.querySelectorAll("[data-ss-option-help]").forEach(button => {
     const showHelp = event => {
-      if (event.target?.closest("input[data-opt]")) return;
+      if (event.target?.closest("label.ss-option-check")) return;
       event.stopPropagation();
-      state.ssOptionHelpKey = event.currentTarget.dataset.ssOptionHelp;
+      const nextKey = event.currentTarget.dataset.ssOptionHelp;
+      if (!nextKey || nextKey === state.ssOptionHelpKey) return;
+      state.ssOptionHelpKey = nextKey;
       renderKeepingWorkspacePosition();
     };
     button.addEventListener("click", showHelp);
-    button.addEventListener("mouseenter", showHelp);
     button.addEventListener("focus", showHelp);
     button.addEventListener("keydown", event => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -6696,6 +7195,21 @@ function bindEvents() {
 }
 
 render();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
