@@ -329,6 +329,9 @@ let state = {
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
   correlation: { x: "rtt", y: "sendQ" },
   chartZoom: { start: 0, end: 1 },
+  chartZoomByMetric: {},
+  activeChartMetric: null,
+  activeChartAction: null,
   cache: {
     timestampRawVersion: -1,
     timestampBlocks: [],
@@ -2366,6 +2369,7 @@ function render() {
       ${state.view === "charts" ? `<main class="workspace wide">${renderChartsPage()}</main>` : ""}
       ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
     </div>
+    ${renderChartAnnotationMenu()}
     ${renderDrawer()}
     ${renderModal()}
   `;
@@ -2429,11 +2433,13 @@ function renderInvestigationContext() {
       <button data-context-action="conversations"><i class="ri-chat-3-line"></i> Conversations</button>
       <button class="icon" data-context-action="clear" title="Clear active context" aria-label="Clear active context">${icons.x}</button>
     </div>
-    ${topAnomaly ? `<div class="investigation-note ${topAnomaly.severity}">
-      <b>${escapeHtml(topAnomaly.severity)}</b>
-      <span>${escapeHtml(topAnomaly.title)}</span>
-    </div>` : ""}
-    ${(state.view === "analysis" || state.view === "charts") ? renderGuidedChecklistPanel(socket) : ""}
+    <div class="investigation-subrow">
+      ${topAnomaly ? `<div class="investigation-note ${topAnomaly.severity}">
+        <b>${escapeHtml(topAnomaly.severity)}</b>
+        <span>${escapeHtml(topAnomaly.title)}</span>
+      </div>` : ""}
+      ${(state.view === "analysis" || state.view === "charts") ? renderGuidedChecklistPanel(socket) : ""}
+    </div>
   </section>`;
 }
 
@@ -2827,14 +2833,14 @@ function renderChartsPage() {
           </label>` : ""}
         </div>
         <div class="chart-toolbar">
-          <div class="chart-tool-group">
-            <button data-action="zoomIn">${icons.zoomIn} Zoom in</button>
-            <button data-action="zoomOut">${icons.zoomOut} Zoom out</button>
+          <div class="chart-tool-group icon-tool-group">
+            <button class="icon-button" data-action="zoomIn" title="Zoom in" aria-label="Zoom in">${icons.zoomIn}</button>
+            <button class="icon-button" data-action="zoomOut" title="Zoom out" aria-label="Zoom out">${icons.zoomOut}</button>
           </div>
-          <div class="chart-tool-group">
-            <button data-action="panLeft">${icons.arrowLeft} Pan left</button>
-            <button data-action="panRight">${icons.arrowRight} Pan right</button>
-            <button data-action="resetZoom">${icons.reset} Reset zoom</button>
+          <div class="chart-tool-group icon-tool-group">
+            <button class="icon-button" data-action="panLeft" title="Pan left" aria-label="Pan left">${icons.arrowLeft}</button>
+            <button class="icon-button" data-action="panRight" title="Pan right" aria-label="Pan right">${icons.arrowRight}</button>
+            <button class="icon-button" data-action="resetZoom" title="Reset zoom" aria-label="Reset zoom">${icons.reset}</button>
           </div>
           <div class="chart-tool-group">
             <button data-action="thresholds">${icons.threshold} Thresholds</button>
@@ -2862,13 +2868,18 @@ function renderChartsPage() {
       </div>
     </section>
     <section class="chart-grid cols-${columns} density-${layout.density}">
-      ${orderedMetrics.map((m, index) => `<div class="panel chart-card" data-chart-card="${m}">
+      ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}" data-chart-card="${m}">
         <div class="panel-head">
           <div class="panel-title chart-title-wrap">
             <span>${escapeHtml(metricLabel(m))}</span>
             ${renderChartMetricTooltip(m)}
           </div>
-          <div class="col-tools">
+          <div class="col-tools chart-card-tools">
+            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "zoomIn" ? "active-chart-tool" : ""}" data-chart-zoom="zoomIn" data-chart-zoom-metric="${m}" title="Zoom in" aria-label="Zoom in ${escapeHtml(metricLabel(m))}">${icons.zoomIn}</button>
+            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "zoomOut" ? "active-chart-tool" : ""}" data-chart-zoom="zoomOut" data-chart-zoom-metric="${m}" title="Zoom out" aria-label="Zoom out ${escapeHtml(metricLabel(m))}">${icons.zoomOut}</button>
+            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "panLeft" ? "active-chart-tool" : ""}" data-chart-zoom="panLeft" data-chart-zoom-metric="${m}" title="Pan left" aria-label="Pan left ${escapeHtml(metricLabel(m))}">${icons.arrowLeft}</button>
+            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "panRight" ? "active-chart-tool" : ""}" data-chart-zoom="panRight" data-chart-zoom-metric="${m}" title="Pan right" aria-label="Pan right ${escapeHtml(metricLabel(m))}">${icons.arrowRight}</button>
+            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "resetZoom" ? "active-chart-tool" : ""}" data-chart-zoom="resetZoom" data-chart-zoom-metric="${m}" title="Reset zoom" aria-label="Reset zoom ${escapeHtml(metricLabel(m))}">${icons.reset}</button>
             <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
             ${renderChartMoveMenu(m)}
           </div>
@@ -2974,22 +2985,7 @@ function renderDashboardStudio() {
 }
 function renderTailLatencyLensPanel() {
   const lens = tailLatencyLens();
-  if (!hasRealTimestampHistory()) {
-    return `<section class="tail-latency-lens">
-      <article class="guide-card">
-        <strong>Tail latency lens</strong>
-        <p>Timestamped snapshots are required to isolate short tail windows. Re-import a sampled capture with timestamps to unlock P99/P99.9 and worst-window analysis.</p>
-      </article>
-    </section>`;
-  }
-  if (!lens) {
-    return `<section class="tail-latency-lens">
-      <article class="guide-card">
-        <strong>Tail latency lens</strong>
-        <p>No visible extreme window stands out above the current tail thresholds on this socket.</p>
-      </article>
-    </section>`;
-  }
+  if (!hasRealTimestampHistory() || !lens) return "";
   const rttStats = lens.stats.rtt;
   const rtoStats = lens.stats.rto;
   return `<section class="tail-latency-lens">
@@ -4047,11 +4043,13 @@ function renderChartAnnotationMenu() {
   if (!state.chartAnnotationMenuContext || !state.chartAnnotationMenuPos) return "";
   const context = state.chartAnnotationMenuContext;
   const pos = `style="left:${state.chartAnnotationMenuPos.left}px;top:${state.chartAnnotationMenuPos.top}px"`;
-  return `<div class="row-menu chart-context-menu open" ${pos} role="menu" aria-label="Chart context menu">
-    <button data-chart-annotation-menu="annotate" role="menuitem">
-      ${icons.note}
-      <span>Annotate here</span>
-      <small>${escapeHtml(metricLabel(context.metric))} at ${escapeHtml(timeLabel(context.row?.t || 0, context.row?.epochMs))}</small>
+  return `<div class="chart-context-menu open" ${pos} role="menu" aria-label="Chart context menu">
+    <button data-chart-annotation-menu="annotate" role="menuitem" title="${escapeHtml(metricLabel(context.metric))} at ${escapeHtml(timeLabel(context.row?.t || 0, context.row?.epochMs))}">
+      <span class="chart-context-menu-icon">${icons.note}</span>
+      <span class="chart-context-menu-copy">
+        <strong>Annotate here</strong>
+        <small>${escapeHtml(metricLabel(context.metric))} - ${escapeHtml(timeLabel(context.row?.t || 0, context.row?.epochMs))}</small>
+      </span>
     </button>
   </div>`;
 }
@@ -5034,13 +5032,14 @@ function chartResolutionLabel() {
   return `${formatNumber(visible)} visible point(s), ${mode}`;
 }
 
-function visibleHistory() {
+function visibleHistory(metric = null) {
   const rows = state.history.length ? state.history : [];
   if (rows.length <= 2) return rows;
-  const cacheKey = `${state.dataVersion}|${state.selectedId}|${rows.length}|${rows[0]?.epochMs || 0}|${rows[rows.length - 1]?.epochMs || 0}|${state.chartZoom.start}|${state.chartZoom.end}`;
+  const zoom = chartZoomFor(metric);
+  const cacheKey = `${state.dataVersion}|${state.selectedId}|${metric || "shared"}|${rows.length}|${rows[0]?.epochMs || 0}|${rows[rows.length - 1]?.epochMs || 0}|${zoom.start}|${zoom.end}`;
   if (state.cache.visibleHistoryKey === cacheKey && state.cache.visibleHistoryRows) return state.cache.visibleHistoryRows;
-  const start = Math.floor(state.chartZoom.start * (rows.length - 1));
-  const end = Math.max(start + 1, Math.ceil(state.chartZoom.end * (rows.length - 1)));
+  const start = Math.floor(zoom.start * (rows.length - 1));
+  const end = Math.max(start + 1, Math.ceil(zoom.end * (rows.length - 1)));
   const visibleRows = rows.slice(start, end + 1);
   state.cache.visibleHistoryKey = cacheKey;
   state.cache.visibleHistoryRows = visibleRows;
@@ -5154,9 +5153,36 @@ function zonedDateTimeToEpoch(value) {
   return utcGuess - timeZoneOffsetMs(zone, firstPass);
 }
 
-function setZoom(start, end) {
-  state.chartZoom.start = Math.max(0, Math.min(0.98, start));
-  state.chartZoom.end = Math.max(state.chartZoom.start + 0.02, Math.min(1, end));
+function chartZoomFor(metric = null) {
+  if (!metric) return state.chartZoom;
+  return state.chartZoomByMetric?.[metric] || state.chartZoom;
+}
+function setZoom(start, end, metric = null) {
+  const target = metric
+    ? (state.chartZoomByMetric[metric] ||= { start: state.chartZoom.start, end: state.chartZoom.end })
+    : state.chartZoom;
+  target.start = Math.max(0, Math.min(0.98, start));
+  target.end = Math.max(target.start + 0.02, Math.min(1, end));
+  state.cache.visibleHistoryKey = "";
+  state.cache.visibleHistoryRows = null;
+}
+function applyChartZoomAction(action, metric = null) {
+  state.activeChartMetric = metric || state.prefs.graphMetric;
+  state.activeChartAction = action;
+  if (action === "resetZoom") {
+    setZoom(0, 1, metric);
+    return;
+  }
+  const zoom = chartZoomFor(metric);
+  const width = zoom.end - zoom.start;
+  if (action === "zoomIn" || action === "zoomOut") {
+    const center = zoom.start + width / 2;
+    const next = action === "zoomIn" ? width * 0.62 : Math.min(1, width / 0.62);
+    setZoom(center - next / 2, center + next / 2, metric);
+    return;
+  }
+  const delta = width * 0.25 * (action === "panLeft" ? -1 : 1);
+  setZoom(zoom.start + delta, zoom.end + delta, metric);
 }
 
 function orderedChartMetrics() {
@@ -5379,6 +5405,41 @@ function chartAxisDomain(metric, values, thresholds = []) {
   const max = rawMax + padding;
   return { min, max, span: Math.max(1, max - min), zoomed: true };
 }
+function renderChartThresholdOverlay(items, pad, w, h) {
+  const labels = items
+    .filter(item => item.show)
+    .map(item => ({ ...item, lineY: item.y, label: `${item.name} ${item.formatted}` }))
+    .sort((a, b) => a.lineY - b.lineY);
+  if (!labels.length) return "";
+  const top = pad.t + 12;
+  const bottom = h - pad.b - 10;
+  const gap = 16;
+  for (const label of labels) label.labelY = Math.max(top, Math.min(bottom, label.lineY - 6));
+  for (let i = 1; i < labels.length; i += 1) {
+    if (labels[i].labelY - labels[i - 1].labelY < gap) labels[i].labelY = labels[i - 1].labelY + gap;
+  }
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    if (labels[i].labelY > bottom) labels[i].labelY = bottom;
+    if (i > 0 && labels[i].labelY - labels[i - 1].labelY < gap) labels[i - 1].labelY = labels[i].labelY - gap;
+  }
+  const labelRight = w - pad.r - 6;
+  return `<g class="threshold-overlay">
+    ${labels.map(label => {
+      const width = Math.min(150, Math.max(76, label.label.length * 6.2 + 14));
+      const x = labelRight - width;
+      const y = label.labelY - 10;
+      const connector = Math.abs(label.labelY - label.lineY) > 7
+        ? `<path d="M${x - 5},${label.labelY - 3} C${x - 18},${label.labelY - 3} ${x - 18},${label.lineY} ${labelRight - 4},${label.lineY}" fill="none" stroke="${label.color}" stroke-width="1" opacity=".52"/>`
+        : "";
+      return `<g>
+        <line x1="${pad.l}" x2="${w - pad.r}" y1="${label.lineY}" y2="${label.lineY}" stroke="${label.color}" stroke-dasharray="${label.dash}" opacity=".82"/>
+        ${connector}
+        <rect x="${x}" y="${y}" width="${width}" height="16" rx="7" fill="#07101a" stroke="${label.color}" opacity=".92"/>
+        <text x="${labelRight - 7}" y="${label.labelY + 2}" text-anchor="end" fill="${label.color}" font-size="10" font-weight="700">${escapeHtml(label.label)}</text>
+      </g>`;
+    }).join("")}
+  </g>`;
+}
 function drawChart() {
   const svg = document.querySelector("#chart");
   if (!svg) return;
@@ -5388,7 +5449,7 @@ function drawChart() {
 function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshold = false) {
   const w = svg.clientWidth || 640;
   const h = svg.clientHeight || 300;
-  const visibleData = visibleHistory();
+  const visibleData = visibleHistory(metric);
   const renderData = renderableHistory(visibleData, metric, style, w);
   const data = renderData.rows;
   const values = data.map(d => d[metric] || 0);
@@ -5433,6 +5494,10 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger);
   const warnY = showWarnLine ? y(t.warn) : 0;
   const dangerY = showDangerLine ? y(t.danger) : 0;
+  const thresholdOverlay = renderChartThresholdOverlay([
+    { show: showWarnLine, name: "warn", formatted: formatMetricValue(metric, t.warn), y: warnY, color: "#ff9f43", dash: "7 6" },
+    { show: showDangerLine, name: "danger", formatted: formatMetricValue(metric, t.danger), y: dangerY, color: "#ff5c77", dash: "4 4" }
+  ], pad, w, h);
   const microburstBand = chartMicroburstBand(microburst, data, pad, w, h, firstTime, lastTime);
   const annotationOverlay = chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime);
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
@@ -5449,8 +5514,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${tick.label}</text>`).join("")}
     ${microburstBand}
     ${annotationOverlay}
-    ${showWarnLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${warnY}" y2="${warnY}" stroke="#ff9f43" stroke-dasharray="7 6"/><text x="${w - pad.r - 6}" y="${warnY - 6}" text-anchor="end" fill="#ff9f43" font-size="11">warn ${formatMetricValue(metric, t.warn)}</text>` : ""}
-    ${showDangerLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${dangerY}" y2="${dangerY}" stroke="#ff5c77" stroke-dasharray="4 4"/><text x="${w - pad.r - 6}" y="${dangerY - 6}" text-anchor="end" fill="#ff5c77" font-size="11">danger ${formatMetricValue(metric, t.danger)}</text>` : ""}
+    ${thresholdOverlay}
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${axis.zoomed ? " - zoomed Y" : ""}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(metric)} ${metricUnit(metric) ? `(${metricUnit(metric)})` : ""}</text>
@@ -5529,7 +5593,7 @@ function svgPoint(svg, event) {
 function chartPointerContext(svg, event) {
   const metric = svg.dataset.metric || state.prefs.graphMetric;
   const renderStyle = svg.dataset.renderStyle || state.prefs.graphStyle;
-  const rows = renderableHistory(visibleHistory(), metric, renderStyle, svg.clientWidth || 640).rows;
+  const rows = renderableHistory(visibleHistory(metric), metric, renderStyle, svg.clientWidth || 640).rows;
   if (!rows.length) return null;
   const left = Number(svg.dataset.plotLeft);
   const right = Number(svg.dataset.plotRight);
@@ -5595,7 +5659,7 @@ function attachChartInteractions(svg) {
     const pct = (x - b.left) / Math.max(1, b.right - b.left);
     const metric = svg.dataset.metric || state.prefs.graphMetric;
     const renderStyle = svg.dataset.renderStyle || state.prefs.graphStyle;
-    const rows = renderableHistory(visibleHistory(), metric, renderStyle, svg.clientWidth || 640).rows;
+    const rows = renderableHistory(visibleHistory(metric), metric, renderStyle, svg.clientWidth || 640).rows;
     const row = nearestChartRow(rows, pct);
     const value = row[metric] || 0;
     const tooltipOpacity = chartTooltipOpacity();
@@ -5631,10 +5695,12 @@ function attachChartInteractions(svg) {
     if (span > 12) {
       const a = (Math.min(startX, endX) - b.left) / (b.right - b.left);
       const z = (Math.max(startX, endX) - b.left) / (b.right - b.left);
-      const currentStart = state.chartZoom.start;
-      const currentWidth = state.chartZoom.end - state.chartZoom.start;
-      setZoom(currentStart + a * currentWidth, currentStart + z * currentWidth);
-      render();
+      const metric = svg.dataset.metric || null;
+      const zoom = chartZoomFor(metric);
+      const currentStart = zoom.start;
+      const currentWidth = zoom.end - zoom.start;
+      setZoom(currentStart + a * currentWidth, currentStart + z * currentWidth, metric);
+      renderKeepingWorkspacePosition();
     } else {
       drawOverlay(endX);
     }
@@ -6519,14 +6585,21 @@ async function importFile(file) {
     preFilter: state.preImportFilters.enabled ? { ...state.preImportFilters } : null,
     onProgress(update, options = {}) {
       state.raw = update.raw;
-      state.importStatus = update.status;
+      const isTimelineImport = hasTimestampedRawData();
+      const visibleSockets = isTimelineImport ? aggregateParsedSocketsByKey(update.sockets) : update.sockets;
+      state.importStatus = update.status && isTimelineImport && visibleSockets.length !== update.sockets.length
+        ? {
+          ...update.status,
+          detail: `${update.status.detail} ${formatNumber(visibleSockets.length)} active sockets after timeline aggregation.`
+        }
+        : update.status;
       if (options.render !== false) {
         resetDerivedCaches({ raw: true });
-        state.sockets = hasTimestampedRawData() ? aggregateParsedSocketsByKey(update.sockets) : update.sockets;
+        state.sockets = visibleSockets;
         recomputeFromSockets();
         render();
       } else {
-        state.sockets = update.sockets;
+        state.sockets = visibleSockets;
       }
     }
   });
@@ -6639,6 +6712,13 @@ function handleGlobalKeydown(event) {
 function bindEvents() {
   document.onkeydown = handleGlobalKeydown;
   bindSmartChartTooltips();
+  document.querySelectorAll("[data-chart-zoom]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      event.preventDefault();
+      applyChartZoomAction(event.currentTarget.dataset.chartZoom, event.currentTarget.dataset.chartZoomMetric);
+      renderKeepingWorkspacePosition();
+    });
+  });
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
     const action = event.currentTarget.dataset.action;
     if (action === "parse") {
@@ -6895,27 +6975,10 @@ function bindEvents() {
         render();
       });
     }
-    if (action === "zoomIn") {
-      const width = state.chartZoom.end - state.chartZoom.start;
-      const center = state.chartZoom.start + width / 2;
-      const next = width * 0.62;
-      setZoom(center - next / 2, center + next / 2);
-      render();
+    if (action === "zoomIn" || action === "zoomOut" || action === "panLeft" || action === "panRight" || action === "resetZoom") {
+      applyChartZoomAction(action);
+      renderKeepingWorkspacePosition();
     }
-    if (action === "zoomOut") {
-      const width = state.chartZoom.end - state.chartZoom.start;
-      const center = state.chartZoom.start + width / 2;
-      const next = Math.min(1, width / 0.62);
-      setZoom(center - next / 2, center + next / 2);
-      render();
-    }
-    if (action === "panLeft" || action === "panRight") {
-      const width = state.chartZoom.end - state.chartZoom.start;
-      const delta = width * 0.25 * (action === "panLeft" ? -1 : 1);
-      setZoom(state.chartZoom.start + delta, state.chartZoom.end + delta);
-      render();
-    }
-    if (action === "resetZoom") { setZoom(0, 1); renderKeepingWorkspacePosition(); }
     if (action === "saveCharts") { saveChartsPng().catch(error => toast("Export failed", error.message || "PNG export failed.", "danger")); }
     if (action === "saveThresholds") {
       document.querySelectorAll("[data-threshold]").forEach(input => {

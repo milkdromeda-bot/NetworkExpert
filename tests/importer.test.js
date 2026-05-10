@@ -59,21 +59,25 @@ test("pre-import protocol filter keeps tcp6 when tcp is requested", async () => 
   assert.equal(result.sockets[0].family, "tcp6");
 });
 
-test("streaming import reports progressive updates for larger text files", async () => {
+test("streaming import reports progressive observation updates for larger text files", async () => {
   const line = "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1\n";
   const raw = line.repeat(3000);
   let progressCalls = 0;
+  let lastDetail = "";
 
   const result = await importSocketFile(textFile("large.log", raw), {
     formatNumber: String,
     preFilter: null,
-    onProgress() {
+    onProgress(update) {
       progressCalls += 1;
+      lastDetail = update.status?.detail || lastDetail;
     }
   });
 
   assert.equal(result.sockets.length, 3000);
   assert.ok(progressCalls >= 1);
+  assert.match(lastDetail, /socket observations scanned/);
+  assert.doesNotMatch(lastDetail, /sockets kept/);
 });
 
 test("pre-import state filter keeps only matching socket states", async () => {

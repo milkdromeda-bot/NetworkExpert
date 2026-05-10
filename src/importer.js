@@ -101,7 +101,7 @@ async function importTextStream(stream, totalBytes, label, { formatNumber, onPro
         sockets,
         status: {
           title: "Streaming parse",
-          detail: `${label}: ${formatNumber(sockets.length)} sockets kept, ${formatNumber(readBytes)} bytes read${activePreFilter ? " with pre-import filters" : ""}.`,
+          detail: `${label}: ${formatNumber(sockets.length)} socket observations scanned, ${formatNumber(readBytes)} bytes read${activePreFilter ? " with pre-import filters" : ""}.`,
           progress: totalBytes ? Math.min(99, Math.round((readBytes / totalBytes) * 100)) : Math.min(99, chunks)
         }
       }, { render: shouldRender });
