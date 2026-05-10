@@ -4918,3 +4918,19 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   0%, 100% { filter: drop-shadow(0 0 0 rgba(57, 214, 214, 0)); opacity: .8; }
   45% { filter: drop-shadow(0 0 8px rgba(57, 214, 214, .9)); opacity: 1; }
 }
+.annotation-overlay-item {
+  mix-blend-mode: screen;
+}
+.annotation-item footer .danger.subtle {
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: rgba(255, 92, 119, .42);
+  color: #ff9aad;
+  background: rgba(91, 22, 36, .28);
+}
+.annotation-item footer .danger.subtle:hover,
+.annotation-item footer .danger.subtle:focus {
+  border-color: rgba(255, 92, 119, .74);
+  color: #ffd5dd;
+  background: rgba(91, 22, 36, .44);
+}

@@ -17,6 +17,7 @@ import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-sum
 import { commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
+import { applyChartZoomOperation, clampZoomRange, zoomForMetric } from "./chart-zoom.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -1195,10 +1196,12 @@ function chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime) {
     const boxX = Math.min(Math.max(x + 8, pad.l + 8), Math.max(pad.l + 8, w - pad.r - width - 6));
     const boxY = pad.t + 10 + (index % 3) * 26;
     return `
-      <line x1="${x}" x2="${x}" y1="${pad.t}" y2="${h - pad.b}" stroke="${color}" stroke-width="1.6" stroke-dasharray="6 4" opacity=".92"/>
-      <circle cx="${x}" cy="${pad.t + 8}" r="4" fill="${color}"/>
-      <rect x="${boxX}" y="${boxY}" width="${width}" height="20" rx="6" fill="#081019" stroke="${color}"/>
-      <text x="${boxX + 8}" y="${boxY + 14}" fill="${color}" font-size="11" font-weight="700">${escapeHtml(label)}</text>
+      <g class="annotation-overlay-item" opacity=".8" pointer-events="none">
+        <line x1="${x}" x2="${x}" y1="${pad.t}" y2="${h - pad.b}" stroke="${color}" stroke-width="1.8" stroke-dasharray="6 4"/>
+        <circle cx="${x}" cy="${pad.t + 8}" r="4.5" fill="${color}"/>
+        <rect x="${boxX}" y="${boxY}" width="${width}" height="20" rx="6" fill="#081019" stroke="${color}"/>
+        <text x="${boxX + 8}" y="${boxY + 14}" fill="${color}" font-size="11" font-weight="800">${escapeHtml(label)}</text>
+      </g>
     `;
   }).join("");
 }
@@ -4558,7 +4561,7 @@ function renderAnnotationModal() {
     </section>
     <section class="annotation-history">
       <div class="annotation-history-head"><strong>Current annotations</strong><span class="hint">${items.length} item(s) on this socket and source</span></div>
-      ${items.length ? `<div class="annotation-list">${items.slice().reverse().map(item => `<article class="annotation-item"><header><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(annotationTypeLabel(item.kind))}</span></header><small>${escapeHtml(item.metric === "*" ? "all charts" : metricLabel(item.metric))} � ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</small>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}<footer><button data-action="deleteAnnotation" data-annotation-id="${escapeHtml(item.id)}">${icons.trash} Delete</button></footer></article>`).join("")}</div>` : `<div class="empty">No annotation yet for this socket.</div>`}
+      ${items.length ? `<div class="annotation-list">${items.slice().reverse().map(item => `<article class="annotation-item"><header><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(annotationTypeLabel(item.kind))}</span></header><small>${escapeHtml(item.metric === "*" ? "all charts" : metricLabel(item.metric))} � ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</small>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}<footer><button class="danger subtle" data-action="deleteAnnotation" data-annotation-id="${escapeHtml(item.id)}" title="Delete this annotation">${icons.trash} Delete</button></footer></article>`).join("")}</div>` : `<div class="empty">No annotation yet for this socket.</div>`}
     </section>
   </div>`;
 }
@@ -5154,35 +5157,28 @@ function zonedDateTimeToEpoch(value) {
 }
 
 function chartZoomFor(metric = null) {
-  if (!metric) return state.chartZoom;
-  return state.chartZoomByMetric?.[metric] || state.chartZoom;
+  return zoomForMetric(state.chartZoomByMetric, state.chartZoom, metric);
 }
 function setZoom(start, end, metric = null) {
-  const target = metric
-    ? (state.chartZoomByMetric[metric] ||= { start: state.chartZoom.start, end: state.chartZoom.end })
-    : state.chartZoom;
-  target.start = Math.max(0, Math.min(0.98, start));
-  target.end = Math.max(target.start + 0.02, Math.min(1, end));
+  const next = clampZoomRange(start, end);
+  if (metric) state.chartZoomByMetric[metric] = next;
+  else state.chartZoom = next;
   state.cache.visibleHistoryKey = "";
   state.cache.visibleHistoryRows = null;
 }
 function applyChartZoomAction(action, metric = null) {
-  state.activeChartMetric = metric || state.prefs.graphMetric;
-  state.activeChartAction = action;
-  if (action === "resetZoom") {
-    setZoom(0, 1, metric);
-    return;
-  }
-  const zoom = chartZoomFor(metric);
-  const width = zoom.end - zoom.start;
-  if (action === "zoomIn" || action === "zoomOut") {
-    const center = zoom.start + width / 2;
-    const next = action === "zoomIn" ? width * 0.62 : Math.min(1, width / 0.62);
-    setZoom(center - next / 2, center + next / 2, metric);
-    return;
-  }
-  const delta = width * 0.25 * (action === "panLeft" ? -1 : 1);
-  setZoom(zoom.start + delta, zoom.end + delta, metric);
+  const result = applyChartZoomOperation({
+    action,
+    metric,
+    sharedZoom: state.chartZoom,
+    chartZoomByMetric: state.chartZoomByMetric
+  });
+  state.chartZoom = result.sharedZoom;
+  state.chartZoomByMetric = result.chartZoomByMetric;
+  state.activeChartMetric = result.activeChartMetric || metric || state.prefs.graphMetric;
+  state.activeChartAction = result.activeChartAction;
+  state.cache.visibleHistoryKey = "";
+  state.cache.visibleHistoryRows = null;
 }
 
 function orderedChartMetrics() {
@@ -5513,7 +5509,6 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     ${yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, v)}</text>`).join("")}
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${tick.label}</text>`).join("")}
     ${microburstBand}
-    ${annotationOverlay}
     ${thresholdOverlay}
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${axis.zoomed ? " - zoomed Y" : ""}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
@@ -5522,6 +5517,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     ${style === "bars" ? bars : ""}
     ${style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
     ${style === "points" || style === "xy" ? points : ""}
+    ${annotationOverlay}
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <g class="crosshair-layer" data-crosshair-layer="1" pointer-events="none"></g>
@@ -5551,6 +5547,37 @@ function scheduleMultiChartDraw() {
   requestAnimationFrame(drawSlice);
 }
 
+function chartRenderStyle() {
+  return state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle;
+}
+
+function chartCardForMetric(metric) {
+  return [...document.querySelectorAll("[data-chart-card]")].find(card => card.dataset.chartCard === metric) || null;
+}
+
+function updateChartActiveChrome(metric, action) {
+  document.querySelectorAll(".chart-card.active-chart").forEach(card => card.classList.remove("active-chart"));
+  document.querySelectorAll(".chart-card-tools .active-chart-tool").forEach(button => button.classList.remove("active-chart-tool"));
+  const card = chartCardForMetric(metric);
+  if (!card) return;
+  card.classList.add("active-chart");
+  const button = [...card.querySelectorAll("[data-chart-zoom]")].find(item => item.dataset.chartZoom === action);
+  if (button) {
+    button.classList.remove("active-chart-tool");
+    void button.offsetWidth;
+    button.classList.add("active-chart-tool");
+  }
+}
+
+function redrawChartCardMetric(metric, action = state.activeChartAction) {
+  const card = chartCardForMetric(metric);
+  const svg = card?.querySelector("[data-mini-chart]");
+  if (!svg?.isConnected) return false;
+  state.chartRenderToken += 1;
+  drawChartInto(svg, metric, chartRenderStyle(), true);
+  updateChartActiveChrome(metric, action);
+  return true;
+}
 function drawCorrelation() {
   const svg = document.querySelector("#correlationChart");
   if (!svg) return;
@@ -6715,8 +6742,11 @@ function bindEvents() {
   document.querySelectorAll("[data-chart-zoom]").forEach(btn => {
     btn.addEventListener("click", event => {
       event.preventDefault();
-      applyChartZoomAction(event.currentTarget.dataset.chartZoom, event.currentTarget.dataset.chartZoomMetric);
-      renderKeepingWorkspacePosition();
+      event.stopPropagation();
+      const action = event.currentTarget.dataset.chartZoom;
+      const metric = event.currentTarget.dataset.chartZoomMetric;
+      applyChartZoomAction(action, metric);
+      if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
     });
   });
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
@@ -6817,12 +6847,14 @@ function bindEvents() {
       state.modal = null;
       state.annotationContext = null;
       toast("Annotation saved", `${label} was attached to the current socket.`);
-      render();
+      renderKeepingWorkspacePosition();
     }
     if (action === "deleteAnnotation") {
+      const annotation = state.annotations.find(item => item.id === event.currentTarget.dataset.annotationId);
       state.annotations = state.annotations.filter(item => item.id !== event.currentTarget.dataset.annotationId);
       saveAnnotations();
-      render();
+      toast("Annotation deleted", `${annotation?.label || "Annotation"} was removed from this socket.`);
+      renderKeepingWorkspacePosition();
     }
     if (action === "zoomTailWindow") {
       const preset = event.currentTarget.dataset.dashboardPresetJump;
