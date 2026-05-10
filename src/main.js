@@ -19,6 +19,7 @@ import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annota
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
 import { applyChartZoomOperation, clampZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "./chart-zoom.js";
 import { applicationServiceSortKey, inferApplicationService } from "./services.js";
+import { TABLE_STATE_STORAGE_KEY, normalizeTableState, resetTableColumns, resetTableSort, setTableColumnVisibility, tableColumnControlModels, tableStateSnapshot, toggleTableColumnPin, toggleTableColumnVisibility } from "./table-state.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
@@ -52,6 +53,41 @@ const TABLE_COLUMNS = [
 
 function defaultTableColumns() {
   return TABLE_COLUMNS.filter(col => col.defaultVisible !== false).map(col => col.key);
+}
+
+function defaultTableFilters() {
+  return {
+    text: "",
+    risk: "all",
+    state: "all",
+    family: "all",
+    minRecvQ: "",
+    minSendQ: "",
+    minRtt: "",
+    srcIp: "",
+    dstIp: "",
+    srcPort: "",
+    dstPort: "",
+    process: "",
+    onlyAnomalies: false
+  };
+}
+
+function defaultTableState(pageSize = prefsDefault.defaultPageSize) {
+  return {
+    page: 1,
+    pageSize,
+    sortKey: "risk",
+    sortDir: "desc",
+    pinned: ["risk", "state", "local"],
+    visible: defaultTableColumns(),
+    order: TABLE_COLUMNS.map(c => c.key),
+    filters: defaultTableFilters()
+  };
+}
+
+function tableDefaults() {
+  return defaultTableState(state?.prefs?.defaultPageSize || prefsDefault.defaultPageSize);
 }
 
 const EXPERT_DEFAULT_THRESHOLDS = {
@@ -321,6 +357,8 @@ let state = {
   openMenuId: null,
   openExportMenu: null,
   openExportMenuPos: null,
+  openTableSettings: false,
+  openTableSettingsPos: null,
   openDashboardPresetMenu: false,
   dashboardPresetBeforeOpen: null,
   openConversationInsightKey: null,
@@ -352,30 +390,7 @@ let state = {
     tailLatencySummary: null
   },
   thresholds: cloneThresholds(),
-  table: {
-    page: 1,
-    pageSize: prefsDefault.defaultPageSize,
-    sortKey: "risk",
-    sortDir: "desc",
-    pinned: ["risk", "state", "local"],
-    visible: defaultTableColumns(),
-    order: TABLE_COLUMNS.map(c => c.key),
-    filters: {
-      text: "",
-      risk: "all",
-      state: "all",
-      family: "all",
-      minRecvQ: "",
-      minSendQ: "",
-      minRtt: "",
-      srcIp: "",
-      dstIp: "",
-      srcPort: "",
-      dstPort: "",
-      process: "",
-      onlyAnomalies: false
-    }
-  }
+  table: loadTableState(initialPrefs.defaultPageSize)
 };
 
 applyDefaultDashboardPreset();
@@ -408,6 +423,9 @@ const icons = {
   drag: `<i class="ri-draggable"></i>`,
   trash: `<i class="ri-delete-bin-6-line"></i>`,
   clear: `<i class="ri-eraser-line"></i>`,
+  sortAsc: `<i class="ri-sort-asc"></i>`,
+  sortDesc: `<i class="ri-sort-desc"></i>`,
+  sortNeutral: `<i class="ri-filter-2-line"></i>`,
   brain: `<i class="ri-brain-line"></i>`,
   columns: `<i class="ri-table-line"></i>`,
   copy: `<i class="ri-file-copy-line"></i>`,
@@ -448,6 +466,10 @@ function chartTooltipOpacity() {
   return clampChartTooltipOpacity(state.prefs.chartLayout?.tooltipOpacity);
 }
 
+function clampValue(value, min, max) {
+  return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
 function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("networkExpertPrefs") || "{}");
@@ -468,6 +490,23 @@ function savePrefs() {
   state.prefs.chartLayout.tooltipOpacity = chartTooltipOpacity();
   state.prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(state.prefs.defaultDashboardPreset);
   localStorage.setItem("networkExpertPrefs", JSON.stringify(state.prefs));
+}
+
+function loadTableState(pageSize = prefsDefault.defaultPageSize) {
+  const defaults = defaultTableState(pageSize);
+  try {
+    return normalizeTableState({
+      ...defaults,
+      ...JSON.parse(localStorage.getItem(TABLE_STATE_STORAGE_KEY) || "{}")
+    }, TABLE_COLUMNS, defaults);
+  } catch {
+    return normalizeTableState(defaults, TABLE_COLUMNS, defaults);
+  }
+}
+
+function saveTableState() {
+  state.table = normalizeTableState(state.table, TABLE_COLUMNS, tableDefaults());
+  localStorage.setItem(TABLE_STATE_STORAGE_KEY, JSON.stringify(tableStateSnapshot(state.table)));
 }
 
 function loadAnnotations() {
@@ -1577,6 +1616,7 @@ function applyTableLayout(profile) {
   state.table.sortDir = profile.sortDir || state.table.sortDir;
   state.table.pageSize = Number(profile.pageSize || state.table.pageSize);
   state.table.page = 1;
+  saveTableState();
 }
 
 function dashboardSnapshot(name) {
@@ -2654,23 +2694,39 @@ function renderExecutiveSummary() {
     </div>
   </section>`;
 }
-function renderKeepingWorkspacePosition() {
+function captureWorkspacePosition() {
   const workspace = document.querySelector(".workspace");
-  const scrollTop = workspace?.scrollTop || 0;
-  const scrollLeft = workspace?.scrollLeft || 0;
-  const windowScrollX = window.scrollX || 0;
-  const windowScrollY = window.scrollY || 0;
-  const restore = () => {
-    const nextWorkspace = document.querySelector(".workspace");
-    if (nextWorkspace) {
-      nextWorkspace.scrollTop = scrollTop;
-      nextWorkspace.scrollLeft = scrollLeft;
-    }
-    window.scrollTo(windowScrollX, windowScrollY);
+  return {
+    scrollTop: workspace?.scrollTop || 0,
+    scrollLeft: workspace?.scrollLeft || 0,
+    windowScrollX: window.scrollX || 0,
+    windowScrollY: window.scrollY || 0
   };
+}
+
+function restoreWorkspacePosition(snapshot) {
+  const nextWorkspace = document.querySelector(".workspace");
+  if (nextWorkspace) {
+    nextWorkspace.scrollTop = snapshot.scrollTop;
+    nextWorkspace.scrollLeft = snapshot.scrollLeft;
+  }
+  window.scrollTo(snapshot.windowScrollX, snapshot.windowScrollY);
+}
+
+function renderKeepingWorkspacePosition() {
+  const snapshot = captureWorkspacePosition();
+  const active = document.activeElement;
+  if (active && typeof active.blur === "function" && active.closest?.(".modal")) active.blur();
+  const restore = () => restoreWorkspacePosition(snapshot);
   render();
   restore();
-  requestAnimationFrame(restore);
+  queueMicrotask(restore);
+  requestAnimationFrame(() => {
+    restore();
+    requestAnimationFrame(restore);
+  });
+  setTimeout(restore, 0);
+  setTimeout(restore, 80);
 }
 
 function renderKeepingModalPosition() {
@@ -3285,15 +3341,77 @@ function renderSocketTable() {
   const pager = renderPagination(allRows.length, page.totalPages, page.start);
   const topPager = ["top", "both"].includes(state.prefs.paginationPosition) ? pager : "";
   const bottomPager = ["bottom", "both"].includes(state.prefs.paginationPosition) ? pager : "";
-  return html`${renderGridControls(allRows.length)}${topPager}<div class="table-wrap"><table>
-    <thead><tr><th>Actions</th>${columns.map(col => renderHeader(col)).join("")}</tr></thead>
+  return html`${renderGridControls(allRows.length)}${topPager}<div class="table-wrap table-wrap--settings"><table>
+    <thead><tr><th class="action-head">Actions</th>${columns.map(col => renderHeader(col)).join("")}<th class="table-settings-head">${renderTableSettingsTrigger()}</th></tr></thead>
     <tbody>
       ${page.rows.map(s => `<tr data-socket="${escapeHtml(s.id)}" class="${s.id === state.selectedId ? "selected" : ""}">
         <td>${renderRowActions(s)}</td>
         ${columns.map(col => `<td class="${state.table.pinned.includes(col.key) ? "pinned-cell" : ""}">${col.render(s)}</td>`).join("")}
+        <td class="table-settings-cell"></td>
       </tr>`).join("")}
     </tbody>
-  </table></div>${bottomPager}`;
+  </table>${renderTableSettingsMenu()}</div>${bottomPager}`;
+}
+
+function renderTableSettingsTrigger() {
+  return `<button class="icon table-settings-trigger" data-table-settings-menu title="Table columns and sorting" aria-label="Table columns and sorting">${icons.settings}</button>`;
+}
+
+function renderTableSettingsContent({ includeHead = true } = {}) {
+  const visibleCount = state.table.visible.length;
+  const controls = tableColumnControlModels(state.table, TABLE_COLUMNS, tableDefaults());
+  return `${includeHead ? `<header class="table-settings-menu-head">
+      <strong>${icons.columns} Columns</strong>
+      <span>${formatNumber(visibleCount)} visible</span>
+    </header>` : `<div class="table-settings-summary"><strong>${formatNumber(visibleCount)} visible columns</strong></div>`}
+    <div class="table-settings-actions">
+      <button data-table-menu-action="clearSort">${icons.sortNeutral} Reset sort</button>
+      <button data-table-menu-action="resetColumns">${icons.reset} Reset columns</button>
+    </div>
+    <div class="table-settings-column-list">
+      ${controls.map(({ key, label, visible, pinned }) => {
+        return `<div class="table-column-toggle-row ${visible ? "active" : ""}">
+          <button type="button" class="table-column-toggle" data-menu-visible-col="${key}" role="checkbox" aria-checked="${visible ? "true" : "false"}" title="${visible ? "Hide column" : "Show column"}: ${escapeHtml(label)}">
+            <span class="filter-toggle-mark" aria-hidden="true"></span>
+            <span class="table-column-label">${escapeHtml(label)}</span>
+          </button>
+          <button type="button" class="table-column-pin ${pinned ? "active" : ""}" data-menu-pin-col="${key}" title="${pinned ? "Unpin column" : "Pin column"}" aria-label="${pinned ? "Unpin column" : "Pin column"}" ${visible ? "" : "disabled"}>${pinned ? icons.unpin : icons.pin}</button>
+        </div>`;
+      }).join("")}
+    </div>`;
+}
+
+function renderTableSettingsDrawer() {
+  return `<div class="table-settings-drawer">${renderTableSettingsContent({ includeHead: false })}</div>`;
+}
+
+function renderTableSettingsMenu() {
+  const pos = state.openTableSettings && state.openTableSettingsPos
+    ? `style="left:${state.openTableSettingsPos.left}px;top:${state.openTableSettingsPos.top}px"`
+    : "";
+  return `<div class="row-menu table-settings-menu ${state.openTableSettings ? "open" : ""}" ${pos}>
+    ${renderTableSettingsContent()}
+  </div>`;
+}
+
+function tableSettingsPlacement(button) {
+  const viewportWidth = window.innerWidth || 0;
+  const viewportHeight = window.innerHeight || 0;
+  const menuWidth = Math.min(320, Math.max(240, viewportWidth - 16));
+  const menuHeight = Math.min(540, Math.max(260, viewportHeight - 16));
+  if (viewportWidth < 360 || viewportHeight < 420) return { drawer: true };
+
+  const rect = button.getBoundingClientRect();
+  const maxLeft = viewportWidth - menuWidth - 8;
+  const left = clampValue(rect.right - menuWidth, 8, maxLeft);
+  const belowTop = rect.bottom + 6;
+  const aboveTop = rect.top - menuHeight - 6;
+  const top = belowTop + menuHeight <= viewportHeight - 8
+    ? belowTop
+    : aboveTop >= 8
+      ? aboveTop
+      : clampValue(rect.top, 8, viewportHeight - menuHeight - 8);
+  return { drawer: false, left: Math.round(left), top: Math.round(top) };
 }
 
 function renderRowActions(socket) {
@@ -3336,15 +3454,16 @@ function renderPeerCell(socket) {
 }
 
 function renderHeader(col) {
-  const sorted = state.table.sortKey === col.key ? (state.table.sortDir === "asc" ? "ASC" : "DESC") : "";
+  const sorted = state.table.sortKey === col.key;
+  const sortIcon = sorted ? (state.table.sortDir === "asc" ? icons.sortAsc : icons.sortDesc) : icons.sortNeutral;
   const pinned = state.table.pinned.includes(col.key);
   return `<th class="${pinned ? "pinned-head" : ""}" draggable="true" data-col-key="${col.key}">
     <span class="drag-handle" aria-hidden="true">${icons.drag}</span>
-    <button class="th-sort" data-sort="${col.key}">${escapeHtml(col.label)} ${sorted}</button>
+    <span class="th-compact">
+      <button class="th-sort ${sorted ? "active" : ""}" data-sort="${col.key}">${escapeHtml(col.label)} <span class="sort-indicator ${sorted ? state.table.sortDir : ""}" aria-hidden="true">${sortIcon}</span></button>
+    </span>
     <span class="col-tools">
-      <button class="mini" data-column-help="${col.key}" title="Column guide" aria-label="Column guide"><i class="ri-information-line"></i></button>
-      <button class="mini" data-pin-col="${col.key}" title="${pinned ? "Unpin column" : "Pin column"}" aria-label="${pinned ? "Unpin column" : "Pin column"}">${pinned ? icons.unpin : icons.pin}</button>
-      <button class="mini" data-hide-col="${col.key}" title="Hide column" aria-label="Hide column">${icons.hide}</button>
+      <button class="mini th-pin ${pinned ? "active" : ""}" data-pin-col="${col.key}" title="${pinned ? "Unpin column" : "Pin column"}" aria-label="${pinned ? "Unpin column" : "Pin column"}">${pinned ? icons.unpin : icons.pin}</button>
     </span>
     ${renderColumnTooltip(col)}
   </th>`;
@@ -4071,18 +4190,24 @@ function renderChartAnnotationMenu() {
 }
 function renderDrawer() {
   const selected = state.sockets.find(s => s.id === state.selectedId);
-  const title = state.drawer === "prefs" ? "Preferences" : state.drawer === "guide" ? "Expert guide" : state.drawer === "thresholds" ? "Threshold configuration" : "Socket details";
+  const title = state.drawer === "prefs" ? "Preferences"
+    : state.drawer === "guide" ? "Expert guide"
+      : state.drawer === "thresholds" ? "Threshold configuration"
+        : state.drawer === "tableSettings" ? "Columns"
+          : "Socket details";
   const body = state.drawer === "prefs"
     ? renderPrefs()
     : state.drawer === "guide"
       ? renderGuide()
       : state.drawer === "thresholds"
         ? renderThresholdConfig()
-        : selected ? renderSocketDetail(selected) + `<pre class="code">${escapeHtml(JSON.stringify(selected, null, 2))}</pre>` : `<div class="empty">Select a socket.</div>`;
+        : state.drawer === "tableSettings"
+          ? renderTableSettingsDrawer()
+          : selected ? renderSocketDetail(selected) + `<pre class="code">${escapeHtml(JSON.stringify(selected, null, 2))}</pre>` : `<div class="empty">Select a socket.</div>`;
   const headerAction = state.drawer === "thresholds"
     ? `<div class="drawer-actions"><button class="compact-action" data-action="resetThresholdDefaults">${icons.reset} Defaults</button><button class="primary compact-action" data-action="saveThresholds">${icons.saveDisk} Save</button></div>`
     : "";
-  return html`<aside class="drawer ${state.drawer ? "open" : ""} ${state.drawer === "thresholds" ? "wide" : ""}">
+  return html`<aside class="drawer ${state.drawer ? "open" : ""} ${state.drawer === "thresholds" || state.drawer === "tableSettings" ? "wide" : ""}">
     <header><div class="drawer-title"><strong>${title}</strong>${headerAction}</div><button class="icon" data-action="closeDrawer">${icons.x}</button></header>
     <main>${body}</main>
   </aside>`;
@@ -6727,6 +6852,11 @@ function closeFloatingMenus(options = {}) {
     state.openExportMenuPos = null;
     changed = true;
   }
+  if (state.openTableSettings || state.openTableSettingsPos) {
+    state.openTableSettings = false;
+    state.openTableSettingsPos = null;
+    changed = true;
+  }
   if (state.openMenuId || state.openMenuPos) {
     state.openMenuId = null;
     state.openMenuPos = null;
@@ -6740,6 +6870,10 @@ function closeFloatingMenus(options = {}) {
   if (state.openConversationInsightKey || state.openConversationInsightPos) {
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
+    changed = true;
+  }
+  if (state.drawer === "tableSettings") {
+    state.drawer = null;
     changed = true;
   }
   return changed;
@@ -7074,6 +7208,7 @@ function bindEvents() {
         order: TABLE_COLUMNS.map(c => c.key),
         filters: { text: "", risk: "all", state: "all", family: "all", minRecvQ: "", minSendQ: "", minRtt: "", srcIp: "", dstIp: "", srcPort: "", dstPort: "", process: "", onlyAnomalies: false }
       };
+      saveTableState();
       render();
     }
     if (action === "saveTableLayout") {
@@ -7322,6 +7457,40 @@ function bindEvents() {
     state.chartAnnotationMenuPos = null;
     if (context) openAnnotationModal(context.metric, context);
   }));
+  document.querySelectorAll("[data-table-settings-menu]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    if (state.openTableSettings) {
+      state.openTableSettings = false;
+      state.openTableSettingsPos = null;
+    } else {
+      const placement = tableSettingsPlacement(event.currentTarget);
+      if (placement.drawer) {
+        state.openTableSettings = false;
+        state.openTableSettingsPos = null;
+        state.drawer = "tableSettings";
+      } else {
+        state.drawer = state.drawer === "tableSettings" ? null : state.drawer;
+        state.openTableSettings = true;
+        state.openTableSettingsPos = { left: placement.left, top: placement.top };
+      }
+    }
+    renderKeepingWorkspacePosition();
+  }));
+  document.querySelectorAll(".table-settings-menu").forEach(menu => menu.addEventListener("click", event => {
+    event.stopPropagation();
+  }));
+  document.querySelectorAll("[data-table-menu-action]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const action = event.currentTarget.dataset.tableMenuAction;
+    if (action === "clearSort") {
+      state.table = resetTableSort(state.table, TABLE_COLUMNS, tableDefaults());
+    }
+    if (action === "resetColumns") {
+      state.table = resetTableColumns(state.table, TABLE_COLUMNS, tableDefaults());
+    }
+    saveTableState();
+    renderKeepingWorkspacePosition();
+  }));
   document.querySelectorAll("[data-export-menu]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     const scope = event.currentTarget.dataset.exportMenu;
@@ -7462,16 +7631,19 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-socket]").forEach(row => row.addEventListener("click", event => {
+    if (event.target.closest("button, input, label, select, textarea, a, [role='button'], .row-menu, .table-settings-menu, .column-tooltip")) return;
     focusSocket(event.currentTarget.dataset.socket, "Chosen by clicking a row");
     state.openConversationInsightKey = null;
     state.openConversationInsightPos = null;
     renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-sort]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
     const key = event.currentTarget.dataset.sort;
     state.table.sortDir = state.table.sortKey === key && state.table.sortDir === "desc" ? "asc" : "desc";
     state.table.sortKey = key;
     state.table.page = 1;
+    saveTableState();
     render();
   }));
   document.querySelectorAll("[data-page]").forEach(btn => btn.addEventListener("click", event => {
@@ -7484,8 +7656,10 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-pin-col]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
     const key = event.currentTarget.dataset.pinCol;
-    state.table.pinned = state.table.pinned.includes(key) ? state.table.pinned.filter(x => x !== key) : [...state.table.pinned, key];
+    state.table = toggleTableColumnPin(state.table, key, TABLE_COLUMNS, tableDefaults());
+    saveTableState();
     event.currentTarget.closest(".modal") ? renderKeepingModalPosition() : render();
   }));
   document.querySelectorAll("[data-column-help]").forEach(btn => btn.addEventListener("click", event => {
@@ -7495,10 +7669,10 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-hide-col]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
     const key = event.currentTarget.dataset.hideCol;
-    state.table.visible = state.table.visible.filter(x => x !== key);
-    state.table.pinned = state.table.pinned.filter(x => x !== key);
-    if (!state.table.visible.length) state.table.visible = ["risk"];
+    state.table = setTableColumnVisibility(state.table, key, false, TABLE_COLUMNS, tableDefaults());
+    saveTableState();
     event.currentTarget.closest(".modal") ? renderKeepingModalPosition() : render();
   }));
   document.querySelectorAll("[data-load-table-layout]").forEach(btn => btn.addEventListener("click", event => {
@@ -7596,7 +7770,10 @@ function bindEvents() {
       event.preventDefault();
       const from = event.dataTransfer.getData("text/plain");
       const to = event.currentTarget.dataset.colKey;
-      if (moveTableColumn(from, to)) render();
+      if (moveTableColumn(from, to)) {
+        saveTableState();
+        render();
+      }
     });
   });
   document.querySelectorAll("[data-chart-move-menu]").forEach(btn => btn.addEventListener("click", event => {
@@ -7651,13 +7828,27 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-visible-col]").forEach(input => input.addEventListener("change", event => {
+    event.stopPropagation();
     const key = event.currentTarget.dataset.visibleCol;
-    state.table.visible = event.currentTarget.checked
-      ? [...new Set([...state.table.visible, key])]
-      : state.table.visible.filter(x => x !== key);
-    if (!event.currentTarget.checked) state.table.pinned = state.table.pinned.filter(x => x !== key);
-    if (!state.table.visible.length) state.table.visible = ["risk"];
-    renderKeepingModalPosition();
+    state.table = setTableColumnVisibility(state.table, key, event.currentTarget.checked, TABLE_COLUMNS, tableDefaults());
+    saveTableState();
+    event.currentTarget.closest(".modal") ? renderKeepingModalPosition() : renderKeepingWorkspacePosition();
+  }));
+  document.querySelectorAll("[data-menu-visible-col]").forEach(btn => btn.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = event.currentTarget.dataset.menuVisibleCol;
+    state.table = toggleTableColumnVisibility(state.table, key, TABLE_COLUMNS, tableDefaults());
+    saveTableState();
+    renderKeepingWorkspacePosition();
+  }));
+  document.querySelectorAll("[data-menu-pin-col]").forEach(btn => btn.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = event.currentTarget.dataset.menuPinCol;
+    state.table = toggleTableColumnPin(state.table, key, TABLE_COLUMNS, tableDefaults());
+    saveTableState();
+    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-jump]").forEach(btn => btn.addEventListener("click", event => {
     focusSocket(event.currentTarget.dataset.jump, "Chosen from navigation jump");
@@ -7723,7 +7914,7 @@ function bindEvents() {
     });
   });
   document.querySelector("#onlyAnomalies")?.addEventListener("change", e => { state.table.filters.onlyAnomalies = e.target.checked; state.table.page = 1; render(); });
-  document.querySelectorAll("[data-page-size]").forEach(select => select.addEventListener("change", e => { state.table.pageSize = Number(e.target.value); state.table.page = 1; render(); }));
+  document.querySelectorAll("[data-page-size]").forEach(select => select.addEventListener("change", e => { state.table.pageSize = Number(e.target.value); state.table.page = 1; saveTableState(); render(); }));
   for (const [id, key] of [["anomalySeverity", "severity"], ["anomalyMetric", "metric"], ["anomalySort", "sort"], ["anomalyText", "text"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.anomalyFilters[key] = e.target.value; render(); });
   }
