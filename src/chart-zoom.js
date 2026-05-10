@@ -32,6 +32,16 @@ export function nextZoomRange(zoom = DEFAULT_ZOOM, action = "resetZoom") {
   return current;
 }
 
+export function zoomRangeFromDragSelection(zoom = DEFAULT_ZOOM, selectionStart = 0, selectionEnd = 1) {
+  const current = clampZoomRange(zoom.start, zoom.end);
+  const left = Math.max(0, Math.min(1, selectionStart));
+  const right = Math.max(0, Math.min(1, selectionEnd));
+  const a = Math.min(left, right);
+  const z = Math.max(left, right);
+  const currentWidth = current.end - current.start;
+  return clampZoomRange(current.start + a * currentWidth, current.start + z * currentWidth);
+}
+
 export function applyChartZoomOperation({ action, metric = null, sharedZoom = DEFAULT_ZOOM, chartZoomByMetric = {} }) {
   const current = zoomForMetric(chartZoomByMetric, sharedZoom, metric);
   const next = nextZoomRange(current, action);

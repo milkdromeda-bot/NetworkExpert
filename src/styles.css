@@ -1961,6 +1961,44 @@ th:focus-within .column-tooltip,
 .badge.listen { border-color: rgba(255, 209, 102, .7); color: var(--yellow); }
 .badge.danger { border-color: rgba(255, 92, 119, .8); color: var(--red); }
 
+.app-service-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: 190px;
+  padding: 4px 8px;
+  border: 1px solid rgba(76, 222, 244, .5);
+  border-radius: 999px;
+  color: #9ff8ff;
+  background: linear-gradient(135deg, rgba(16, 86, 101, .42), rgba(9, 14, 24, .84));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  line-height: 1;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-service-chip i { color: var(--cyan); font-size: 13px; }
+.app-service-chip b { color: var(--muted); font-size: 9px; letter-spacing: .12em; }
+.app-service-chip.inline { margin-left: 6px; transform: translateY(-1px); }
+.app-service-chip.compact { padding: 3px 6px; max-width: 120px; font-size: 10px; }
+.chart-socket-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.chart-socket-title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .anomaly-list, .field-list, .guide-list { display: grid; gap: 9px; }
 .table-metric {
   font-weight: 800;
@@ -4934,3 +4972,1120 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   color: #ffd5dd;
   background: rgba(91, 22, 36, .44);
 }
+
+/* === SmartTrade design-system inspired skin: start === */
+:root {
+  --bg: #0d0a10;
+  --panel: #111017;
+  --panel-2: #1f1d24;
+  --panel-3: #2d2a33;
+  --line: #3b3842;
+  --line-strong: #5a5663;
+  --muted: #b8b0c4;
+  --text: #ffffff;
+  --soft: #f4f2f8;
+  --blue: #71bcff;
+  --cyan: #6fc7ff;
+  --green: #79d98b;
+  --yellow: #f4bd74;
+  --orange: #f6a04f;
+  --red: #ff6b78;
+  --magenta: #b993ff;
+  --shadow: 0 10px 28px rgba(0, 0, 0, .34);
+}
+
+html,
+body {
+  background: #0b0810;
+}
+
+body {
+  color: var(--text);
+  font-family: "Segoe UI", "Arial Narrow", Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #121016;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #8c8892;
+  border: 2px solid #121016;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b3afb9;
+}
+
+.app-shell,
+.workspace,
+.left-pane,
+.right-pane,
+.rail,
+.topbar,
+.investigation-context {
+  background: #0d0a10;
+}
+
+.workspace {
+  background:
+    linear-gradient(180deg, rgba(34, 31, 39, .46), rgba(13, 10, 16, 0) 160px),
+    #0d0a10;
+}
+
+.topbar {
+  min-height: 56px;
+  background: #0b0910;
+  border-bottom: 1px solid #2f2b35;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .02);
+}
+
+.rail,
+.left-pane,
+.right-pane {
+  border-color: #34313a;
+}
+
+.rail {
+  background: #0a080e;
+}
+
+.brand,
+.rail button.icon.primary {
+  border-color: #3f3a46;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, 0)),
+    #1f1d24;
+  box-shadow: none;
+}
+
+.brand-node,
+.rail-dot {
+  background: #71bcff;
+  box-shadow: none;
+}
+
+.brand::before,
+.rail-line {
+  background: #71bcff;
+  opacity: .8;
+}
+
+.app-title,
+.panel-title,
+.section h2,
+.dashboard-compact-title strong,
+.drawer-title strong,
+.modal header strong,
+.chart-title,
+.chart-socket-title,
+.guided-checklist-head strong,
+.tail-lens-head strong,
+.stats-table-card h3,
+.stats-dist-card h3,
+.stats-summary-card h3 {
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.app-title,
+.dashboard-compact-title strong {
+  text-transform: none;
+}
+
+.muted,
+small,
+.panel-subtitle,
+.caption,
+.dashboard-control > span:first-child,
+.tooltip-kicker,
+.kpi label,
+.executive-summary-card span,
+.executive-summary-badge span {
+  color: #b8b0c4;
+}
+
+a,
+.link,
+.tab,
+.app-tab {
+  color: #71bcff;
+}
+
+button {
+  border: 1px solid #4b4652;
+  border-radius: 4px;
+  background: #343139;
+  color: #ffffff;
+  box-shadow: none;
+  transform: none;
+  text-shadow: none;
+}
+
+button::after {
+  display: none;
+}
+
+button:hover,
+button:focus {
+  border-color: #6e6876;
+  background: #3f3a45;
+  box-shadow: none;
+  transform: none;
+}
+
+button:focus-visible {
+  outline: 2px solid #71bcff;
+  outline-offset: 2px;
+}
+
+button.primary,
+.app-tab.active,
+button.mega.primary {
+  border-color: #2b8bd3;
+  background: #1476bd;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+button.primary:hover,
+.app-tab.active:hover,
+button.mega.primary:hover {
+  border-color: #55aeee;
+  background: #1988d4;
+  box-shadow: none;
+}
+
+button.danger,
+.anomaly-status.solid {
+  border-color: #d94f5f;
+  background: #8b2632;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+button.danger:hover {
+  border-color: #ff7886;
+  background: #a9303d;
+  box-shadow: none;
+}
+
+button i,
+.icon i,
+button.primary i,
+button.danger i {
+  color: currentColor;
+  filter: none;
+}
+
+button.icon,
+.icon-tool-group button.icon-button,
+.chart-card-tools .mini,
+.pager button.icon {
+  border-radius: 4px;
+  background: #2d2a33;
+}
+
+input,
+select,
+textarea,
+.command-row input,
+.grid-controls input,
+.grid-controls select,
+.chart-controls input,
+.chart-controls select {
+  border: 1px solid #5a5663;
+  border-radius: 4px;
+  background: #343139;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #c4bfcb;
+  opacity: .75;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #71bcff;
+  box-shadow: 0 0 0 1px #71bcff;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #1476bd;
+}
+
+.panel,
+.section,
+.kpi,
+.field-card,
+.guide-card,
+.anomaly,
+.dashboard-studio.compact,
+.dashboard-preset-menu,
+.dashboard-preset-trigger,
+.dashboard-saved-select select,
+.dashboard-save-name input,
+.stats-summary-card,
+.stats-table-card,
+.stats-dist-card,
+.tail-latency-lens,
+.guided-checklist-panel,
+.raw-preview-card,
+.capture-flow-card,
+.ss-option-detail-card,
+.drawer,
+.modal,
+.toast,
+.chart-context-menu,
+.export-menu,
+.row-menu,
+.chart-move-menu,
+.column-tooltip,
+.chart-tooltip,
+.app-title-tooltip {
+  border-color: #3b3842;
+  background: #1f1d24;
+  box-shadow: none;
+}
+
+.panel-head,
+.drawer header,
+.modal header,
+.tabs,
+.grid-controls-shell,
+.chart-panel-header,
+.dashboard-compact-bar {
+  border-color: #3b3842;
+  background: transparent;
+}
+
+.panel-body,
+.modal .body,
+.drawer main {
+  background: transparent;
+}
+
+.kpis {
+  gap: 8px;
+}
+
+.kpi,
+.executive-summary-card,
+.executive-summary-badge {
+  border: 1px solid #3b3842;
+  border-radius: 6px;
+  background: #141118;
+}
+
+.kpi strong,
+.executive-summary-card strong,
+.executive-summary-badge strong {
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.tabs {
+  gap: 0;
+  padding: 0 10px;
+}
+
+.tab {
+  border-radius: 0;
+  color: #71bcff;
+  font-weight: 850;
+}
+
+.tab:hover {
+  background: #1f1d24;
+}
+
+.tab.active {
+  border-bottom-color: #71bcff;
+  background: #15131a;
+  color: #ffffff;
+}
+
+table,
+.stats-table {
+  border-collapse: collapse;
+}
+
+th,
+td,
+.stats-table tr {
+  border-color: #3b3842;
+}
+
+th {
+  background: #121016;
+  color: #c8d8ef;
+  font-weight: 900;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+tr:hover,
+tr.selected {
+  background: #201d27;
+}
+
+.badge,
+.chip,
+.metric-chip,
+.app-service-chip,
+.conversation-anomaly-badge,
+.link-badges span,
+.link-groups span,
+.compare-status,
+.delta,
+.risk {
+  border-radius: 3px;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.badge,
+.chip {
+  border-color: transparent;
+  background: #71bcff;
+  color: #06111b;
+}
+
+.badge.tcp,
+.chip.hot {
+  background: #71bcff;
+  color: #06111b;
+}
+
+.badge.udp,
+.compare-status.gone,
+.compare-status.better,
+.delta.down {
+  background: #79d98b;
+  color: #07170b;
+}
+
+.badge.listen,
+.conversation-anomaly-badge.medium {
+  background: #f4bd74;
+  color: #1b1004;
+}
+
+.badge.danger,
+.conversation-anomaly-badge.critical,
+.anomaly.critical {
+  background: rgba(255, 107, 120, .16);
+  color: #ff9aa5;
+}
+
+.conversation-anomaly-badge.high,
+.table-metric.warn,
+.compare-status.worse,
+.delta.up {
+  color: #f6a04f;
+}
+
+.risk.critical,
+.table-metric.danger {
+  color: #ff6b78;
+}
+
+.risk.high {
+  color: #f6a04f;
+}
+
+.risk.medium {
+  color: #f4bd74;
+}
+
+.risk.low {
+  color: #79d98b;
+}
+
+.app-service-chip {
+  border-color: #4d4855;
+  background: #2d2a33;
+  color: #ffffff;
+}
+
+.app-service-chip i {
+  color: #71bcff;
+}
+
+.chart-card,
+.chart-grid > .chart-card,
+.chart-shell,
+.chart-box,
+.small-chart,
+.hero-chart {
+  border-color: #3b3842;
+  background: #0d0a10;
+  box-shadow: none;
+}
+
+.chart-card {
+  background: #111017;
+}
+
+.chart-card.active-chart {
+  border-color: #71bcff;
+  box-shadow: 0 0 0 1px rgba(113, 188, 255, .25);
+}
+
+.chart-card-tools .active-chart-tool {
+  border-color: #71bcff;
+  color: #71bcff;
+}
+
+.chart-tooltip,
+.column-tooltip,
+.chart-context-menu,
+.export-menu,
+.row-menu,
+.chart-move-menu {
+  border-radius: 4px;
+  background: rgba(31, 29, 36, .92);
+  backdrop-filter: blur(6px);
+}
+
+.tooltip-kicker,
+.chart-tooltip-correlate b,
+.ss-option-kicker,
+.dashboard-control > span:first-child {
+  color: #71bcff;
+}
+
+.tooltip-thresholds span,
+.annotation-item,
+.ss-option-row,
+.preimport-presets button,
+.threshold-card {
+  border-color: #3b3842;
+  background: #141118;
+}
+
+.tooltip-thresholds span.warning {
+  border-color: #f6a04f;
+}
+
+.tooltip-thresholds span.danger {
+  border-color: #ff6b78;
+}
+
+.chart-context-menu button,
+.export-menu button,
+.row-menu button,
+.chart-move-menu button {
+  border-radius: 3px;
+  background: transparent;
+}
+
+.chart-context-menu button:hover,
+.chart-context-menu button:focus,
+.export-menu button:hover,
+.row-menu button:hover,
+.chart-move-menu button:hover {
+  background: #343139;
+}
+
+.chart-context-menu-icon,
+.dashboard-preset-icon {
+  border-color: #4b4652;
+  background: #343139;
+  color: #71bcff;
+  box-shadow: none;
+}
+
+.dashboard-preset-option {
+  border-color: transparent;
+  background: #141118;
+}
+
+.dashboard-preset-option:hover,
+.dashboard-preset-option.selected {
+  border-color: #3b3842;
+  background: #2d2a33;
+}
+
+.dashboard-preset-option.selected .dashboard-preset-icon,
+.dashboard-preset-trigger .dashboard-preset-icon {
+  border-color: #71bcff;
+  background: #2d2a33;
+  color: #71bcff;
+}
+
+.dashboard-divider {
+  background: #3b3842;
+}
+
+.filter-toggle,
+.check,
+.ss-option-row {
+  border-color: #3b3842;
+  background: #141118;
+}
+
+.filter-toggle:hover,
+.check:hover,
+.ss-option-row:hover,
+.ss-option-row.selected {
+  border-color: #71bcff;
+  background: #201d27;
+}
+
+.import-status progress,
+progress {
+  overflow: hidden;
+  border-radius: 999px;
+  background: #343139;
+}
+
+.import-status progress::-webkit-progress-bar,
+progress::-webkit-progress-bar {
+  background: #343139;
+}
+
+.import-status progress::-webkit-progress-value,
+progress::-webkit-progress-value {
+  background: #71bcff;
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, .68);
+}
+
+.modal {
+  border-radius: 12px;
+  background: #2d2a33;
+}
+
+.drawer {
+  background: #141118;
+}
+
+.toast {
+  border-left-color: #71bcff;
+}
+
+.toast.warn {
+  border-left-color: #f4bd74;
+}
+
+.toast.danger {
+  border-left-color: #ff6b78;
+}
+
+.anomaly {
+  border-left-color: #f4bd74;
+}
+
+.anomaly.high {
+  border-left-color: #f6a04f;
+}
+
+.anomaly.critical {
+  border-left-color: #ff6b78;
+}
+
+.anomaly.low,
+.anomaly.medium {
+  background: #141118;
+}
+
+.annotation-overlay-item {
+  mix-blend-mode: normal;
+}
+
+.annotation-item footer .danger.subtle {
+  border-color: #d94f5f;
+  background: #2d1a20;
+  color: #ff9aa5;
+}
+
+.service-map-canvas,
+pre,
+code,
+textarea {
+  background-color: #0d0a10;
+}
+
+svg text {
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+@media (max-width: 760px) {
+  body {
+    background: #0d0a10;
+  }
+}
+/* === SmartTrade design-system inspired skin: end === */
+
+/* === SmartTrade low-neon refinement: start === */
+:root {
+  --blue: #5fa8e8;
+  --cyan: #74a8d8;
+  --accent-blue: #1476bd;
+  --accent-blue-soft: #5fa8e8;
+  --focus-ring: rgba(95, 168, 232, .38);
+}
+
+.workspace {
+  background:
+    linear-gradient(180deg, rgba(31, 29, 36, .34), rgba(13, 10, 16, 0) 120px),
+    #0d0a10;
+}
+
+.brand,
+.rail button.icon,
+.rail button.icon.primary,
+button.icon,
+.icon-tool-group button.icon-button,
+.chart-card-tools .mini,
+.pager button.icon {
+  border-color: #4a4551;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, 0)),
+    #1f1d24;
+  box-shadow: none;
+}
+
+.brand-node,
+.rail-dot {
+  background: #9b96a3;
+  border-color: #d4d0da;
+  box-shadow: none;
+}
+
+.brand-node.n2,
+.rail-dot.d2 {
+  background: #5fa8e8;
+}
+
+.brand-node.n3,
+.rail-dot.d3 {
+  background: #79d98b;
+}
+
+.brand::before,
+.rail-line {
+  background: #8e8996;
+  box-shadow: none;
+  opacity: .75;
+}
+
+.rail button.icon:hover,
+.rail button.icon:focus,
+button.icon:hover,
+button.icon:focus,
+.icon-tool-group button.icon-button:hover,
+.chart-card-tools .mini:hover {
+  border-color: #6b6572;
+  background: #2d2a33;
+  box-shadow: none;
+}
+
+button i,
+.icon i,
+.rail button.icon i,
+.metric-info-dot i {
+  color: #f4f2f8;
+  filter: none;
+}
+
+button.primary i,
+.app-tab.active i {
+  color: #ffffff;
+}
+
+.app-tabs,
+.status-pill,
+.kpi,
+.executive-summary-card,
+.executive-summary-badge,
+.panel,
+.dashboard-studio.compact,
+.grid-controls-shell,
+.filter-group,
+.endpoint-group,
+.flow-health-group,
+.scope-group,
+.filter-toggle,
+.check,
+.ss-option-row,
+.guided-checklist-panel,
+.tail-latency-lens {
+  border-color: #3b3842;
+  background: #141118;
+  box-shadow: none;
+}
+
+.kpi {
+  background: #0f0d13;
+}
+
+.kpi label,
+.panel-title,
+.section h2,
+.filter-group-label,
+.endpoint-group-label,
+.scope-chip,
+.dashboard-control > span:first-child,
+.tooltip-kicker,
+.ss-option-kicker,
+.guided-checklist-kicker,
+.tail-lens-kicker {
+  color: #c7c1ce;
+  letter-spacing: .05em;
+}
+
+.scope-chip,
+.filter-group-label,
+.endpoint-group-label,
+.metric-info-dot,
+.chart-info,
+.field-info,
+.app-title-info {
+  border-color: #4a4551;
+  background: #201d27;
+  color: #d7d3de;
+  box-shadow: none;
+}
+
+.scope-chip:hover,
+.metric-info-dot:hover,
+.chart-info:hover,
+.field-info:hover,
+.app-title-info:hover {
+  border-color: #6b6572;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+button.primary,
+button.mega.primary,
+.app-tab.active {
+  border-color: #2f6f9f;
+  background: #1476bd;
+}
+
+button.primary:hover,
+button.mega.primary:hover,
+.app-tab.active:hover {
+  border-color: #4d8dbd;
+  background: #176fae;
+}
+
+.app-tab {
+  color: #b8b0c4;
+}
+
+.app-tab:hover {
+  color: #ffffff;
+  background: #1f1d24;
+}
+
+.tab {
+  color: #b8b0c4;
+}
+
+.tab.active {
+  color: #ffffff;
+  border-bottom-color: #5fa8e8;
+  background: #19161f;
+}
+
+.tab:hover {
+  color: #ffffff;
+}
+
+input,
+select,
+textarea,
+.command-row input,
+.grid-controls input,
+.grid-controls select,
+.chart-controls input,
+.chart-controls select {
+  border-color: #5a5663;
+  background: #343139;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #7aa9d4;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #5fa8e8;
+}
+
+.filter-toggle:hover,
+.check:hover,
+.ss-option-row:hover,
+.ss-option-row.selected {
+  border-color: #6b6572;
+  background: #201d27;
+}
+
+.badge,
+.chip,
+.metric-chip,
+.app-service-chip,
+.conversation-anomaly-badge,
+.link-badges span,
+.link-groups span,
+.compare-status,
+.delta {
+  border-color: #4a4551;
+  background: #2d2a33;
+  color: #ffffff;
+}
+
+.badge.tcp,
+.chip.hot {
+  background: #5f9dce;
+  color: #06111b;
+}
+
+.badge.udp {
+  background: #79b982;
+  color: #07170b;
+}
+
+.badge.listen {
+  background: #d9a35e;
+  color: #1b1004;
+}
+
+.app-service-chip i,
+.dashboard-preset-icon,
+.chart-context-menu-icon {
+  color: #9ac5e8;
+}
+
+.app-service-chip {
+  background: #2d2a33;
+}
+
+.conversation-anomaly-trigger,
+.conversation-anomaly-trigger:hover,
+.conversation-anomaly-trigger:focus {
+  border-color: #4a4551;
+  background: #2d2a33;
+  box-shadow: none;
+}
+
+.risk.critical,
+.table-metric.danger {
+  color: #ff7f8b;
+}
+
+.risk.high,
+.table-metric.warn {
+  color: #e7a65a;
+}
+
+.risk.medium {
+  color: #e5c06f;
+}
+
+.risk.low {
+  color: #89c892;
+}
+
+.chart-card.active-chart {
+  border-color: #5a5663;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .035);
+}
+
+.chart-card-tools .active-chart-tool {
+  border-color: #7aa9d4;
+  color: #dbeeff;
+  animation: none;
+}
+
+.chart-card-tools .active-chart-tool svg,
+.chart-card.active-chart .chart-title-wrap .metric-info-dot {
+  animation: none;
+}
+
+@keyframes chart-tool-pulse {
+  0%, 100% { box-shadow: none; transform: none; }
+  45% { box-shadow: none; transform: none; }
+}
+
+@keyframes chart-icon-blink {
+  0%, 100% { filter: none; opacity: 1; }
+  45% { filter: none; opacity: 1; }
+}
+
+.chart-tooltip,
+.column-tooltip,
+.chart-context-menu,
+.export-menu,
+.row-menu,
+.chart-move-menu,
+.dashboard-preset-menu {
+  border-color: #4a4551;
+  background: rgba(31, 29, 36, .94);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .38);
+}
+
+.chart-context-menu button:hover,
+.chart-context-menu button:focus,
+.export-menu button:hover,
+.row-menu button:hover,
+.chart-move-menu button:hover,
+.dashboard-preset-option:hover,
+.dashboard-preset-option.selected {
+  border-color: #5a5663;
+  background: #343139;
+}
+
+.dashboard-preset-option.selected .dashboard-preset-icon,
+.dashboard-preset-trigger .dashboard-preset-icon {
+  border-color: #5a5663;
+  background: #343139;
+  color: #d7d3de;
+}
+
+.import-status progress::-webkit-progress-value,
+progress::-webkit-progress-value {
+  background: #5fa8e8;
+}
+
+.guided-checklist-panel,
+.tail-latency-lens {
+  border-left-color: #5a5663;
+}
+
+.guided-checklist-card {
+  background: #0f0d13;
+  border-color: #3b3842;
+}
+
+.guided-checklist-card.critical {
+  border-left-color: #ff6b78;
+}
+
+.guided-checklist-card.high {
+  border-left-color: #e7a65a;
+}
+
+.guided-checklist-card.medium {
+  border-left-color: #d9a35e;
+}
+
+.guided-checklist-card.low {
+  border-left-color: #79b982;
+}
+
+.anomaly-status.blink {
+  animation: none;
+  box-shadow: none;
+}
+
+@keyframes anomalyPulse {
+  0%, 100% { background: #8b2632; box-shadow: none; }
+  50% { background: #8b2632; box-shadow: none; }
+}
+/* === SmartTrade low-neon refinement: end === */
+
+/* === SmartTrade modal/overlay low-neon refinement: start === */
+.modal,
+.modal.annotation,
+.modal.chartStats,
+.modal.serviceAliases,
+.modal.topology,
+.drawer,
+.anomaly-lens,
+.conversation-lens,
+.socket-lens,
+.active-investigation-panel {
+  border-color: #4a4551;
+  background: #141118;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .45);
+}
+
+.modal header,
+.drawer header {
+  border-bottom-color: #3b3842;
+  background: #141118;
+}
+
+.modal .body,
+.drawer main {
+  background: #141118;
+}
+
+.modal .kpi,
+.anomaly-lens .kpi,
+.conversation-lens .kpi,
+.socket-lens .kpi,
+.lens-summary-card,
+.summary-tile {
+  border-color: #4a4551;
+  background: #0f0d13;
+}
+
+.modal .anomaly,
+.anomaly-lens article,
+.conversation-anomaly-list article {
+  border-color: #3b3842;
+  background: #141118;
+}
+
+.modal .anomaly.critical,
+.conversation-anomaly-list article.critical {
+  border-left-color: #ff6b78;
+}
+
+.modal .anomaly.high,
+.conversation-anomaly-list article.high {
+  border-left-color: #e7a65a;
+}
+
+.modal .anomaly.medium,
+.conversation-anomaly-list article.medium {
+  border-left-color: #d9a35e;
+}
+
+.modal .anomaly.low,
+.conversation-anomaly-list article.low {
+  border-left-color: #79b982;
+}
+
+.modal button:not(.primary):not(.danger),
+.drawer button:not(.primary):not(.danger) {
+  border-color: #4a4551;
+  background: #343139;
+}
+
+.modal button:not(.primary):not(.danger):hover,
+.drawer button:not(.primary):not(.danger):hover {
+  border-color: #6b6572;
+  background: #3f3a45;
+}
+
+.modal-backdrop.open {
+  backdrop-filter: none;
+}
+/* === SmartTrade modal/overlay low-neon refinement: end === */

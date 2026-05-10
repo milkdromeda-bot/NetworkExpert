@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyChartZoomOperation, clampZoomRange, nextZoomRange, zoomForMetric } from "../src/chart-zoom.js";
+import { applyChartZoomOperation, clampZoomRange, nextZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "../src/chart-zoom.js";
 
 const actions = ["zoomIn", "zoomOut", "panLeft", "panRight", "resetZoom"];
 const seeds = Array.from({ length: 40 }, (_, index) => {
@@ -70,4 +70,17 @@ test("metric zoom falls back to shared zoom until customized", () => {
     zoomForMetric({ rx_bps: { start: 0.4, end: 0.6 } }, { start: 0.25, end: 0.75 }, "rx_bps"),
     { start: 0.4, end: 0.6 }
   );
+});
+test("drag selection computes a nested metric-local zoom range", () => {
+  const next = zoomRangeFromDragSelection({ start: 0.2, end: 0.8 }, 0.25, 0.75);
+  assert.ok(Math.abs(next.start - 0.35) < 1e-12);
+  assert.ok(Math.abs(next.end - 0.65) < 1e-12);
+});
+
+test("drag selection is direction independent and bounded", () => {
+  const next = zoomRangeFromDragSelection({ start: 0.1, end: 0.3 }, 0.9, 0.1);
+  assert.ok(next.start >= 0);
+  assert.ok(next.end <= 1);
+  assert.ok(next.end > next.start);
+  assert.deepEqual(next, zoomRangeFromDragSelection({ start: 0.1, end: 0.3 }, 0.1, 0.9));
 });

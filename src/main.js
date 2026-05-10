@@ -17,12 +17,14 @@ import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-sum
 import { commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
-import { applyChartZoomOperation, clampZoomRange, zoomForMetric } from "./chart-zoom.js";
+import { applyChartZoomOperation, clampZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "./chart-zoom.js";
+import { applicationServiceSortKey, inferApplicationService } from "./services.js";
 
 const TABLE_COLUMNS = [
   { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
   { key: "state", label: "State", value: s => s.state, render: s => `<span class="badge ${s.state === "LISTEN" ? "listen" : ""}">${escapeHtml(s.state)}</span>` },
   { key: "family", label: "Proto", value: s => s.family, render: s => `<span class="badge ${s.family.includes("udp") ? "udp" : "tcp"}">${escapeHtml(s.family)}</span>` },
+  { key: "application", label: "App", value: s => applicationServiceSortKey(s), render: s => renderApplicationServiceChip(s) || `<span class="muted">-</span>` },
   { key: "recvQ", label: "Recv-Q", value: s => s.recvQ, render: s => renderTableMetricCell("recvQ", s.recvQ) },
   { key: "sendQ", label: "Send-Q", value: s => s.sendQ, render: s => renderTableMetricCell("sendQ", s.sendQ) },
   { key: "tx_bps", label: "TX bps", value: s => socketBandwidth(s, "tx_bps"), render: s => renderTableMetricCell("tx_bps", socketBandwidth(s, "tx_bps")), defaultVisible: false },
@@ -1745,6 +1747,7 @@ function buildConversations() {
         family: socket.family,
         states: new Set(),
         processes: new Set(),
+        application: applicationServiceSortKey(socket),
         count: 0,
         maxRisk: "low",
         anomalies: 0,
@@ -1801,7 +1804,7 @@ function conversationDefaultSortDir(key) {
 
 function conversationSortText(conv, key) {
   if (key === "flow") return `${conv.local} ${conv.peer}`;
-  if (key === "proto") return `${conv.family} ${[...conv.states].join(" ")}`;
+  if (key === "proto") return `${conv.family} ${[...conv.states].join(" ")} ${conv.application || ""}`;
   if (key === "process") return [...conv.processes].join(", ") || "-";
   return "";
 }
@@ -1886,6 +1889,7 @@ function buildExpertInformation() {
         count: 0,
         sockets: [],
         processes: new Set(),
+        application: applicationServiceSortKey(socket),
         peers: new Set()
       });
     }
@@ -2411,6 +2415,7 @@ function renderInvestigationContext() {
     .slice()
     .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))[0];
   const process = socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "unknown process";
+  const appChip = renderApplicationServiceChip(socket, "inline");
   return `<section class="investigation-context" aria-label="Active investigation context">
     <div class="investigation-main">
       <span class="tooltip-kicker">Active investigation</span>
@@ -2419,7 +2424,7 @@ function renderInvestigationContext() {
         <span>${icons.arrowRight}</span>
         <strong>${escapeHtml(socket.peer)}</strong>
       </div>
-      <small>${escapeHtml(state.activeContextReason || "Chosen by explicit user selection")} / ${escapeHtml(socket.family || "socket")} / ${escapeHtml(socket.state)} / ${escapeHtml(process)}</small>
+      <small>${escapeHtml(state.activeContextReason || "Chosen by explicit user selection")} / ${escapeHtml(socket.family || "socket")} / ${escapeHtml(socket.state)} / ${escapeHtml(process)} ${appChip}</small>
     </div>
     <div class="investigation-metrics">
       <span><b class="risk ${socket.risk}">${escapeHtml(socket.risk)}</b><small>risk</small></span>
@@ -2444,6 +2449,14 @@ function renderInvestigationContext() {
       ${(state.view === "analysis" || state.view === "charts") ? renderGuidedChecklistPanel(socket) : ""}
     </div>
   </section>`;
+}
+
+function renderApplicationServiceChip(socket, extraClass = "") {
+  const app = inferApplicationService(socket);
+  if (!app) return "";
+  const side = app.side === "local" ? "local port" : "peer port";
+  const title = `${app.label} inferred from ${side} ${app.port}. ${app.description} Confidence: ${app.confidence}.`;
+  return `<span class="app-service-chip ${escapeHtml(extraClass)}" title="${escapeHtml(title)}"><i class="ri-stack-line"></i><b>APP</b> ${escapeHtml(app.label)}</span>`;
 }
 
 function guidedChecklistItems(socket = selectedSocket()) {
@@ -2805,7 +2818,7 @@ function renderChartsPage() {
     ${renderTailLatencyLensPanel()}
     <section class="panel ${layout.stickyToolbar ? "sticky-chart-panel" : ""}">
       <div class="panel-head">
-        <div class="panel-title">Socket charts ${selected ? escapeHtml(selected.local) : ""}</div>
+        <div class="panel-title chart-socket-title"><span>Socket charts ${selected ? escapeHtml(selected.local) : ""}</span>${selected ? renderApplicationServiceChip(selected) : ""}</div>
         <div class="toolbar">
           <button class="icon" data-chart-stats="${state.prefs.graphMetric}" title="Metric statistics">${icons.stats}</button>
           <button data-action="layoutPrefs">${icons.layout} Layout</button>
@@ -3008,7 +3021,7 @@ function renderTailLatencyLensPanel() {
         <article><span>Worst window</span><strong>${escapeHtml(formatTailLatencyWindow(lens))}</strong></article>
         <article><span>RTT tail</span><strong>${escapeHtml(`${formatMetricValue("rtt", rttStats?.p99 || 0)} / ${formatMetricValue("rtt", rttStats?.p999 || 0)}`)}</strong><small>P99 / P99.9</small></article>
         <article><span>RTO tail</span><strong>${escapeHtml(`${formatMetricValue("rto", rtoStats?.p99 || 0)} / ${formatMetricValue("rto", rtoStats?.p999 || 0)}`)}</strong><small>P99 / P99.9</small></article>
-        <article><span>Worst peaks</span><strong>${escapeHtml(`${formatMetricValue("rtt", lens.peaks.rtt)} RTT • ${formatMetricValue("rto", lens.peaks.rto)} RTO`)}</strong><small>${escapeHtml(`${formatMetricValue("recvQ", lens.peaks.recvQ)} Recv-Q • ${formatMetricValue("sendQ", lens.peaks.sendQ)} Send-Q`)}</small></article>
+        <article><span>Worst peaks</span><strong>${escapeHtml(`${formatMetricValue("rtt", lens.peaks.rtt)} RTT * ${formatMetricValue("rto", lens.peaks.rto)} RTO`)}</strong><small>${escapeHtml(`${formatMetricValue("recvQ", lens.peaks.recvQ)} Recv-Q * ${formatMetricValue("sendQ", lens.peaks.sendQ)} Send-Q`)}</small></article>
       </div>
     </article>
   </section>`;
@@ -3533,7 +3546,7 @@ function renderConversations() {
       <tbody>${page.rows.map(c => `<tr data-socket="${escapeHtml(c.socket.id)}" class="${c.socket.id === state.selectedId ? "selected" : ""}">
         <td><span class="risk ${c.maxRisk}">${c.maxRisk}</span></td>
         <td><div class="flow-cell"><strong>${escapeHtml(c.local)}</strong><span>${icons.arrowRight}</span>${renderPeerEndpoint(c.peer)}</div></td>
-        <td><span class="badge ${c.family.includes("udp") ? "udp" : "tcp"}">${escapeHtml(c.family)}</span> ${[...c.states].map(stateName => `<span class="badge ${stateName === "LISTEN" ? "listen" : ""}">${escapeHtml(stateName)}</span>`).join(" ")}</td>
+        <td><span class="badge ${c.family.includes("udp") ? "udp" : "tcp"}">${escapeHtml(c.family)}</span> ${[...c.states].map(stateName => `<span class="badge ${stateName === "LISTEN" ? "listen" : ""}">${escapeHtml(stateName)}</span>`).join(" ")} ${renderApplicationServiceChip(c.socket, "compact")}</td>
         <td>${escapeHtml([...c.processes].slice(0, 3).join(", ") || "-")}</td>
         <td>${formatNumber(c.count)}</td>
         <td>${renderConversationAnomalyCell(c)}</td>
@@ -4561,7 +4574,7 @@ function renderAnnotationModal() {
     </section>
     <section class="annotation-history">
       <div class="annotation-history-head"><strong>Current annotations</strong><span class="hint">${items.length} item(s) on this socket and source</span></div>
-      ${items.length ? `<div class="annotation-list">${items.slice().reverse().map(item => `<article class="annotation-item"><header><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(annotationTypeLabel(item.kind))}</span></header><small>${escapeHtml(item.metric === "*" ? "all charts" : metricLabel(item.metric))} � ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</small>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}<footer><button class="danger subtle" data-action="deleteAnnotation" data-annotation-id="${escapeHtml(item.id)}" title="Delete this annotation">${icons.trash} Delete</button></footer></article>`).join("")}</div>` : `<div class="empty">No annotation yet for this socket.</div>`}
+      ${items.length ? `<div class="annotation-list">${items.slice().reverse().map(item => `<article class="annotation-item"><header><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(annotationTypeLabel(item.kind))}</span></header><small>${escapeHtml(item.metric === "*" ? "all charts" : metricLabel(item.metric))} * ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</small>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}<footer><button class="danger subtle" data-action="deleteAnnotation" data-annotation-id="${escapeHtml(item.id)}" title="Delete this annotation">${icons.trash} Delete</button></footer></article>`).join("")}</div>` : `<div class="empty">No annotation yet for this socket.</div>`}
     </section>
   </div>`;
 }
@@ -5724,10 +5737,12 @@ function attachChartInteractions(svg) {
       const z = (Math.max(startX, endX) - b.left) / (b.right - b.left);
       const metric = svg.dataset.metric || null;
       const zoom = chartZoomFor(metric);
-      const currentStart = zoom.start;
-      const currentWidth = zoom.end - zoom.start;
-      setZoom(currentStart + a * currentWidth, currentStart + z * currentWidth, metric);
-      renderKeepingWorkspacePosition();
+      const nextZoom = zoomRangeFromDragSelection(zoom, a, z);
+      setZoom(nextZoom.start, nextZoom.end, metric);
+      state.activeChartMetric = metric;
+      state.activeChartAction = "dragZoom";
+      if (svg.matches("[data-mini-chart]") && redrawChartCardMetric(metric, "dragZoom")) return;
+      if (svg.id === "chart") drawChart();
     } else {
       drawOverlay(endX);
     }
@@ -5855,7 +5870,7 @@ function captureIncidentReportCharts(limit = 5) {
         heroMetric,
         `${metricLabel(heroMetric)} overview`,
         heroSvg,
-        `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} • ` : ""}Current visible chart window • ${reportChartWindowLabel()}`,
+        `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} * ` : ""}Current visible chart window * ${reportChartWindowLabel()}`,
         true
       );
     }
@@ -5863,7 +5878,7 @@ function captureIncidentReportCharts(limit = 5) {
       if (captures.length >= limit) return;
       const metric = card.dataset.chartCard;
       const svg = card.querySelector("[data-mini-chart]");
-      pushCapture(metric, metricLabel(metric), svg, `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} • ` : ""}Chart card • ${reportChartWindowLabel()}`);
+      pushCapture(metric, metricLabel(metric), svg, `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} * ` : ""}Chart card * ${reportChartWindowLabel()}`);
     });
   }
 
@@ -5873,7 +5888,7 @@ function captureIncidentReportCharts(limit = 5) {
       metric,
       `${metricLabel(metric)} snapshot`,
       buildReportChartSvg(metric),
-      `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} • ` : ""}Generated from current filtered history • ${reportChartWindowLabel()}`
+      `${microburst ? `Microburst ${formatMicroburstWindow(microburst)} * ` : ""}Generated from current filtered history * ${reportChartWindowLabel()}`
     );
   });
 
@@ -6142,7 +6157,7 @@ function buildIncidentReportHtml(chartCaptures = []) {
                     <strong>${escapeHtml(item.label)}</strong>
                     <span class="token">${escapeHtml(annotationTypeLabel(item.kind))}</span>
                   </header>
-                  <div class="small">${escapeHtml(item.metric === "*" ? "Socket-wide" : metricLabel(item.metric))} � ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</div>
+                  <div class="small">${escapeHtml(item.metric === "*" ? "Socket-wide" : metricLabel(item.metric))} * ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</div>
                   ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
                 </article>`).join("")}
               </div>
@@ -7736,23 +7751,3 @@ function bindEvents() {
 }
 
 render();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
