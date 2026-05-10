@@ -14,9 +14,30 @@ test("socket drops above ten are critical", () => {
   const drops = analyzeSocket(socket).find(item => item.metric === "skmem.d");
 
   assert.equal(drops.severity, "critical");
+  assert.match(drops.detail, /does not by itself prove/i);
+  assert.match(drops.detail, /ethtool -S/i);
+  assert.match(drops.detail, /netdev_max_backlog/i);
   assert.equal(riskForSocket(socket), "critical");
 });
 
+test("socket drop wording does not claim NIC ring overflow without evidence", () => {
+  const socket = socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d1)");
+
+  const drops = analyzeSocket(socket).find(item => item.metric === "skmem.d");
+
+  assert.match(drops.detail, /kernel receive-side\/socket-memory loss/i);
+  assert.match(drops.detail, /does not by itself prove/i);
+});
+
+
+test("socket drop wording points to netdev backlog validation", () => {
+  const socket = socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d26)");
+
+  const drops = analyzeSocket(socket).find(item => item.metric === "skmem.d");
+
+  assert.match(drops.detail, /net\.core\.netdev_max_backlog/i);
+  assert.match(drops.detail, /1000/i);
+});
 test("large receive queue creates critical risk", () => {
   const socket = socketFrom("ESTAB 600000 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1");
 

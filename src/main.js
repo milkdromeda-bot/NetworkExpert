@@ -163,8 +163,8 @@ const COLUMN_HELP = {
   },
   "skmem.d": {
     summary: "Socket memory drops counted for this socket.",
-    detail: "In ss skmem, d is the drop counter. Any non-zero value deserves attention because it means the socket path has dropped data due to buffer or memory pressure. Repeated growth is a much stronger incident signal than a static historical value.",
-    use: "Chart drops over time, then compare with Recv-Q, skmem.r, system memory pressure, and burst timing."
+    detail: "In ss skmem, d is the drop counter: packets/data dropped before demultiplexing in the kernel receive path. Any non-zero value deserves attention, but it is not a standalone proof of NIC ring-buffer overflow. Treat it as receive-side loss to correlate with Recv-Q, skmem.r, softnet backlog, qdisc/interface drops, NIC driver counters, and net.core.netdev_max_backlog. A backlog of 1000 is often conservative for burst-heavy low-latency captures, but only tune it after confirming softnet/backlog pressure.",
+    use: "Chart drops over time, then compare with Recv-Q, skmem.r, burst timing, /proc/net/softnet_stat, ip -s link, ethtool -S counters such as rx_missed_errors or rx_no_buffer_count, and sysctl net.core.netdev_max_backlog."
   },
   pacing_rate: {
     summary: "Kernel TCP pacing rate, usually in bits per second.",
@@ -257,6 +257,8 @@ function cloneThresholds() {
   return Object.fromEntries(Object.entries(EXPERT_DEFAULT_THRESHOLDS).map(([metric, threshold]) => [metric, { ...threshold }]));
 }
 
+const initialPrefs = loadPrefs();
+
 let state = {
   raw: SAMPLE,
   command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
@@ -281,6 +283,7 @@ let state = {
   filterHistory: loadFilterHistory(),
   tableProfiles: loadTableProfiles(),
   dashboardProfiles: loadDashboardProfiles(),
+  activeDashboardPreset: dashboardPresetIdOrDefault(initialPrefs.defaultDashboardPreset),
   serviceAliases: loadServiceAliases(),
   aliasEditKey: "",
   topologyProfiles: loadTopologyProfiles(),
@@ -293,7 +296,7 @@ let state = {
   baseline: null,
   ipIntel: {},
   ipIntelRunning: false,
-  prefs: loadPrefs(),
+  prefs: initialPrefs,
   view: "ingest",
   activeTab: "sockets",
   anomalyFilters: { severity: "all", metric: "all", text: "", sort: "priority" },
@@ -305,12 +308,21 @@ let state = {
   ssOptionHelpKey: "-i",
   showSsOptions: false,
   annotationDraft: buildAnnotationDraft({ sourceName: "built-in sample" }),
+  annotationContext: null,
   ingestRawExpanded: SAMPLE.length <= INGEST_RAW_EAGER_LIMIT,
   openChartMoveMetric: null,
   openChartMovePos: null,
+  chartAnnotationMenuContext: null,
+  chartAnnotationMenuPos: null,
   openMenuPos: null,
+  openMenuId: null,
+  openExportMenu: null,
+  openExportMenuPos: null,
+  openDashboardPresetMenu: false,
+  dashboardPresetBeforeOpen: null,
   openConversationInsightKey: null,
   openConversationInsightPos: null,
+  conversationSort: { key: "anomalies", dir: "desc" },
   selectedMapEdgeId: null,
   copiedGuideCommand: "",
   history: [],
@@ -360,11 +372,14 @@ let state = {
   }
 };
 
+applyDefaultDashboardPreset();
+
 const icons = {
   activity: `<i class="ri-pulse-line"></i>`,
   settings: `<i class="ri-equalizer-3-line"></i>`,
   book: `<i class="ri-book-open-line"></i>`,
   upload: `<i class="ri-folder-open-line"></i>`,
+  load: `<i class="ri-folder-open-line"></i>`,
   sample: `<i class="ri-flask-line"></i>`,
   play: `<i class="ri-radar-line"></i>`,
   alert: `<i class="ri-error-warning-line"></i>`,
@@ -404,11 +419,36 @@ const icons = {
   down: `<i class="ri-arrow-down-s-line"></i>`
 };
 
+function dashboardPresetIdOrDefault(value) {
+  const fallback = DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]
+    ? prefsDefault.defaultDashboardPreset
+    : Object.keys(DASHBOARD_PRESETS)[0] || "noc";
+  return DASHBOARD_PRESETS[value] ? value : fallback;
+}
+
+function renderDashboardPresetOptions(selectedId) {
+  const selected = dashboardPresetIdOrDefault(selectedId);
+  return Object.entries(DASHBOARD_PRESETS)
+    .map(([id, preset]) => `<option value="${escapeHtml(id)}" ${id === selected ? "selected" : ""}>${escapeHtml(preset.name)}</option>`)
+    .join("");
+}
+function clampChartTooltipOpacity(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0.8;
+  return Math.max(0.2, Math.min(1, number));
+}
+
+function chartTooltipOpacity() {
+  return clampChartTooltipOpacity(state.prefs.chartLayout?.tooltipOpacity);
+}
+
 function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("networkExpertPrefs") || "{}");
     const prefs = { ...prefsDefault, ...saved, chartLayout: { ...prefsDefault.chartLayout, ...(saved.chartLayout || {}) } };
     prefs.chartLayout.columns = clampChartColumns(prefs.chartLayout.columns);
+    prefs.chartLayout.tooltipOpacity = clampChartTooltipOpacity(prefs.chartLayout.tooltipOpacity);
+    prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(prefs.defaultDashboardPreset);
     if (saved.sampling == null || (saved.sampling === 5 && saved.chartResolutionDefault !== "max")) prefs.sampling = 1;
     prefs.chartResolutionDefault = "max";
     return prefs;
@@ -419,6 +459,8 @@ function loadPrefs() {
 
 function savePrefs() {
   state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
+  state.prefs.chartLayout.tooltipOpacity = chartTooltipOpacity();
+  state.prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(state.prefs.defaultDashboardPreset);
   localStorage.setItem("networkExpertPrefs", JSON.stringify(state.prefs));
 }
 
@@ -466,15 +508,47 @@ function annotationMetricChoices() {
   }));
 }
 
-function openAnnotationModal(metric = "*") {
+function annotationKindForChartContext(metric, value) {
+  if (["rtt", "rttvar", "rto"].includes(metric)) return "rtt-peak";
+  if (["skmem.d", "skmem.d_rate"].includes(metric)) return "burst-start";
+  if (["recvQ", "sendQ"].includes(metric)) return "queue-reset";
+  if (["rx_bps", "tx_bps", "delivery_rate", "pacing_rate"].includes(metric) && Number(value) > 0) return "burst-start";
+  return "custom";
+}
+
+function annotationLabelForChartContext(metric, value) {
+  const severity = thresholdSeverity(metric, Number(value) || 0);
+  if (severity === "danger" || severity === "warn") return `${metricLabel(metric)} spike`;
+  if (["recvQ", "sendQ"].includes(metric)) return `${metricLabel(metric)} marker`;
+  if (["rtt", "rttvar", "rto"].includes(metric)) return `${metricLabel(metric)} peak`;
+  return `${metricLabel(metric)} marker`;
+}
+
+function openAnnotationModal(metric = "*", context = null) {
   const socketId = annotationSocketId();
   if (!socketId) {
     toast("No active socket", "Select a socket before adding an annotation.", "warn");
     return;
   }
+  const chartContext = context && Number.isFinite(Number(context.epochMs))
+    ? {
+        ...context,
+        metric: context.metric || metric || "*",
+        epochMs: Number(context.epochMs),
+        value: Number.isFinite(Number(context.value)) ? Number(context.value) : null
+      }
+    : null;
+  const draftMetric = chartContext?.metric || metric || "*";
+  const kind = chartContext?.kind || annotationKindForChartContext(draftMetric, chartContext?.value);
+  state.annotationContext = chartContext;
   state.annotationDraft = {
-    ...buildAnnotationDraft({ sourceName: state.sourceName, socketId, metric: metric || "*" }),
-    metric: metric || "*"
+    ...buildAnnotationDraft({ sourceName: state.sourceName, socketId, metric: draftMetric, kind }),
+    kind,
+    label: chartContext?.label || annotationLabelForChartContext(draftMetric, chartContext?.value),
+    note: chartContext?.note || "",
+    metric: draftMetric,
+    anchor: chartContext ? "cursor" : "visible-end",
+    epochMs: chartContext?.epochMs ?? null
   };
   state.modal = "annotation";
   render();
@@ -713,6 +787,19 @@ function renderSsOptionChip(option) {
   `;
 }
 
+function renderExportMenu(scope = "analysis") {
+  const open = state.openExportMenu === scope;
+  const pos = open && state.openExportMenuPos
+    ? `style="left:${state.openExportMenuPos.left}px;top:${state.openExportMenuPos.top}px"`
+    : "";
+  return `<span class="export-menu-wrap">
+    <button data-export-menu="${escapeHtml(scope)}" title="Export report or evidence pack">${icons.pack} Export</button>
+    <div class="row-menu export-menu ${open ? "open" : ""}" ${pos}>
+      <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>PDF report</span><small>Readable incident snapshot</small></button>
+      <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><small>PDF, CSV, JSON and chart PNGs</small></button>
+    </div>
+  </span>`;
+}
 function renderSsOptionControl(option, coverage, selectedKey) {
   const [short, long, desc, group] = option;
   const key = ssOptionKey(short, long);
@@ -1329,13 +1416,13 @@ function buildAdvisorFindings() {
       id: "socket-drops",
       severity: drops.some(socket => metricValue(socket, "skmem.d") >= thresholdFor("skmem.d").danger) ? "critical" : "high",
       title: "Socket memory drops detected",
-      pattern: "skmem.d is non-zero, which means packets/data were dropped at socket memory level.",
+      pattern: "skmem.d is non-zero: packets/data were dropped before demultiplexing in the kernel receive path.",
       sockets: drops,
       confidence: "High",
-      why: "Drops are not just latency: they are loss. The important question is whether the counter is static historical noise or increasing over time. If it grows with Recv-Q/skmem.r, the receiver path is overloaded.",
-      next: ["Chart skmem.d over time", "Correlate with Recv-Q and skmem.r", "Check NIC and softnet drops"],
-      mitigate: ["Reduce burst rate or add backpressure", "Fix CPU/softirq pressure", "Increase buffers only with memory guardrails", "Investigate packet drops before blaming the application protocol"],
-      commands: [envCommand("ss -tinpm"), envCommand("ip -s link show", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("sysctl net.core.rmem_max net.ipv4.tcp_rmem")]
+      why: "Drops are not just latency: they are loss. skmem.d can be compatible with NIC/qdisc/ring pressure or a too-small netdev_max_backlog, but it does not prove ring-buffer overflow by itself. The important question is whether the counter is static historical noise or increasing over time; if it grows with Recv-Q/skmem.r, softnet backlog, or interface drops, the receiver path is overloaded.",
+      next: ["Chart skmem.d over time", "Correlate with Recv-Q and skmem.r", "Check netdev_max_backlog, softnet drops/time_squeeze, and NIC driver counters before concluding ring-buffer overflow"],
+      mitigate: ["Reduce burst rate or add backpressure", "Fix CPU/softirq pressure", "If softnet drops increase and netdev_max_backlog is 1000, test net.core.netdev_max_backlog=10000 under change control", "Increase buffers only with memory guardrails", "Investigate packet drops before blaming the application protocol"],
+      commands: [envCommand("ss -tinpm"), envCommand("ip -s link show", { host: true }), envCommand("ethtool -S <iface> | egrep -i 'rx.*drop|rx.*miss|no.?buffer|timeout|fifo|overrun'", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("sysctl net.core.netdev_max_backlog net.core.rmem_max net.ipv4.tcp_rmem"), envCommand("sudo sysctl -w net.core.netdev_max_backlog=10000", { host: true })]
     }));
   }
 
@@ -1349,8 +1436,8 @@ function buildAdvisorFindings() {
       confidence: "High",
       why: `A static drop counter can be old evidence; an increasing counter is current pressure. Average cadence is ${formatMetricValue("skmem.d_rate", dropRate.avgDropRate)} and the worst interval reached ${formatMetricValue("skmem.d_rate", dropRate.peakDropRate)}.`,
       next: ["Enable the Socket drop rate chart", "Look for bursts aligned with RX bandwidth or Recv-Q", "Compare this cadence with incident timestamps"],
-      mitigate: ["If cadence is bursty, reduce producer burst size or add backpressure", "If cadence is steady, investigate CPU/softirq and receive buffer pressure", "Validate host NIC/qdisc/softnet drops before tuning socket buffers"],
-      commands: [envCommand("ss -tinpm"), envCommand("watch -n 1 'ss -tinpm | grep -A1 skmem'"), envCommand("ip -s link show", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true })]
+      mitigate: ["If cadence is bursty, reduce producer burst size or add backpressure", "If cadence is steady, investigate CPU/softirq and receive buffer pressure", "If netdev_max_backlog is 1000 and softnet drops rise during bursts, test 10000 then persist only after before/after evidence", "Validate host NIC ring/qdisc/softnet counters before tuning socket buffers"],
+      commands: [envCommand("ss -tinpm"), envCommand("watch -n 1 'ss -tinpm | grep -A1 skmem'"), envCommand("ip -s link show", { host: true }), envCommand("ethtool -S <iface> | egrep -i 'rx.*drop|rx.*miss|no.?buffer|timeout|fifo|overrun'", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("sysctl net.core.netdev_max_backlog"), envCommand("sudo sysctl -w net.core.netdev_max_backlog=10000", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true })]
     }));
   }
 
@@ -1362,10 +1449,10 @@ function buildAdvisorFindings() {
       pattern: `${formatMicroburstWindow(microburst)} with simultaneous RX bandwidth, Recv-Q, socket receive memory, and drop growth.`,
       sockets: [selected],
       confidence: microburst.dropDeltaTotal >= 1 ? "High" : "Medium",
-      why: `This is a classic short receive-pressure window: RX peaked at ${formatMetricValue("rx_bps", microburst.peakRxBps)}, Recv-Q at ${formatMetricValue("recvQ", microburst.peakRecvQ)}, skmem.r at ${formatMetricValue("skmem.r", microburst.peakSkmemR)}, and new drops reached ${formatMetricValue("skmem.d", microburst.dropDeltaTotal)}. That usually means burst absorption exceeded what the local reader path could drain in time.`,
+      why: `This is a classic short receive-pressure window: RX peaked at ${formatMetricValue("rx_bps", microburst.peakRxBps)}, Recv-Q at ${formatMetricValue("recvQ", microburst.peakRecvQ)}, skmem.r at ${formatMetricValue("skmem.r", microburst.peakSkmemR)}, and new drops reached ${formatMetricValue("skmem.d", microburst.dropDeltaTotal)}. That usually means burst absorption exceeded what the local reader path could drain in time; if netdev_max_backlog is still 1000, validate softnet drops because the software receive backlog may be the limiting queue before demultiplexing.`,
       next: ["Narrow the chart zoom around the detected window", "Enable Recv-Q, RX bandwidth, Socket drops, and Socket memory receive together", "Check whether the same process or peer repeats the pattern"],
-      mitigate: ["Reduce producer burst size or add backpressure", "Check local CPU, scheduler latency, and softirq pressure", "Tune receive buffers only after proving the consumer cannot drain bursts fast enough"],
-      commands: [envCommand("ss -tinpm state established"), envCommand("pidstat -druwt -p <pid> 1"), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true }), envCommand("ip -s link show", { host: true })]
+      mitigate: ["Reduce producer burst size or add backpressure", "Check local CPU, scheduler latency, softirq pressure, and netdev_max_backlog", "If softnet drops rise with bursts, test net.core.netdev_max_backlog=10000 before larger socket buffers", "Tune receive buffers only after proving the consumer cannot drain bursts fast enough"],
+      commands: [envCommand("ss -tinpm state established"), envCommand("pidstat -druwt -p <pid> 1"), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("sysctl net.core.netdev_max_backlog"), envCommand("sudo sysctl -w net.core.netdev_max_backlog=10000", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true }), envCommand("ip -s link show", { host: true })]
     }));
   }
 
@@ -1489,6 +1576,11 @@ function dashboardSnapshot(name) {
   return createDashboardSnapshot(state, name);
 }
 
+function applyDefaultDashboardPreset() {
+  const presetId = dashboardPresetIdOrDefault(state.prefs.defaultDashboardPreset);
+  state.activeDashboardPreset = presetId;
+  applyDashboardPresetProfile(state, presetId, chartMetricList);
+}
 function applyDashboardProfile(profile) {
   applySavedDashboardProfile(state, profile, chartMetricList);
   state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
@@ -1496,7 +1588,9 @@ function applyDashboardProfile(profile) {
 }
 
 function applyDashboardPreset(presetId) {
+  if (!DASHBOARD_PRESETS[presetId]) return;
   applyDashboardPresetProfile(state, presetId, chartMetricList);
+  state.activeDashboardPreset = presetId;
   state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
   savePrefs();
 }
@@ -1674,12 +1768,85 @@ function buildConversations() {
     conv.maxRto = Math.max(conv.maxRto, metricValue(socket, "rto"));
     conv.drops += metricValue(socket, "skmem.d");
   }
-  return [...map.values()].sort((a, b) =>
-    riskRank(b.maxRisk) - riskRank(a.maxRisk) ||
+  return sortConversations([...map.values()]);
+}
+
+const CONVERSATION_SORT_LABELS = {
+  risk: "Risk",
+  flow: "Flow",
+  proto: "Proto/state",
+  process: "Process",
+  sockets: "Sockets",
+  anomalies: "Anomalies",
+  tx: "TX",
+  rx: "RX",
+  sendQ: "Send-Q",
+  recvQ: "Recv-Q",
+  rtt: "RTT",
+  rto: "RTO",
+  drops: "Drops"
+};
+
+const CONVERSATION_TEXT_SORTS = new Set(["flow", "proto", "process"]);
+
+function conversationDefaultSortDir(key) {
+  return CONVERSATION_TEXT_SORTS.has(key) ? "asc" : "desc";
+}
+
+function conversationSortText(conv, key) {
+  if (key === "flow") return `${conv.local} ${conv.peer}`;
+  if (key === "proto") return `${conv.family} ${[...conv.states].join(" ")}`;
+  if (key === "process") return [...conv.processes].join(", ") || "-";
+  return "";
+}
+
+function conversationSortValue(conv, key) {
+  if (CONVERSATION_TEXT_SORTS.has(key)) return conversationSortText(conv, key);
+  if (key === "risk") return riskRank(conv.maxRisk);
+  if (key === "sockets") return conv.count;
+  if (key === "anomalies") return conv.anomalies;
+  if (key === "tx") return conv.txBps;
+  if (key === "rx") return conv.rxBps;
+  if (key === "sendQ") return conv.sendQ;
+  if (key === "recvQ") return conv.recvQ;
+  if (key === "rtt") return conv.maxRtt;
+  if (key === "rto") return conv.maxRto;
+  if (key === "drops") return conv.drops;
+  return 0;
+}
+
+function compareConversationFallback(a, b) {
+  return riskRank(b.maxRisk) - riskRank(a.maxRisk) ||
     b.anomalies - a.anomalies ||
+    b.drops - a.drops ||
     b.sendQ - a.sendQ ||
-    b.txBps - a.txBps
-  );
+    b.txBps - a.txBps ||
+    String(a.key).localeCompare(String(b.key), "fr", { numeric: true });
+}
+
+function sortConversations(conversations) {
+  const sort = state.conversationSort || { key: "anomalies", dir: "desc" };
+  const key = CONVERSATION_SORT_LABELS[sort.key] ? sort.key : "anomalies";
+  const factor = sort.dir === "asc" ? 1 : -1;
+  return conversations.map((conv, index) => ({ conv, index })).sort((a, b) => {
+    const av = conversationSortValue(a.conv, key);
+    const bv = conversationSortValue(b.conv, key);
+    let result = 0;
+    if (typeof av === "number" && typeof bv === "number") {
+      result = av - bv;
+    } else {
+      result = String(av).localeCompare(String(bv), "fr", { numeric: true, sensitivity: "base" });
+    }
+    return result * factor || compareConversationFallback(a.conv, b.conv) || a.index - b.index;
+  }).map(item => item.conv);
+}
+
+function renderConversationSortHeader(key, label) {
+  const sort = state.conversationSort || { key: "anomalies", dir: "desc" };
+  const active = sort.key === key;
+  const direction = active ? (sort.dir === "asc" ? "ASC" : "DESC") : "";
+  const title = `Sort conversations by ${label}${active ? ` (${direction})` : ""}`;
+  return `<th><button class="th-sort conversation-sort ${active ? "active" : ""}" data-conversation-sort="${escapeHtml(key)}" title="${escapeHtml(title)}">${escapeHtml(label)}${direction ? ` <span>${direction}</span>` : ""}</button></th>`;
 }
 
 function conversationAnomalySummary(conv) {
@@ -2260,7 +2427,6 @@ function renderInvestigationContext() {
       <button data-context-action="charts">${icons.chart} Charts</button>
       <button data-context-action="anomalies" class="${socketAnomalies.length ? "hot-action" : ""}">${icons.alert} Anomalies</button>
       <button data-context-action="conversations"><i class="ri-chat-3-line"></i> Conversations</button>
-      <button data-context-action="annotate">${icons.note} Annotate</button>
       <button class="icon" data-context-action="clear" title="Clear active context" aria-label="Clear active context">${icons.x}</button>
     </div>
     ${topAnomaly ? `<div class="investigation-note ${topAnomaly.severity}">
@@ -2472,13 +2638,17 @@ function renderKeepingWorkspacePosition() {
   const scrollLeft = workspace?.scrollLeft || 0;
   const windowScrollX = window.scrollX || 0;
   const windowScrollY = window.scrollY || 0;
+  const restore = () => {
+    const nextWorkspace = document.querySelector(".workspace");
+    if (nextWorkspace) {
+      nextWorkspace.scrollTop = scrollTop;
+      nextWorkspace.scrollLeft = scrollLeft;
+    }
+    window.scrollTo(windowScrollX, windowScrollY);
+  };
   render();
-  const nextWorkspace = document.querySelector(".workspace");
-  if (nextWorkspace) {
-    nextWorkspace.scrollTop = scrollTop;
-    nextWorkspace.scrollLeft = scrollLeft;
-  }
-  window.scrollTo(windowScrollX, windowScrollY);
+  restore();
+  requestAnimationFrame(restore);
 }
 
 function renderKeepingModalPosition() {
@@ -2597,8 +2767,7 @@ function renderAnalysisPage() {
           <div class="toolbar">
             <button data-action="toggleDeepAnalysis" class="${state.prefs.deepAnalysis ? "primary" : ""}" title="Run advanced advisor in the background">${icons.brain} Deep analysis</button>
             <button data-action="setBaseline" title="Use current parsed sockets as before baseline"><i class="ri-scales-3-line"></i> Set baseline</button>
-            <button data-action="exportReport" title="Open incident report for printing or saving as PDF">${icons.report} Incident report</button>
-            <button data-action="exportEvidencePack" title="Download a structured evidence pack">${icons.pack} Evidence pack</button>
+            ${renderExportMenu("analysis")}
             <input id="searchInput" placeholder='Filter: state:ESTAB risk>=high port:443 process:nginx rtt>100' value="${escapeHtml(state.table.filters.text)}" />
             <button class="icon" data-action="details" title="Socket details">${icons.activity}</button>
           </div>
@@ -2670,9 +2839,7 @@ function renderChartsPage() {
           <div class="chart-tool-group">
             <button data-action="thresholds">${icons.threshold} Thresholds</button>
             <button data-action="saveCharts">${icons.save} Export PNG</button>
-            <button data-action="annotate">${icons.note} Annotate</button>
-            <button data-action="exportReport">${icons.report} Incident report</button>
-            <button data-action="exportEvidencePack">${icons.pack} Evidence pack</button>
+            ${renderExportMenu("charts")}
           </div>
           <div class="chart-timezone-group">
             <label>Time zone ${renderChartInfo("Time zone", "Controls how timestamps are displayed on chart axes, crosshair labels, and date-time zoom fields. The underlying samples are unchanged.", "Use UTC for server-side logs and incident correlation across machines. Use local time when matching an operator timeline, application logs, or monitoring dashboards configured in that zone.")}</label>
@@ -2703,7 +2870,6 @@ function renderChartsPage() {
           </div>
           <div class="col-tools">
             <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
-            <button class="mini" data-action="annotateMetric" data-annotation-metric="${m}" title="Annotate this chart">${icons.note}</button>
             ${renderChartMoveMenu(m)}
           </div>
         </div>
@@ -2738,39 +2904,74 @@ function renderChartsPage() {
   `;
 }
 
-function renderDashboardStudio() {
-  return `<section class="dashboard-studio">
-    <div class="dashboard-hero">
-      <div>
-        <span class="tooltip-kicker">Dashboard studio</span>
-        <h2>Operational dashboards</h2>
-        <p>Apply expert presets, tune visible widgets, then save the exact chart layout for recurring investigations.</p>
-      </div>
-      <div class="dashboard-save">
-        <input id="dashboardName" placeholder="Dashboard name" />
-        <button class="primary" data-action="saveDashboard">${icons.saveDisk} Save dashboard</button>
-      </div>
-    </div>
-    <div class="dashboard-presets">
-      ${Object.entries(DASHBOARD_PRESETS).map(([id, preset]) => `<button data-dashboard-preset="${id}">
-        <strong>${escapeHtml(preset.name)}</strong>
-        <span>${escapeHtml(preset.description)}</span>
+function dashboardPresetIcon(presetId) {
+  return {
+    noc: "ri-dashboard-3-line",
+    latency: "ri-pulse-line",
+    tail: "ri-line-chart-line",
+    drops: "ri-error-warning-line",
+    microburst: "ri-flashlight-line",
+    throughput: "ri-route-line",
+    warroom: "ri-team-line"
+  }[presetId] || "ri-dashboard-3-line";
+}
+
+function renderDashboardPresetPicker(activePresetId, presetEntries) {
+  const activePreset = DASHBOARD_PRESETS[activePresetId] || presetEntries[0]?.[1];
+  const activeIcon = dashboardPresetIcon(activePresetId);
+  const open = state.openDashboardPresetMenu;
+  return `<div class="dashboard-preset-picker" id="dashboardPresetPicker">
+    <button class="dashboard-preset-trigger" data-dashboard-preset-toggle aria-expanded="${open ? "true" : "false"}" title="${escapeHtml(activePreset?.description || "Choose an expert dashboard preset.")}">
+      <span class="dashboard-preset-icon"><i class="${escapeHtml(activeIcon)}"></i></span>
+      <span class="dashboard-preset-current">${escapeHtml(activePreset?.name || "Choose preset")}</span>
+      <i class="ri-arrow-down-s-line dashboard-preset-chevron"></i>
+    </button>
+    <div class="dashboard-preset-menu ${open ? "open" : ""}" role="listbox" aria-label="Expert dashboard presets">
+      ${presetEntries.map(([id, preset]) => `<button class="dashboard-preset-option ${id === activePresetId ? "selected" : ""}" data-dashboard-preset-choice="${escapeHtml(id)}" role="option" aria-selected="${id === activePresetId ? "true" : "false"}" title="${escapeHtml(preset.description)}">
+        <span class="dashboard-preset-icon"><i class="${escapeHtml(dashboardPresetIcon(id))}"></i></span>
+        <span class="dashboard-preset-option-copy"><strong>${escapeHtml(preset.name)}</strong><small>${escapeHtml(preset.description)}</small></span>
       </button>`).join("")}
     </div>
-    <div class="dashboard-saved">
-      <strong>Saved dashboards</strong>
-      <div class="dashboard-profile-list">
-        ${state.dashboardProfiles.length ? state.dashboardProfiles.map(profile => `<article class="dashboard-profile">
-          <span>${escapeHtml(profile.name)}</span>
-          <small>${escapeHtml(new Date(profile.createdAt).toLocaleString(resolvedNumberLocale()))}</small>
-          <button class="icon" data-load-dashboard="${profile.id}" title="Load dashboard"><i class="ri-check-line"></i></button>
-          <button class="icon" data-delete-dashboard="${profile.id}" title="Delete dashboard">${icons.trash}</button>
-        </article>`).join("") : `<span class="hint">No saved dashboard yet.</span>`}
+  </div>`;
+}
+function renderDashboardStudio() {
+  const presetEntries = Object.entries(DASHBOARD_PRESETS);
+  const activePresetId = DASHBOARD_PRESETS[state.activeDashboardPreset]
+    ? state.activeDashboardPreset
+    : presetEntries[0]?.[0];
+  const presetPicker = renderDashboardPresetPicker(activePresetId, presetEntries);
+  const savedOptions = state.dashboardProfiles
+    .map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)} - ${escapeHtml(new Date(profile.createdAt).toLocaleString(resolvedNumberLocale()))}</option>`)
+    .join("");
+  return `<section class="dashboard-studio compact">
+    <div class="dashboard-compact-bar dashboard-compact-bar--single">
+      <div class="dashboard-compact-title">
+        <span class="tooltip-kicker">Dashboard studio</span>
+        <strong>Operational dashboards</strong>
       </div>
+      <div class="dashboard-control dashboard-preset-control">
+        <span>Expert preset</span>
+        ${presetPicker}
+      </div>
+      <div class="dashboard-divider" aria-hidden="true"></div>
+      <label class="dashboard-control dashboard-saved-select">
+        <span>Saved dashboards</span>
+        <select id="savedDashboardSelect" ${state.dashboardProfiles.length ? "" : "disabled"}>
+          ${state.dashboardProfiles.length ? savedOptions : `<option>No saved dashboard yet</option>`}
+        </select>
+      </label>
+      <div class="dashboard-saved-actions">
+        <button data-action="loadSelectedDashboard" ${state.dashboardProfiles.length ? "" : "disabled"} title="Load selected dashboard">${icons.load} Load</button>
+        <button data-action="deleteSelectedDashboard" ${state.dashboardProfiles.length ? "" : "disabled"} title="Delete selected dashboard">${icons.trash} Delete</button>
+      </div>
+      <label class="dashboard-control dashboard-save-name">
+        <span>Save current</span>
+        <input id="dashboardName" placeholder="Dashboard name" />
+      </label>
+      <button class="primary dashboard-save-button" data-action="saveDashboard" title="Save current chart layout">${icons.saveDisk} Save</button>
     </div>
   </section>`;
 }
-
 function renderTailLatencyLensPanel() {
   const lens = tailLatencyLens();
   if (!hasRealTimestampHistory()) {
@@ -3329,7 +3530,7 @@ function renderConversations() {
     ${renderGridControls(conversations.length)}
     ${topPager}
     <div class="table-wrap"><table>
-      <thead><tr><th>Risk</th><th>Flow</th><th>Proto/state</th><th>Process</th><th>Sockets</th><th>Anomalies</th><th>TX</th><th>RX</th><th>Send-Q</th><th>Recv-Q</th><th>RTT</th><th>RTO</th><th>Drops</th></tr></thead>
+      <thead><tr>${renderConversationSortHeader("risk", "Risk")}${renderConversationSortHeader("flow", "Flow")}${renderConversationSortHeader("proto", "Proto/state")}${renderConversationSortHeader("process", "Process")}${renderConversationSortHeader("sockets", "Sockets")}${renderConversationSortHeader("anomalies", "Anomalies")}${renderConversationSortHeader("tx", "TX")}${renderConversationSortHeader("rx", "RX")}${renderConversationSortHeader("sendQ", "Send-Q")}${renderConversationSortHeader("recvQ", "Recv-Q")}${renderConversationSortHeader("rtt", "RTT")}${renderConversationSortHeader("rto", "RTO")}${renderConversationSortHeader("drops", "Drops")}</tr></thead>
       <tbody>${page.rows.map(c => `<tr data-socket="${escapeHtml(c.socket.id)}" class="${c.socket.id === state.selectedId ? "selected" : ""}">
         <td><span class="risk ${c.maxRisk}">${c.maxRisk}</span></td>
         <td><div class="flow-cell"><strong>${escapeHtml(c.local)}</strong><span>${icons.arrowRight}</span>${renderPeerEndpoint(c.peer)}</div></td>
@@ -3841,6 +4042,19 @@ function renderSocketInsights(socket) {
   return `<div class="insight-list">${socketInsights(socket).map(([title, text]) => `<article class="field-card insight-card"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p></article>`).join("")}</div>`;
 }
 
+
+function renderChartAnnotationMenu() {
+  if (!state.chartAnnotationMenuContext || !state.chartAnnotationMenuPos) return "";
+  const context = state.chartAnnotationMenuContext;
+  const pos = `style="left:${state.chartAnnotationMenuPos.left}px;top:${state.chartAnnotationMenuPos.top}px"`;
+  return `<div class="row-menu chart-context-menu open" ${pos} role="menu" aria-label="Chart context menu">
+    <button data-chart-annotation-menu="annotate" role="menuitem">
+      ${icons.note}
+      <span>Annotate here</span>
+      <small>${escapeHtml(metricLabel(context.metric))} at ${escapeHtml(timeLabel(context.row?.t || 0, context.row?.epochMs))}</small>
+    </button>
+  </div>`;
+}
 function renderDrawer() {
   const selected = state.sockets.find(s => s.id === state.selectedId);
   const title = state.drawer === "prefs" ? "Preferences" : state.drawer === "guide" ? "Expert guide" : state.drawer === "thresholds" ? "Threshold configuration" : "Socket details";
@@ -3863,6 +4077,7 @@ function renderDrawer() {
 function renderPrefs() {
   const tab = state.prefsTab || "display";
   const realTimeline = hasRealTimestampHistory();
+  const tooltipOpacity = chartTooltipOpacity();
   const localeChoices = [
     ["auto", `Browser default (${resolvedNumberLocale()})`],
     ["en-US", "English - United States"],
@@ -3907,6 +4122,8 @@ function renderPrefs() {
         <label>Point size<select id="prefChartPointSize">
           ${["XS", "S", "M", "L"].map(size => `<option value="${size}" ${state.prefs.chartPointSize === size ? "selected" : ""}>${size}${size === "XS" ? " - 1 px" : ""}</option>`).join("")}
         </select></label>
+        <label>Default expert preset<select id="prefDefaultDashboardPreset">${renderDashboardPresetOptions(state.prefs.defaultDashboardPreset)}</select></label>
+        <label class="range-preference"><span>Crosshair tooltip background</span><input id="prefTooltipOpacity" type="range" min="0.35" max="1" step="0.05" value="${tooltipOpacity}"/><small><b>${Math.round(tooltipOpacity * 100)}%</b> opacity - 80% keeps the label readable while revealing the curve behind it.</small></label>
         <div class="synthetic-pref ${realTimeline ? "disabled" : ""}">
           <div>
             <strong>Fallback for data without timestamps</strong>
@@ -4026,7 +4243,8 @@ function renderGuideBestPractices() {
         <button class="primary" data-action="sampleTailLatency">${icons.chart} Load tail latency sample</button>
       </div>
     </article>
-    <article class="guide-card"><strong>6. Store raw evidence</strong><p>Write to .log, .gz, or .zip so you can re-run analysis offline and compare with application, host, and network telemetry.</p></article>`;
+    <article class="guide-card"><strong>6. Receive backlog sanity check</strong><p>If socket drops say "dropped before demultiplexing" during RX bursts, check sysctl net.core.netdev_max_backlog. A value of 1000 is plausible on Ubuntu defaults and can be too small for burst-heavy NIC/GRO/LRO delivery. Confirm with /proc/net/softnet_stat first; then test sudo sysctl -w net.core.netdev_max_backlog=10000 and persist only after before/after evidence.</p></article>
+    <article class="guide-card"><strong>7. Store raw evidence</strong><p>Write to .log, .gz, or .zip so you can re-run analysis offline and compare with application, host, and network telemetry.</p></article>`;
 }
 
 function renderGuideUseCases() {
@@ -4084,8 +4302,8 @@ function renderGuideUseCases() {
         "Buffers high but queues stable and no drops: may be normal burst absorption; watch trend before tuning."
       ],
       next: ["Open socket details and compare r/rb/t/tb/w/bl/d.", "Chart skmem.r, skmem.t, drops, Send-Q, and Recv-Q together.", "Check system-wide memory and TCP buffer sysctls."],
-      commands: [envCommand("ss -tinpm"), envCommand("sysctl net.ipv4.tcp_rmem net.ipv4.tcp_wmem net.ipv4.tcp_mem net.core.rmem_max net.core.wmem_max"), envCommand("nstat -az | egrep 'Prune|Collapse|Rcv|Drop|Memory'", { host: true }), envCommand("cat /proc/net/sockstat /proc/net/sockstat6", { host: true })],
-      mitigation: "Tune buffers with guardrails: define memory budget, test under load, and keep before/after ss timelines. Larger buffers can increase latency and hide slow consumers."
+      commands: [envCommand("ss -tinpm"), envCommand("sysctl net.core.netdev_max_backlog net.ipv4.tcp_rmem net.ipv4.tcp_wmem net.ipv4.tcp_mem net.core.rmem_max net.core.wmem_max"), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("nstat -az | egrep 'Prune|Collapse|Rcv|Drop|Memory'", { host: true }), envCommand("cat /proc/net/sockstat /proc/net/sockstat6", { host: true })],
+      mitigation: "Tune backlog and buffers with guardrails: if softnet drops rise and netdev_max_backlog is 1000, test 10000 before larger socket buffers; define memory/latency budget and keep before/after ss timelines."
     },
     {
       title: "5. LXC/LXD namespace split: container symptom or host network problem?",
@@ -4309,15 +4527,25 @@ function renderAnnotationModal() {
   const socketId = annotationSocketId();
   const items = currentSourceAnnotations(null, socketId, visibleHistory());
   const types = annotationTypeList();
-  const anchors = annotationAnchorOptions();
-  const metrics = annotationMetricChoices();
   const draft = state.annotationDraft || buildAnnotationDraft({ sourceName: state.sourceName, socketId, metric: state.prefs.graphMetric });
+  const clickedEpoch = Number(draft.epochMs);
+  const cursorAnchor = draft.anchor === "cursor" && Number.isFinite(clickedEpoch)
+    ? [{ id: "cursor", label: `Clicked chart point - ${timeLabel(0, clickedEpoch)}`, epochMs: clickedEpoch }]
+    : [];
+  const anchors = [...cursorAnchor, ...annotationAnchorOptions()];
+  const metrics = annotationMetricChoices();
+  const context = state.annotationContext;
   return `<div class="annotation-modal">
     <section class="annotation-editor">
       <div class="annotation-context">
         <strong>${socket ? `${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}` : "No active socket"}</strong>
         <span class="hint">Attach a note to the current socket, or target one metric so the marker appears only on the related charts.</span>
       </div>
+      ${context ? `<div class="annotation-click-context">
+        <span class="tooltip-kicker">Chart right-click context</span>
+        <strong>${escapeHtml(metricLabel(context.metric))} at ${escapeHtml(timeLabel(0, context.epochMs))}</strong>
+        <span>${escapeHtml(formatMetricValue(context.metric, context.value ?? 0))} - marker will be pinned to this exact captured sample.</span>
+      </div>` : ""}
       <div class="annotation-grid">
         <label><span>Marker type</span><select id="annotationKind">${types.map(item => `<option value="${item.id}" ${draft.kind === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
         <label><span>Target metric</span><select id="annotationMetric">${metrics.map(item => `<option value="${item.value}" ${draft.metric === item.value ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
@@ -4419,6 +4647,7 @@ function renderPreImportFilters() {
 
 function renderLayoutPrefs() {
   const l = state.prefs.chartLayout;
+  const tooltipOpacity = chartTooltipOpacity();
   const metrics = chartMetricList();
   return `<div class="layout-config">
     <article class="field-card">
@@ -4438,6 +4667,7 @@ function renderLayoutPrefs() {
       <label class="check inline"><input id="layoutSharedZoom" type="checkbox" ${l.sharedZoom ? "checked" : ""}/> Shared zoom across charts</label>
       <label class="check inline"><input id="layoutLegend" type="checkbox" ${l.showLegend ? "checked" : ""}/> Show legend/status</label>
       <label class="check inline"><input id="layoutCrosshair" type="checkbox" ${l.showCrosshair ? "checked" : ""}/> Enable crosshair and drag zoom</label>
+      <label class="range-preference"><span>Crosshair tooltip background</span><input id="layoutTooltipOpacity" type="range" min="0.35" max="1" step="0.05" value="${tooltipOpacity}"/><small><b>${Math.round(tooltipOpacity * 100)}%</b> opacity - keeps the chart slightly visible behind the tooltip.</small></label>
       <label class="check inline"><input id="layoutThresholds" type="checkbox" ${l.showThresholds ? "checked" : ""}/> Show threshold lines and colors</label>
       <label class="check inline"><input id="layoutStickyToolbar" type="checkbox" ${l.stickyToolbar ? "checked" : ""}/> Sticky chart controls</label>
     </article>
@@ -5027,13 +5257,20 @@ function resetAllState() {
   state.activeTab = "sockets";
   state.drawer = null;
   state.modal = null;
+  state.annotationContext = null;
   state.statsMetric = null;
   state.ingestRawExpanded = true;
   state.openChartMoveMetric = null;
   state.openChartMovePos = null;
   state.openMenuPos = null;
+  state.openMenuId = null;
+  state.openExportMenu = null;
+  state.openExportMenuPos = null;
+  state.openDashboardPresetMenu = false;
+  state.activeDashboardPreset = Object.keys(DASHBOARD_PRESETS)[0] || "noc";
   state.openConversationInsightKey = null;
   state.openConversationInsightPos = null;
+  state.conversationSort = { key: "anomalies", dir: "desc" };
   state.selectedMapEdgeId = null;
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
@@ -5110,6 +5347,38 @@ function zoomToTailLatencyWindow() {
   return true;
 }
 
+const COUNTER_AXIS_METRICS = new Set([
+  "bytes_acked",
+  "bytes_received",
+  "bytes_sent",
+  "bytes_retrans",
+  "segs_out",
+  "segs_in",
+  "data_segs_out",
+  "data_segs_in",
+  "delivered"
+]);
+
+function chartAxisDomain(metric, values, thresholds = []) {
+  const finiteValues = values.filter(Number.isFinite);
+  if (!finiteValues.length) return { min: 0, max: 1, span: 1, zoomed: false };
+  const rawMin = Math.min(...finiteValues);
+  const rawMax = Math.max(...finiteValues);
+  const rawRange = rawMax - rawMin;
+  const finiteThresholds = thresholds.filter(Number.isFinite);
+  const thresholdMax = finiteThresholds.length ? Math.max(...finiteThresholds) : 0;
+  const defaultMax = Math.max(rawMax, thresholdMax, 1);
+  const defaultMin = Math.min(0, rawMin);
+  const defaultSpan = Math.max(1, defaultMax - defaultMin);
+  const canZoomCounter = COUNTER_AXIS_METRICS.has(metric) && rawMin > 0 && rawMax > 0;
+  const compressed = canZoomCounter && rawRange > 0 && rawRange / Math.max(rawMax, 1) <= 0.08;
+  const nearFlat = canZoomCounter && rawRange === 0 && rawMax >= 1000;
+  if (!compressed && !nearFlat) return { min: defaultMin, max: defaultMax, span: defaultSpan, zoomed: false };
+  const padding = Math.max(rawRange * 0.18, rawMax * 0.002, 1);
+  const min = Math.max(0, rawMin - padding);
+  const max = rawMax + padding;
+  return { min, max, span: Math.max(1, max - min), zoomed: true };
+}
 function drawChart() {
   const svg = document.querySelector("#chart");
   if (!svg) return;
@@ -5125,9 +5394,10 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const values = data.map(d => d[metric] || 0);
   const t = thresholdFor(metric);
   const finiteThresholds = [t.warn, t.danger].filter(Number.isFinite);
-  const max = Math.max(...values, ...finiteThresholds, 1);
-  const min = Math.min(0, ...values);
-  const span = Math.max(1, max - min);
+  const axis = chartAxisDomain(metric, values, finiteThresholds);
+  const max = axis.max;
+  const min = axis.min;
+  const span = axis.span;
   const yTicks = [0, .25, .5, .75, 1].map(f => min + f * span);
   const longestTick = yTicks.map(v => formatMetricValue(metric, v)).reduce((longest, value) => value.length > longest.length ? value : longest, "");
   const tickWidth = Math.min(150, Math.max(48, longestTick.length * 6.4));
@@ -5181,7 +5451,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     ${annotationOverlay}
     ${showWarnLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${warnY}" y2="${warnY}" stroke="#ff9f43" stroke-dasharray="7 6"/><text x="${w - pad.r - 6}" y="${warnY - 6}" text-anchor="end" fill="#ff9f43" font-size="11">warn ${formatMetricValue(metric, t.warn)}</text>` : ""}
     ${showDangerLine ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${dangerY}" y2="${dangerY}" stroke="#ff5c77" stroke-dasharray="4 4"/><text x="${w - pad.r - 6}" y="${dangerY - 6}" text-anchor="end" fill="#ff5c77" font-size="11">danger ${formatMetricValue(metric, t.danger)}</text>` : ""}
-    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
+    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${axis.zoomed ? " - zoomed Y" : ""}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(metric)} ${metricUnit(metric) ? `(${metricUnit(metric)})` : ""}</text>
     ${style === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
@@ -5193,6 +5463,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     <g class="crosshair-layer" data-crosshair-layer="1" pointer-events="none"></g>
     <rect class="zoom-capture" x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="transparent" pointer-events="all"/>
   `;
+  attachChartContextAnnotation(svg);
   if (state.prefs.chartLayout.showCrosshair) attachChartInteractions(svg);
 }
 
@@ -5255,6 +5526,55 @@ function svgPoint(svg, event) {
   return point.matrixTransform(svg.getScreenCTM().inverse());
 }
 
+function chartPointerContext(svg, event) {
+  const metric = svg.dataset.metric || state.prefs.graphMetric;
+  const renderStyle = svg.dataset.renderStyle || state.prefs.graphStyle;
+  const rows = renderableHistory(visibleHistory(), metric, renderStyle, svg.clientWidth || 640).rows;
+  if (!rows.length) return null;
+  const left = Number(svg.dataset.plotLeft);
+  const right = Number(svg.dataset.plotRight);
+  if (!Number.isFinite(left) || !Number.isFinite(right) || right <= left) return null;
+  const point = svgPoint(svg, event);
+  const x = Math.max(left, Math.min(right, point.x));
+  const pct = (x - left) / Math.max(1, right - left);
+  const row = nearestChartRow(rows, pct);
+  const rawValue = Number(row?.[metric]);
+  const value = Number.isFinite(rawValue) ? rawValue : 0;
+  return {
+    metric,
+    row,
+    value,
+    epochMs: chartRowTime(row),
+    kind: annotationKindForChartContext(metric, value),
+    label: annotationLabelForChartContext(metric, value),
+    note: `Created from chart right-click at ${timeLabel(row?.t || 0, row?.epochMs)} with ${metricLabel(metric)}=${formatMetricValue(metric, value)}.`
+  };
+}
+
+function chartContextMenuPosition(event) {
+  const menuWidth = 250;
+  const menuHeight = 86;
+  const left = Math.min(Math.max(8, event.clientX), window.innerWidth - menuWidth - 8);
+  const top = Math.min(Math.max(8, event.clientY), window.innerHeight - menuHeight - 8);
+  return { left: Math.round(left), top: Math.round(top) };
+}
+
+function attachChartContextAnnotation(svg) {
+  if (svg.dataset.contextAnnotation === "1") return;
+  svg.dataset.contextAnnotation = "1";
+  svg.addEventListener("contextmenu", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const context = chartPointerContext(svg, event);
+    if (!context || !Number.isFinite(context.epochMs)) {
+      toast("No chart point", "No captured sample is available at this position.", "warn");
+      return;
+    }
+    state.chartAnnotationMenuContext = context;
+    state.chartAnnotationMenuPos = chartContextMenuPosition(event);
+    renderKeepingWorkspacePosition();
+  });
+}
 function attachChartInteractions(svg) {
   if (svg.dataset.interactive === "1") return;
   svg.dataset.interactive = "1";
@@ -5278,12 +5598,13 @@ function attachChartInteractions(svg) {
     const rows = renderableHistory(visibleHistory(), metric, renderStyle, svg.clientWidth || 640).rows;
     const row = nearestChartRow(rows, pct);
     const value = row[metric] || 0;
+    const tooltipOpacity = chartTooltipOpacity();
     const selection = dragX == null ? "" : `<rect x="${Math.min(startX, dragX)}" y="${b.top}" width="${Math.abs(dragX - startX)}" height="${b.bottom - b.top}" fill="#5db7ff" opacity=".18" stroke="#5db7ff" stroke-dasharray="5 4"/>`;
     lx.innerHTML = `
       ${selection}
       <line x1="${x}" x2="${x}" y1="${b.top}" y2="${b.bottom}" stroke="#edf4ff" stroke-width="1.4" stroke-dasharray="4 4"/>
       <line x1="${b.left}" x2="${b.right}" y1="${b.bottom}" y2="${b.bottom}" stroke="#52657a"/>
-      <rect x="${Math.min(x + 10, b.right - 190)}" y="${b.top + 8}" width="180" height="48" rx="6" fill="#0b1018" stroke="#52657a"/>
+      <rect x="${Math.min(x + 10, b.right - 190)}" y="${b.top + 8}" width="180" height="48" rx="6" fill="#0b1018" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
       <text x="${Math.min(x + 20, b.right - 180)}" y="${b.top + 28}" fill="#edf4ff" font-size="12">${timeLabel(row.t || 0, row.epochMs)}</text>
       <text x="${Math.min(x + 20, b.right - 180)}" y="${b.top + 46}" fill="${thresholdColor(metric, value)}" font-size="12">${metricLabel(metric)}: ${formatMetricValue(metric, value)}</text>
     `;
@@ -5294,6 +5615,7 @@ function attachChartInteractions(svg) {
     drawOverlay(x, dragging ? x : null);
   });
   svg.addEventListener("pointerdown", event => {
+    if (event.button !== 0) return;
     const p = svgPoint(svg, event);
     startX = clampX(p.x);
     dragging = true;
@@ -6273,7 +6595,49 @@ async function copyTextToClipboard(text) {
   return ok;
 }
 
+function closeDashboardPresetMenu(cancel = false) {
+  if (!state.openDashboardPresetMenu) return false;
+  if (cancel) {
+    state.activeDashboardPreset = dashboardPresetIdOrDefault(state.dashboardPresetBeforeOpen || state.activeDashboardPreset);
+  }
+  state.openDashboardPresetMenu = false;
+  state.dashboardPresetBeforeOpen = null;
+  return true;
+}
+
+function closeFloatingMenus(options = {}) {
+  let changed = closeDashboardPresetMenu(Boolean(options.cancelDashboard));
+  if (state.openExportMenu || state.openExportMenuPos) {
+    state.openExportMenu = null;
+    state.openExportMenuPos = null;
+    changed = true;
+  }
+  if (state.openMenuId || state.openMenuPos) {
+    state.openMenuId = null;
+    state.openMenuPos = null;
+    changed = true;
+  }
+  if (state.openChartMoveMetric || state.openChartMovePos) {
+    state.openChartMoveMetric = null;
+    state.openChartMovePos = null;
+    changed = true;
+  }
+  if (state.openConversationInsightKey || state.openConversationInsightPos) {
+    state.openConversationInsightKey = null;
+    state.openConversationInsightPos = null;
+    changed = true;
+  }
+  return changed;
+}
+
+function handleGlobalKeydown(event) {
+  if (event.key !== "Escape") return;
+  if (!closeFloatingMenus({ cancelDashboard: true })) return;
+  event.preventDefault();
+  renderKeepingWorkspacePosition();
+}
 function bindEvents() {
+  document.onkeydown = handleGlobalKeydown;
   bindSmartChartTooltips();
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
     const action = event.currentTarget.dataset.action;
@@ -6335,7 +6699,7 @@ function bindEvents() {
       setZoom(0, 1);
       markAnalysisDirty({ raw: true });
       recompute();
-      applyDashboardPresetProfile(state, "microburst", chartMetricList);
+      applyDashboardPreset("microburst");
       toast("Microburst sample loaded", "The guide sample opened in Charts with the Microburst investigation preset.");
       render();
     }
@@ -6350,15 +6714,13 @@ function bindEvents() {
       setZoom(0, 1);
       markAnalysisDirty({ raw: true });
       recompute();
-      applyDashboardPresetProfile(state, "tail", chartMetricList);
+      applyDashboardPreset("tail");
       toast("Tail latency sample loaded", "The guide sample opened in Charts with the Tail latency preset.");
       render();
     }
     if (action === "clear") { state.raw = ""; state.ingestRawExpanded = true; markAnalysisDirty({ raw: true }); render(); }
     if (action === "exportReport") { openIncidentReport(); }
     if (action === "exportEvidencePack") { exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger")); }
-    if (action === "annotate") { openAnnotationModal(state.prefs.graphMetric); }
-    if (action === "annotateMetric") { openAnnotationModal(event.currentTarget.dataset.annotationMetric || state.prefs.graphMetric); }
     if (action === "saveAnnotation") {
       const anchors = annotationAnchorOptions();
       const kind = document.querySelector("#annotationKind")?.value || "custom";
@@ -6366,10 +6728,14 @@ function bindEvents() {
       const anchor = document.querySelector("#annotationAnchor")?.value || "visible-end";
       const label = (document.querySelector("#annotationLabel")?.value || "").trim() || annotationDefaultLabel(kind);
       const note = (document.querySelector("#annotationNote")?.value || "").trim();
-      const epochMs = anchors.find(item => item.id === anchor)?.epochMs || visibleHistory()[visibleHistory().length - 1]?.epochMs || Date.now();
+      const draftEpoch = Number(state.annotationDraft?.epochMs);
+      const epochMs = anchor === "cursor" && Number.isFinite(draftEpoch)
+        ? draftEpoch
+        : anchors.find(item => item.id === anchor)?.epochMs || visibleHistory()[visibleHistory().length - 1]?.epochMs || Date.now();
       state.annotations = [...state.annotations, { id: `annotation-${Date.now()}-${Math.random().toString(16).slice(2)}`, sourceName: state.sourceName, socketId: annotationSocketId(), metric, kind, label, note, anchor, epochMs, createdAt: Date.now() }];
       saveAnnotations();
       state.modal = null;
+      state.annotationContext = null;
       toast("Annotation saved", `${label} was attached to the current socket.`);
       render();
     }
@@ -6381,14 +6747,14 @@ function bindEvents() {
     if (action === "zoomTailWindow") {
       const preset = event.currentTarget.dataset.dashboardPresetJump;
       state.view = "charts";
-      if (preset) applyDashboardPresetProfile(state, preset, chartMetricList);
+      if (preset) applyDashboardPreset(preset);
       if (zoomToTailLatencyWindow()) renderKeepingWorkspacePosition();
       else toast("No tail window", "No significant tail-latency window is available on the current visible history.", "warn");
     }
     if (action === "openChecklistCharts") {
       const preset = event.currentTarget.dataset.dashboardPresetJump;
       state.view = "charts";
-      if (preset) applyDashboardPresetProfile(state, preset, chartMetricList);
+      if (preset) applyDashboardPreset(preset);
       renderKeepingWorkspacePosition();
     }
     if (action === "openChecklistAdvisor") {
@@ -6406,7 +6772,7 @@ function bindEvents() {
     if (action === "prefs") { state.drawer = "prefs"; render(); }
     if (action === "details") { state.drawer = "details"; render(); }
     if (action === "columns") { state.modal = "columns"; render(); }
-    if (action === "thresholds") { state.drawer = "thresholds"; render(); }
+    if (action === "thresholds") { state.drawer = "thresholds"; renderKeepingWorkspacePosition(); }
     if (action === "layoutPrefs") { state.modal = "layout"; render(); }
     if (action === "serviceAliases") { state.modal = "serviceAliases"; render(); }
     if (action === "topology") { state.modal = "topology"; render(); }
@@ -6549,7 +6915,7 @@ function bindEvents() {
       setZoom(state.chartZoom.start + delta, state.chartZoom.end + delta);
       render();
     }
-    if (action === "resetZoom") { setZoom(0, 1); render(); }
+    if (action === "resetZoom") { setZoom(0, 1); renderKeepingWorkspacePosition(); }
     if (action === "saveCharts") { saveChartsPng().catch(error => toast("Export failed", error.message || "PNG export failed.", "danger")); }
     if (action === "saveThresholds") {
       document.querySelectorAll("[data-threshold]").forEach(input => {
@@ -6574,6 +6940,7 @@ function bindEvents() {
       l.sharedZoom = Boolean(document.querySelector("#layoutSharedZoom")?.checked);
       l.showLegend = Boolean(document.querySelector("#layoutLegend")?.checked);
       l.showCrosshair = Boolean(document.querySelector("#layoutCrosshair")?.checked);
+      l.tooltipOpacity = clampChartTooltipOpacity(document.querySelector("#layoutTooltipOpacity")?.value ?? l.tooltipOpacity);
       l.showThresholds = Boolean(document.querySelector("#layoutThresholds")?.checked);
       l.stickyToolbar = Boolean(document.querySelector("#layoutStickyToolbar")?.checked);
       const preset = document.querySelector("#layoutPreset")?.value;
@@ -6610,6 +6977,20 @@ function bindEvents() {
       saveTableProfiles();
       toast("Table layout saved", `"${name}" is now available in named table layouts.`);
       render();
+    }
+
+    if (action === "loadSelectedDashboard") {
+      const id = document.querySelector("#savedDashboardSelect")?.value || "";
+      applyDashboardProfile(state.dashboardProfiles.find(profile => profile.id === id));
+      toast("Dashboard loaded", "Saved widgets, layout, style, and correlation were restored.");
+      renderKeepingWorkspacePosition();
+    }
+    if (action === "deleteSelectedDashboard") {
+      const id = document.querySelector("#savedDashboardSelect")?.value || "";
+      state.dashboardProfiles = state.dashboardProfiles.filter(profile => profile.id !== id);
+      saveDashboardProfiles();
+      toast("Dashboard deleted", "The saved dashboard has been removed.");
+      renderKeepingWorkspacePosition();
     }
     if (action === "saveDashboard") {
       const name = document.querySelector("#dashboardName")?.value?.trim() || "";
@@ -6676,7 +7057,7 @@ function bindEvents() {
       render();
     }
     if (action === "closeDrawer") { state.drawer = null; render(); }
-    if (action === "closeModal") { state.modal = null; state.helpColumn = null; render(); }
+    if (action === "closeModal") { state.modal = null; state.helpColumn = null; state.annotationContext = null; render(); }
     if (action === "savePrefs") {
       state.prefs.severityFloor = document.querySelector("#prefSeverity")?.value || state.prefs.severityFloor;
       state.prefs.autoToast = document.querySelector("#prefToast")?.checked ?? state.prefs.autoToast;
@@ -6691,6 +7072,8 @@ function bindEvents() {
       state.prefs.numberGrouping = document.querySelector("#prefNumberGrouping")?.checked ?? state.prefs.numberGrouping;
       state.prefs.chartTimeZone = document.querySelector("#prefChartTimeZone")?.value || state.prefs.chartTimeZone;
       state.prefs.chartPointSize = document.querySelector("#prefChartPointSize")?.value || state.prefs.chartPointSize;
+      state.prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(document.querySelector("#prefDefaultDashboardPreset")?.value || state.prefs.defaultDashboardPreset);
+      state.prefs.chartLayout.tooltipOpacity = clampChartTooltipOpacity(document.querySelector("#prefTooltipOpacity")?.value ?? state.prefs.chartLayout.tooltipOpacity);
       state.prefs.paginationPosition = document.querySelector("#prefPagination")?.value || state.prefs.paginationPosition;
       state.prefs.defaultPageSize = Number(document.querySelector("#prefPageSize")?.value || state.prefs.defaultPageSize);
       state.table.pageSize = state.prefs.defaultPageSize;
@@ -6708,10 +7091,6 @@ function bindEvents() {
   document.querySelectorAll("[data-context-action]").forEach(btn => btn.addEventListener("click", event => {
     const action = event.currentTarget.dataset.contextAction;
     const socket = selectedSocket();
-    if (action === "annotate") {
-      openAnnotationModal("*");
-      return;
-    }
     const suggestedMetric = socket ? state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric : null;
     const previousSelectedId = state.selectedId;
     applyContextAction(state, action, socket, { chartMetrics: chartMetricList(), suggestedMetric });
@@ -6823,6 +7202,45 @@ function bindEvents() {
     state.guideTab = event.currentTarget.dataset.guideTab;
     render();
   }));
+  document.querySelector(".chart-context-menu")?.addEventListener("click", event => {
+    event.stopPropagation();
+  });
+  document.querySelectorAll("[data-chart-annotation-menu]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const context = state.chartAnnotationMenuContext;
+    state.chartAnnotationMenuContext = null;
+    state.chartAnnotationMenuPos = null;
+    if (context) openAnnotationModal(context.metric, context);
+  }));
+  document.querySelectorAll("[data-export-menu]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const scope = event.currentTarget.dataset.exportMenu;
+    if (state.openExportMenu === scope) {
+      state.openExportMenu = null;
+      state.openExportMenuPos = null;
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const menuWidth = 260;
+      const menuHeight = 110;
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - menuWidth - 8);
+      const preferBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+      const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
+      state.openExportMenu = scope;
+      state.openExportMenuPos = { left: Math.round(left), top: Math.round(top) };
+    }
+    renderKeepingWorkspacePosition();
+  }));
+  document.querySelectorAll(".export-menu").forEach(menu => menu.addEventListener("click", event => {
+    event.stopPropagation();
+  }));
+  document.querySelectorAll("[data-export-action]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const action = event.currentTarget.dataset.exportAction;
+    state.openExportMenu = null;
+    state.openExportMenuPos = null;
+    if (action === "pdf") openIncidentReport();
+    if (action === "pack") exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger"));
+  }));
   document.querySelectorAll("[data-action-menu]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     const id = event.currentTarget.dataset.actionMenu;
@@ -6840,6 +7258,17 @@ function bindEvents() {
       state.openMenuPos = { left: Math.round(left), top: Math.round(top) };
     }
     render();
+  }));
+  document.querySelectorAll("[data-conversation-sort]").forEach(btn => btn.addEventListener("click", event => {
+    const key = event.currentTarget.dataset.conversationSort;
+    if (!CONVERSATION_SORT_LABELS[key]) return;
+    const current = state.conversationSort || { key: "anomalies", dir: "desc" };
+    const nextDir = current.key === key ? (current.dir === "asc" ? "desc" : "asc") : conversationDefaultSortDir(key);
+    state.conversationSort = { key, dir: nextDir };
+    state.table.page = 1;
+    state.openConversationInsightKey = null;
+    state.openConversationInsightPos = null;
+    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-conversation-insight]").forEach(btn => {
     btn.addEventListener("click", event => {
@@ -6972,6 +7401,27 @@ function bindEvents() {
     saveTableProfiles();
     toast("Table layout deleted", "The saved table layout has been removed.");
     render();
+  }));
+  document.querySelector("[data-dashboard-preset-toggle]")?.addEventListener("click", event => {
+    event.stopPropagation();
+    if (state.openDashboardPresetMenu) {
+      closeDashboardPresetMenu();
+    } else {
+      state.dashboardPresetBeforeOpen = state.activeDashboardPreset;
+      state.openDashboardPresetMenu = true;
+    }
+    renderKeepingWorkspacePosition();
+  });
+  document.querySelectorAll("[data-dashboard-preset-choice]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const presetId = event.currentTarget.dataset.dashboardPresetChoice;
+    const preset = DASHBOARD_PRESETS[presetId];
+    if (!preset) return;
+    state.openDashboardPresetMenu = false;
+    state.dashboardPresetBeforeOpen = null;
+    applyDashboardPreset(presetId);
+    toast("Dashboard preset applied", preset.name || "Preset applied.");
+    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-dashboard-preset]").forEach(btn => btn.addEventListener("click", event => {
     const presetId = event.currentTarget.dataset.dashboardPreset;
@@ -7134,18 +7584,14 @@ function bindEvents() {
     });
   });
   for (const [id, key] of [["metricSelect", "graphMetric"], ["styleSelect", "graphStyle"]]) {
-    document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = e.target.value; savePrefs(); render(); });
+    document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
   }
-  document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => {
-    state.prefs.chartTimeZone = e.target.value;
-    savePrefs();
-    render();
-  });
+  document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
   for (const [id, key] of [["windowInput", "graphWindow"], ["thresholdInput", "graphThreshold"], ["samplingInput", "sampling"]]) {
-    document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = Number(e.target.value); savePrefs(); render(); });
+    document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = Number(e.target.value); savePrefs(); renderKeepingWorkspacePosition(); });
   }
-  document.querySelector("#startTimeInput")?.addEventListener("change", () => { setZoomFromDateInputs(); render(); });
-  document.querySelector("#endTimeInput")?.addEventListener("change", () => { setZoomFromDateInputs(); render(); });
+  document.querySelector("#startTimeInput")?.addEventListener("change", () => { setZoomFromDateInputs(); renderKeepingWorkspacePosition(); });
+  document.querySelector("#endTimeInput")?.addEventListener("change", () => { setZoomFromDateInputs(); renderKeepingWorkspacePosition(); });
   document.querySelector("#searchInput")?.addEventListener("change", e => { state.table.filters.text = e.target.value; state.table.page = 1; render(); });
   for (const [id, key] of [["riskFilter", "risk"], ["stateFilter", "state"], ["familyFilter", "family"], ["processFilter", "process"], ["srcIpFilter", "srcIp"], ["dstIpFilter", "dstIp"], ["srcPortFilter", "srcPort"], ["dstPortFilter", "dstPort"], ["minRecvQ", "minRecvQ"], ["minSendQ", "minSendQ"], ["minRtt", "minRtt"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.table.filters[key] = e.target.value; state.table.page = 1; render(); });
@@ -7176,7 +7622,7 @@ function bindEvents() {
     state.chartMetrics = event.currentTarget.checked
       ? [...new Set([...state.chartMetrics, metric])]
       : state.chartMetrics.filter(item => item !== metric);
-    render();
+    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-chart-stats]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
@@ -7195,7 +7641,6 @@ function bindEvents() {
 }
 
 render();
-
 
 
 

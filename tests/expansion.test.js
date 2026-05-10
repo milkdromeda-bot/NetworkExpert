@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { SS_OPTIONS, FIELD_DOCS, generateMicroburstSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "../src/data.js";
 import { analyzeSocket, riskForSocket } from "../src/analysis.js";
-import { dashboardSnapshot, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../src/profiles.js";
+import { DASHBOARD_PRESETS, dashboardSnapshot, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../src/profiles.js";
 import { parseSs, metricValue } from "../src/parser.js";
 import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../src/search.js";
 import { commandCoverage, toggleCommandOption } from "../src/ss-command.js";
@@ -50,6 +50,10 @@ test("ss options include cgroup process collection", () => {
 
 test("default prefs collapse guided checklist by default", () => {
   assert.equal(prefsDefault.guidedChecklistCollapsed, true);
+});
+
+test("default dashboard preset points to an expert preset", () => {
+  assert.ok(DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]);
 });
 
 test("ten minute sample emits 600 timestamp markers", () => {

@@ -259,6 +259,7 @@ export const prefsDefault = {
   compactRows: false,
   deepAnalysis: true,
   guidedChecklistCollapsed: true,
+  defaultDashboardPreset: "noc",
   graphMetric: "rtt",
   graphStyle: "line",
   graphWindow: 30,
@@ -284,6 +285,7 @@ export const prefsDefault = {
     showCrosshair: true,
     showThresholds: true,
     stickyToolbar: true,
+    tooltipOpacity: 0.8,
     panelOrder: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"]
   }
 };
