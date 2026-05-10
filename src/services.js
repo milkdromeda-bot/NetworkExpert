@@ -53,9 +53,18 @@ const UDP_SERVICES = {
 
 const LOW_SERVICE_PORT_MAX = 1024;
 const LINUX_EPHEMERAL_START = 32768;
+const SERVICE_CACHE = new WeakMap();
+const SERVICE_LOOKUP = Object.freeze({
+  tcp: toServiceLookup(TCP_SERVICES),
+  udp: toServiceLookup(UDP_SERVICES)
+});
 
 function service(id, label, description) {
-  return { id, label, description };
+  return Object.freeze({ id, label, description });
+}
+
+function toServiceLookup(services) {
+  return new Map(Object.entries(services).map(([port, item]) => [Number(port), item]));
 }
 
 function normalizeFamily(family = "") {
@@ -80,7 +89,8 @@ function isWildcardEndpoint(endpoint = {}) {
 
 function serviceForPort(port, family) {
   const transport = normalizeFamily(family);
-  return (transport === "udp" ? UDP_SERVICES[port] : TCP_SERVICES[port]) || TCP_SERVICES[port] || UDP_SERVICES[port] || null;
+  const primary = SERVICE_LOOKUP[transport]?.get(port);
+  return primary || SERVICE_LOOKUP.tcp.get(port) || SERVICE_LOOKUP.udp.get(port) || null;
 }
 
 function candidate(port, side, socket) {
@@ -91,17 +101,30 @@ function candidate(port, side, socket) {
   const likelyServer = listening || localWildcard || port <= LOW_SERVICE_PORT_MAX;
   const peerService = side === "peer" && port < LINUX_EPHEMERAL_START;
   const confidence = likelyServer || peerService ? "high" : "medium";
-  return {
+  return Object.freeze({
     ...item,
     port,
     side,
     layer: "application",
     confidence,
     transport: normalizeFamily(socket?.family)
-  };
+  });
 }
 
-export function inferApplicationService(socket = {}) {
+export function serviceInferenceKey(socket = {}) {
+  const local = socket?.localAddress || {};
+  const peer = socket?.peerAddress || {};
+  return [
+    normalizeFamily(socket?.family),
+    String(socket?.state || "").toUpperCase(),
+    local.host || "",
+    local.port || "",
+    peer.host || "",
+    peer.port || ""
+  ].join("|");
+}
+
+function computeApplicationService(socket = {}) {
   const localPort = portNumber(socket?.localAddress?.port);
   const peerPort = portNumber(socket?.peerAddress?.port);
   const state = String(socket?.state || "").toUpperCase();
@@ -117,6 +140,16 @@ export function inferApplicationService(socket = {}) {
   return peer || null;
 }
 
+export function inferApplicationService(socket = {}) {
+  if (!socket || typeof socket !== "object") return computeApplicationService(socket);
+  const key = serviceInferenceKey(socket);
+  const cached = SERVICE_CACHE.get(socket);
+  if (cached?.key === key) return cached.value;
+  const value = computeApplicationService(socket);
+  SERVICE_CACHE.set(socket, { key, value });
+  return value;
+}
+
 export function applicationServiceLabel(socket = {}) {
   return inferApplicationService(socket)?.label || "";
 }
@@ -126,7 +159,7 @@ export function applicationServiceSortKey(socket = {}) {
   return app ? `${app.label} ${app.port}` : "";
 }
 
-export const knownApplicationServices = {
+export const knownApplicationServices = Object.freeze({
   tcp: TCP_SERVICES,
   udp: UDP_SERVICES
-};
+});
