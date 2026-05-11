@@ -2286,6 +2286,10 @@ th:focus-within .column-tooltip,
   display: grid;
   gap: 12px;
 }
+.diagnosis-shell {
+  display: grid;
+  gap: 12px;
+}
 .advisor-hero {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -2338,6 +2342,14 @@ th:focus-within .column-tooltip,
   display: grid;
   grid-template-columns: repeat(2, minmax(320px, 1fr));
   gap: 12px;
+}
+.diagnosis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap: 12px;
+}
+.diagnosis-card .advisor-columns li {
+  overflow-wrap: anywhere;
 }
 .advisor-card {
   display: grid;
@@ -4878,6 +4890,7 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .alert-layout,
   .template-grid,
   .advisor-grid,
+  .diagnosis-grid,
   .advisor-columns,
   .advisor-hero,
   .expert-strip,

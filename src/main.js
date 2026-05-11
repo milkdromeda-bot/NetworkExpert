@@ -14,6 +14,7 @@ import { applyContextAction, setActiveInvestigation } from "./navigation.js";
 import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
+import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
@@ -2682,7 +2683,7 @@ function renderAnalysisPage() {
           </div>
         </div>
         <div class="tabs">
-          ${["advisor", "templates", "map", "conversations", "expert", "timeline", "alerts", "compare", "sockets", "groups", "anomalies", "fields"].map(tab => `<button class="tab ${state.activeTab === tab ? "active" : ""}" data-tab="${tab}">${tab}</button>`).join("")}
+          ${["diagnosis", "advisor", "templates", "map", "conversations", "expert", "timeline", "alerts", "compare", "sockets", "groups", "anomalies", "fields"].map(tab => `<button class="tab ${state.activeTab === tab ? "active" : ""}" data-tab="${tab}">${tab}</button>`).join("")}
         </div>
         <div class="panel-body">${renderActiveTab()}</div>
       </div>
@@ -3054,6 +3055,7 @@ function bindSmartChartTooltips() {
 }
 
 function renderActiveTab() {
+  if (state.activeTab === "diagnosis") return renderDiagnosis();
   if (state.activeTab === "advisor") return renderAdvisor();
   if (state.activeTab === "templates") return renderAnalysisTemplates();
   if (state.activeTab === "map") return renderServiceMap();
@@ -3066,6 +3068,73 @@ function renderActiveTab() {
   if (state.activeTab === "anomalies") return renderAnomalies(state.anomalies.filter(a => severityVisible(a.severity)));
   if (state.activeTab === "fields") return renderFields();
   return renderSocketTable();
+}
+
+function diagnosticHypotheses() {
+  const rows = sortedFilteredSockets();
+  return buildDiagnosticHypotheses({
+    sockets: rows.length ? rows : state.sockets,
+    anomalies: state.anomalies,
+    history: state.history,
+    thresholds: thresholdFor
+  }).slice(0, 8);
+}
+
+function renderDiagnosis() {
+  const hypotheses = diagnosticHypotheses();
+  const top = hypotheses[0];
+  return `<div class="diagnosis-shell">
+    <section class="advisor-hero diagnosis-hero">
+      <div>
+        <span class="tooltip-kicker">Diagnostic hypotheses</span>
+        <h3>${escapeHtml(top?.title || "No hypothesis yet")}</h3>
+        <p>${escapeHtml(top?.summary || "Import or parse ss output to build network diagnosis hypotheses.")}</p>
+      </div>
+      <div class="advisor-score">
+        <span>${formatNumber(hypotheses.length)}</span>
+        <small>hypothesis(es)</small>
+      </div>
+    </section>
+    <div class="diagnosis-grid">
+      ${hypotheses.map(renderDiagnosticHypothesis).join("")}
+    </div>
+  </div>`;
+}
+
+function renderDiagnosticHypothesis(item) {
+  return `<article class="advisor-card diagnosis-card ${escapeHtml(item.severity)}">
+    <header>
+      <div>
+        <span class="risk ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
+        <strong>${escapeHtml(item.title)}</strong>
+      </div>
+      <span class="confidence">${escapeHtml(item.confidence)} confidence</span>
+    </header>
+    <p>${escapeHtml(item.summary)}</p>
+    <div class="evidence-row">
+      <span><i class="ri-radar-line"></i> ${escapeHtml(item.category)}</span>
+      <span><i class="ri-plug-line"></i> ${formatNumber(item.count)} socket(s)</span>
+      ${item.processes.length ? `<span><i class="ri-cpu-line"></i> ${escapeHtml(item.processes.join(", "))}</span>` : ""}
+      ${item.peers.length ? `<span><i class="ri-exchange-line"></i> ${escapeHtml(item.peers.join(", "))}</span>` : ""}
+    </div>
+    <div class="advisor-columns">
+      <div>
+        <b>Evidence</b>
+        <ul>${item.evidence.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>
+      </div>
+      <div>
+        <b>Counter-evidence</b>
+        <ul>${item.counterEvidence.length ? item.counterEvidence.map(entry => `<li>${escapeHtml(entry)}</li>`).join("") : "<li>None obvious in this capture.</li>"}</ul>
+      </div>
+    </div>
+    <details>
+      <summary><i class="ri-terminal-box-line"></i> Validation commands</summary>
+      <pre class="code">${escapeHtml(item.commands.join("\n"))}</pre>
+    </details>
+    <footer>
+      ${item.topSocketId ? `<button data-jump="${escapeHtml(item.topSocketId)}">${icons.focus} Show context row</button>` : ""}
+    </footer>
+  </article>`;
 }
 
 function renderAdvisor() {
