@@ -19,40 +19,41 @@ import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annota
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
 import { applyChartZoomOperation, clampZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "./chart-zoom.js";
 import { applicationServiceSortKey, inferApplicationService } from "./services.js";
-import { TABLE_STATE_STORAGE_KEY, normalizeTableState, resetTableColumns, resetTableSort, setTableColumnVisibility, tableColumnControlModels, tableStateSnapshot, toggleTableColumnPin, toggleTableColumnVisibility } from "./table-state.js";
+import { TABLE_STATE_STORAGE_KEY, buildSocketOptionSets, buildVisibleColumnOrder, normalizeTableState, resetTableColumns, resetTableSort, setTableColumnVisibility, tableFilterCacheKey, tableStateSnapshot, toggleTableColumnPin, toggleTableColumnVisibility } from "./table-state.js";
+import { ACCESS_ROLES, COMMON_TIME_ZONES, EXPERT_DEFAULT_THRESHOLDS, INGEST_RAW_EAGER_LIMIT, LINUX_PROFILES, UBUNTU_PROFILES, cloneThresholds } from "./expert-config.js";
+import { applyTableColumnSearchFilter, renderTableSettingsDrawer as renderTableSettingsDrawerView, renderTableSettingsMenu as renderTableSettingsMenuView, renderTableSettingsTrigger as renderTableSettingsTriggerView, tableSettingsPlacement } from "./table-settings-view.js";
+import { columnHelp as columnHelpView, renderColumnTooltip as renderColumnTooltipView, renderThresholdSummary as renderThresholdSummaryView } from "./column-help-view.js";
+import { createTableColumns } from "./table-columns.js";
+import { renderSocketTableView, renderTableHeader } from "./socket-table-view.js";
+import { createGuideView } from "./guide-view.js";
+import { createModalView } from "./modal-view.js";
 
-const TABLE_COLUMNS = [
-  { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
-  { key: "state", label: "State", value: s => s.state, render: s => `<span class="badge ${s.state === "LISTEN" ? "listen" : ""}">${escapeHtml(s.state)}</span>` },
-  { key: "family", label: "Proto", value: s => s.family, render: s => `<span class="badge ${s.family.includes("udp") ? "udp" : "tcp"}">${escapeHtml(s.family)}</span>` },
-  { key: "application", label: "App", value: s => applicationServiceSortKey(s), render: s => renderApplicationServiceChip(s) || `<span class="muted">-</span>` },
-  { key: "recvQ", label: "Recv-Q", value: s => s.recvQ, render: s => renderTableMetricCell("recvQ", s.recvQ) },
-  { key: "sendQ", label: "Send-Q", value: s => s.sendQ, render: s => renderTableMetricCell("sendQ", s.sendQ) },
-  { key: "tx_bps", label: "TX bps", value: s => socketBandwidth(s, "tx_bps"), render: s => renderTableMetricCell("tx_bps", socketBandwidth(s, "tx_bps")), defaultVisible: false },
-  { key: "rx_bps", label: "RX bps", value: s => socketBandwidth(s, "rx_bps"), render: s => renderTableMetricCell("rx_bps", socketBandwidth(s, "rx_bps")), defaultVisible: false },
-  { key: "local", label: "Local", value: s => s.local, render: s => renderEndpointCell(s.local) },
-  { key: "peer", label: "Peer", value: s => s.peer, render: s => renderPeerCell(s) },
-  { key: "process", label: "Process", value: s => s.details.process ? `${s.details.process.name}:${s.details.process.pid}` : "", render: s => escapeHtml(s.details.process ? `${s.details.process.name}:${s.details.process.pid}` : "-") },
-  { key: "rtt", label: "RTT", value: s => metricValue(s, "rtt"), render: s => renderTableMetricCell("rtt", metricValue(s, "rtt")) },
-  { key: "rto", label: "RTO", value: s => metricValue(s, "rto"), render: s => renderTableMetricCell("rto", metricValue(s, "rto")) },
-  { key: "cwnd", label: "cwnd", value: s => metricValue(s, "cwnd"), render: s => renderTableMetricCell("cwnd", metricValue(s, "cwnd")) },
-  { key: "ato", label: "ato", value: s => metricValue(s, "ato"), render: s => renderTableMetricCell("ato", metricValue(s, "ato")) },
-  { key: "skmem.r", label: "skmem.r", value: s => metricValue(s, "skmem.r"), render: s => renderTableMetricCell("skmem.r", metricValue(s, "skmem.r")) },
-  { key: "skmem.t", label: "skmem.t", value: s => metricValue(s, "skmem.t"), render: s => renderTableMetricCell("skmem.t", metricValue(s, "skmem.t")) },
-  { key: "skmem.d", label: "drops", value: s => metricValue(s, "skmem.d"), render: s => renderTableMetricCell("skmem.d", metricValue(s, "skmem.d")) },
-  { key: "rttvar", label: "RTT var", value: s => metricValue(s, "rttvar"), render: s => renderTableMetricCell("rttvar", metricValue(s, "rttvar")), defaultVisible: false },
-  { key: "bytes_acked", label: "Bytes acked", value: s => metricValue(s, "bytes_acked"), render: s => renderTableMetricCell("bytes_acked", metricValue(s, "bytes_acked")), defaultVisible: false },
-  { key: "bytes_received", label: "Bytes received", value: s => metricValue(s, "bytes_received"), render: s => renderTableMetricCell("bytes_received", metricValue(s, "bytes_received")), defaultVisible: false },
-  { key: "segs_out", label: "Segs out", value: s => metricValue(s, "segs_out"), render: s => renderTableMetricCell("segs_out", metricValue(s, "segs_out")), defaultVisible: false },
-  { key: "segs_in", label: "Segs in", value: s => metricValue(s, "segs_in"), render: s => renderTableMetricCell("segs_in", metricValue(s, "segs_in")), defaultVisible: false },
-  { key: "pacing_rate", label: "Pacing rate", value: s => metricValue(s, "pacing_rate"), render: s => renderTableMetricCell("pacing_rate", metricValue(s, "pacing_rate")), defaultVisible: false },
-  { key: "delivery_rate", label: "Delivery rate", value: s => metricValue(s, "delivery_rate"), render: s => renderTableMetricCell("delivery_rate", metricValue(s, "delivery_rate")), defaultVisible: false },
-  { key: "backoff", label: "Backoff", value: s => metricValue(s, "backoff"), render: s => renderTableMetricCell("backoff", metricValue(s, "backoff")), defaultVisible: false },
-  { key: "retrans", label: "Retrans timer", value: s => s.details.timer?.retrans || 0, render: s => renderTableMetricCell("retrans", s.details.timer?.retrans || 0), defaultVisible: false }
-];
+const TABLE_COLUMNS = createTableColumns({
+  riskRank,
+  escapeHtml,
+  applicationServiceSortKey,
+  renderApplicationServiceChip,
+  renderTableMetricCell,
+  socketBandwidth,
+  renderEndpointCell,
+  renderPeerCell,
+  metricValue
+});
+
+const TABLE_COLUMN_BY_KEY = new Map(TABLE_COLUMNS.map(column => [column.key, column]));
+const TABLE_SORT_COLLATOR = new Intl.Collator("fr", { numeric: true });
+const CONVERSATION_SORT_COLLATOR = new Intl.Collator("fr", { numeric: true, sensitivity: "base" });
+const SERVICE_MAP_SORT_COLLATOR = new Intl.Collator("en", { numeric: true });
+const DEFAULT_TABLE_VISIBLE_COLUMNS = TABLE_COLUMNS.filter(col => col.defaultVisible !== false).map(col => col.key);
+const DEFAULT_TABLE_ORDER = TABLE_COLUMNS.map(col => col.key);
+const tableDefaultsCache = new Map();
+const dateTimeFormatterCache = new Map();
+const numberFormatterCache = new Map();
+const numberSeparatorCache = new Map();
+const BROWSER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 function defaultTableColumns() {
-  return TABLE_COLUMNS.filter(col => col.defaultVisible !== false).map(col => col.key);
+  return [...DEFAULT_TABLE_VISIBLE_COLUMNS];
 }
 
 function defaultTableFilters() {
@@ -81,220 +82,17 @@ function defaultTableState(pageSize = prefsDefault.defaultPageSize) {
     sortDir: "desc",
     pinned: ["risk", "state", "local"],
     visible: defaultTableColumns(),
-    order: TABLE_COLUMNS.map(c => c.key),
+    order: [...DEFAULT_TABLE_ORDER],
     filters: defaultTableFilters()
   };
 }
 
 function tableDefaults() {
-  return defaultTableState(state?.prefs?.defaultPageSize || prefsDefault.defaultPageSize);
+  const pageSize = Number(state?.prefs?.defaultPageSize || prefsDefault.defaultPageSize);
+  if (!tableDefaultsCache.has(pageSize)) tableDefaultsCache.set(pageSize, defaultTableState(pageSize));
+  return tableDefaultsCache.get(pageSize);
 }
 
-const EXPERT_DEFAULT_THRESHOLDS = {
-  rtt: { comfort: 50, warn: 150, danger: 300, unit: "ms", rationale: "Interactive workloads usually feel healthy below 50 ms; sustained values above 150 ms deserve path and peer investigation." },
-  rto: { comfort: 250, warn: 1000, danger: 3000, unit: "ms", rationale: "RTO around seconds signals loss, severe jitter, or delayed ACK/recovery pressure." },
-  sendQ: { comfort: 65536, warn: 262144, danger: 1048576, unit: "bytes", rationale: "Growing Send-Q often means peer slow-consumption, congestion, or an application producing faster than the path drains." },
-  recvQ: { comfort: 32768, warn: 131072, danger: 524288, unit: "bytes", rationale: "Large Recv-Q points to local application read latency or scheduling pressure." },
-  cwnd: { comfort: 16, warn: 4, danger: 2, unit: "segments", inverse: true, rationale: "Very small congestion windows suggest loss recovery, pacing collapse, or a path repeatedly backing off." },
-  ato: { comfort: 40, warn: 100, danger: 250, unit: "ms", rationale: "High delayed ACK timeout can amplify latency-sensitive flows and should be correlated with RTT and send stalls." },
-  "skmem.r": { comfort: 131072, warn: 262144, danger: 524288, unit: "bytes", rationale: "Receive socket memory near large buffer levels can indicate local consumer lag or burst absorption pressure." },
-  "skmem.t": { comfort: 131072, warn: 262144, danger: 524288, unit: "bytes", rationale: "Transmit socket memory pressure is a strong sign of peer slowness, congestion, or send buffering buildup." },
-  "skmem.d": { comfort: 0, warn: 1, danger: 10, unit: "drops", rationale: "Any socket memory drop is worth attention; repeated drops are a high-confidence loss symptom." },
-  "skmem.d_rate": { comfort: 0, warn: 0.1, danger: 1, unit: "drops/s", rationale: "Drop cadence is stronger than a static counter: one drop every 10 seconds is worth watching; one drop per second is usually an active pressure symptom." },
-  pacing_rate: { comfort: 1000000, warn: 250000, danger: 64000, unit: "bps", inverse: true, rationale: "Very low pacing rate after a previously healthy flow can reveal congestion-control backoff or app-limited stalls." },
-  delivery_rate: { comfort: 1000000, warn: 250000, danger: 64000, unit: "bps", inverse: true, rationale: "Low delivery rate with queued data can reveal throughput collapse after loss, pacing, or peer-side slowness." },
-  tx_bps: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bps", rationale: "Estimated transmit bandwidth from bytes_acked deltas between timestamped snapshots." },
-  rx_bps: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bps", rationale: "Estimated receive bandwidth from bytes_received deltas between timestamped snapshots." },
-  bytes_acked: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bytes", rationale: "Cumulative bytes acknowledged by the peer. Use deltas over time for transmit bandwidth." },
-  bytes_received: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bytes", rationale: "Cumulative bytes received locally. Use deltas over time for receive bandwidth." },
-  rttvar: { comfort: 20, warn: 80, danger: 200, unit: "ms", rationale: "RTT variance indicates jitter. High variance often matters as much as high average RTT." },
-  segs_out: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "segments", rationale: "Cumulative outbound TCP segments." },
-  segs_in: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "segments", rationale: "Cumulative inbound TCP segments." },
-  backoff: { comfort: 0, warn: 1, danger: 3, unit: "steps", rationale: "TCP backoff increases effective retransmission timeout and is a strong recovery signal." },
-  retrans: { comfort: 0, warn: 1, danger: 3, unit: "retrans", rationale: "Active retransmission timer count for the socket." }
-};
-
-const COLUMN_HELP = {
-  risk: {
-    summary: "Aggregated severity computed from socket counters, queues, timers, memory pressure, and detected symptoms.",
-    detail: "Use Risk as the triage entry point. High or critical rows deserve correlation with RTT/RTO, Send-Q, Recv-Q, cwnd, skmem, and process identity before deciding whether the fault is local, peer-side, or path-related.",
-    use: "Sort descending, then open row details or jump to charts for the same socket."
-  },
-  state: {
-    summary: "TCP or UDP socket state reported by ss.",
-    detail: "ESTAB rows show live flows. LISTEN rows are service endpoints. SYN-SENT, SYN-RECV, FIN-WAIT, CLOSE-WAIT, and TIME-WAIT can expose connection churn, failed handshakes, application close delays, or load-balancer behavior.",
-    use: "Filter by state when separating active bottlenecks from listener inventory or connection lifecycle noise."
-  },
-  family: {
-    summary: "Protocol family detected from the ss output, usually tcp, udp, tcp6, or udp6.",
-    detail: "Protocol changes how queues and timers should be interpreted. TCP has congestion control, RTT, RTO, cwnd, retransmission, and pacing signals; UDP usually needs queue, drop, process, and rate-focused interpretation.",
-    use: "Compare TCP and UDP separately when diagnosing mixed workloads."
-  },
-  recvQ: {
-    summary: "Bytes queued locally waiting for the application to read.",
-    detail: "Sustained Recv-Q growth usually points to a local slow consumer: the local process is not draining data fast enough, is blocked, CPU-starved, or constrained by scheduler/runtime latency.",
-    use: "Correlate with process, CPU symptoms, skmem.r, drops, and application logs."
-  },
-  sendQ: {
-    summary: "Bytes queued locally waiting to be sent or acknowledged.",
-    detail: "Sustained Send-Q growth often means the peer is reading slowly, the network path is congested, TCP is backing off, or the application writes faster than the socket can drain.",
-    use: "Correlate with RTT, RTO, cwnd, pacing_rate, retransmission timers, and peer-side health."
-  },
-  tx_bps: {
-    summary: "Estimated transmit bandwidth for this socket, in bits per second.",
-    detail: "When timestamped snapshots contain bytes_acked, Ultimate Network Expert computes TX bps from byte deltas between samples. If only a single snapshot is available, it falls back to delivery_rate or pacing_rate when ss exposes them.",
-    use: "Chart TX bps with Send-Q, RTT, RTO, and cwnd. Falling TX bps while Send-Q rises usually points to congestion, retransmission recovery, or a slow peer."
-  },
-  rx_bps: {
-    summary: "Estimated receive bandwidth for this socket, in bits per second.",
-    detail: "When timestamped snapshots contain bytes_received, Ultimate Network Expert computes RX bps from byte deltas between samples. This is strongest with regular one-second or millisecond collection intervals.",
-    use: "Chart RX bps with Recv-Q and skmem.r. Low RX bps plus high Recv-Q can indicate a local consumer or scheduling problem."
-  },
-  local: {
-    summary: "Local endpoint address and port for the socket.",
-    detail: "This identifies the host-side service or client port. It is the best anchor for grouping sockets by local workload, service port, bind address, or namespace exposure.",
-    use: "Filter local IP/port to isolate one service, listener, pod, namespace, or test target."
-  },
-  peer: {
-    summary: "Remote endpoint address and port for the socket.",
-    detail: "This identifies the other side of the conversation. Repeated anomalies against the same peer often reveal remote slow consumers, overloaded upstreams, path asymmetry, or a problematic client population.",
-    use: "Group by peer to separate one bad remote endpoint from a global host issue."
-  },
-  process: {
-    summary: "Process name and PID reported by ss when process visibility is available.",
-    detail: "Process attribution turns socket symptoms into actionable ownership. Missing process data usually means ss was not run with enough privilege or process flags.",
-    use: "Collect with sudo and process options such as ss -p when possible."
-  },
-  rtt: {
-    summary: "Smoothed TCP round-trip time observed by the kernel for this socket.",
-    detail: "RTT is the latency baseline for the flow. A high or rising RTT can mean path congestion, queueing, distance, overloaded peers, or wireless/virtualization jitter. It becomes much more actionable when it rises together with Send-Q, RTO, low cwnd, or low pacing rate.",
-    use: "Chart RTT with RTO, Send-Q, and cwnd for the same socket to separate latency from loss recovery."
-  },
-  rttvar: {
-    summary: "RTT variance / deviation reported by ss, in milliseconds.",
-    detail: "RTT variance is the jitter side of latency. A moderate average RTT can still be unhealthy when variance is high because TCP recovery and application tail latency become unstable.",
-    use: "Correlate RTT variance with RTO jumps, backoff, retransmission timers, and application timeouts."
-  },
-  rto: {
-    summary: "TCP retransmission timeout currently calculated for the socket.",
-    detail: "RTO is how long TCP waits before retransmitting when acknowledgements do not arrive. High RTO is usually a stronger warning than high RTT because it reflects loss, severe jitter, delayed acknowledgements, or unstable recovery behavior.",
-    use: "Investigate when RTO jumps while RTT variance, Send-Q, retransmission timers, or low cwnd are also present."
-  },
-  cwnd: {
-    summary: "TCP congestion window: how many segments TCP may keep in flight.",
-    detail: "A small cwnd limits throughput even when the application wants to send. It often drops after loss, ECN/congestion signals, route instability, or aggressive congestion-control backoff.",
-    use: "Correlate low cwnd with high RTO, Send-Q buildup, pacing rate collapse, and retransmission indicators."
-  },
-  ato: {
-    summary: "ACK timeout / delayed ACK timer exposed by ss for the TCP socket.",
-    detail: "High ato can add latency to request/response or small-message workloads. It is not always bad by itself, but it matters when paired with elevated RTT, slow application reads, or bursty bidirectional traffic.",
-    use: "Use ato as a supporting signal for latency-sensitive flows, not as a standalone incident trigger."
-  },
-  "skmem.r": {
-    summary: "Socket receive memory currently allocated by the kernel for inbound data and receive-side bookkeeping.",
-    detail: "In ss skmem, r is the receive memory in use. High skmem.r means the kernel is holding more receive-side socket memory. Common causes include a local application that reads too slowly, bursty inbound traffic, receive buffer growth, scheduler stalls, or memory pressure around many active sockets.",
-    use: "Correlate skmem.r with Recv-Q, process identity, socket drops, CPU saturation, and whether only one service or many sockets are affected."
-  },
-  "skmem.t": {
-    summary: "Socket transmit memory currently allocated by the kernel for outbound data and transmit-side bookkeeping.",
-    detail: "In ss skmem, t is the transmit memory in use. High skmem.t often appears when the local process writes faster than TCP can drain, when the peer reads slowly, when the path is congested, or when congestion control is limiting flight size.",
-    use: "Correlate skmem.t with Send-Q, RTT, RTO, cwnd, pacing_rate, and peer grouping to identify slow consumers."
-  },
-  "skmem.d": {
-    summary: "Socket memory drops counted for this socket.",
-    detail: "In ss skmem, d is the drop counter: packets/data dropped before demultiplexing in the kernel receive path. Any non-zero value deserves attention, but it is not a standalone proof of NIC ring-buffer overflow. Treat it as receive-side loss to correlate with Recv-Q, skmem.r, softnet backlog, qdisc/interface drops, NIC driver counters, and net.core.netdev_max_backlog. A backlog of 1000 is often conservative for burst-heavy low-latency captures, but only tune it after confirming softnet/backlog pressure.",
-    use: "Chart drops over time, then compare with Recv-Q, skmem.r, burst timing, /proc/net/softnet_stat, ip -s link, ethtool -S counters such as rx_missed_errors or rx_no_buffer_count, and sysctl net.core.netdev_max_backlog."
-  },
-  pacing_rate: {
-    summary: "Kernel TCP pacing rate, usually in bits per second.",
-    detail: "Pacing rate is how fast TCP is currently allowed to put data on the wire. A sudden collapse after a previously healthy value can indicate congestion-control backoff, loss recovery, or app-limited behavior.",
-    use: "Compare pacing_rate with TX bps, delivery_rate, Send-Q, cwnd, and RTO."
-  },
-  delivery_rate: {
-    summary: "Kernel-estimated delivered throughput for the socket, in bits per second.",
-    detail: "delivery_rate is TCP's estimate of real delivered bandwidth. It is often more useful than a raw queue size when diagnosing throughput collapse because it reflects what the path is actually delivering.",
-    use: "Compare delivery_rate with TX bps and pacing_rate to separate path limits from application-limited sends."
-  },
-  bytes_acked: {
-    summary: "Cumulative bytes acknowledged by the peer.",
-    detail: "This counter is best used over time. Ultimate Network Expert derives TX bandwidth from the delta of bytes_acked between timestamped snapshots.",
-    use: "Enable this column when validating computed TX bps or checking whether a connection is still making forward progress."
-  },
-  bytes_received: {
-    summary: "Cumulative bytes received locally.",
-    detail: "This counter is best used over time. Ultimate Network Expert derives RX bandwidth from the delta of bytes_received between timestamped snapshots.",
-    use: "Enable this column when validating computed RX bps or checking receive-side progress."
-  },
-  segs_out: {
-    summary: "Cumulative TCP segments sent.",
-    detail: "Segments out helps distinguish byte throughput from packet/segment activity. Many segments with low bytes can indicate tiny writes or inefficient application framing.",
-    use: "Compare with bytes_acked, MSS, retransmission, and pacing rate."
-  },
-  segs_in: {
-    summary: "Cumulative TCP segments received.",
-    detail: "Segments in helps reveal receive-side packet activity and can expose tiny packet patterns when compared with bytes_received.",
-    use: "Compare with bytes_received, Recv-Q, skmem.r, and application read behavior."
-  },
-  backoff: {
-    summary: "TCP retransmission backoff level.",
-    detail: "Backoff increases effective retransmission timeout after repeated recovery trouble. Non-zero values are usually more important than a single high queue sample.",
-    use: "Prioritize sockets with backoff plus high RTO, Send-Q growth, or low delivery rate."
-  },
-  retrans: {
-    summary: "Retransmission timer count from ss timer data.",
-    detail: "This reflects active retransmission recovery state exposed in timer:(...). It is a compact signal that ACKs are not arriving as expected.",
-    use: "Correlate with RTO, backoff, RTT variance, cwnd, and interface or path loss counters."
-  }
-};
-
-const INGEST_RAW_EAGER_LIMIT = 200000;
-
-const COMMON_TIME_ZONES = [
-  "UTC",
-  "Europe/Paris",
-  "Europe/London",
-  "Europe/Berlin",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "Asia/Tokyo",
-  "Asia/Singapore",
-  "Asia/Kolkata",
-  "Australia/Sydney"
-];
-
-const LINUX_PROFILES = {
-  native: {
-    label: "Linux Ubuntu native",
-    note: "Commands run directly on the Ubuntu host. ss, ip route, tc, ethtool, nstat, pidstat, and sysctl can observe the host network namespace when executed with sufficient privileges."
-  },
-  lxc: {
-    label: "Linux Container LXC/LXD",
-    note: "Default. ss inside a container observes the container network namespace, not the host. Analysts usually run commands from inside the container; ops/root can collect host interface, qdisc, ethtool, route, and LXD evidence."
-  }
-};
-
-const UBUNTU_PROFILES = {
-  "22.04": "Ubuntu 22.04 LTS",
-  "24.04": "Ubuntu 24.04 LTS",
-  "26.04": "Ubuntu 26.04 LTS / next LTS"
-};
-
-const ACCESS_ROLES = {
-  analyst: {
-    label: "Analyst inside container, no root",
-    note: "Default. Commands are meant to be run from inside the LXC/LXD container with non-root privileges. Host/LXD evidence is shown as an ops handoff request, not as a command you are expected to run."
-  },
-  opsRoot: {
-    label: "Ops/root with host or sudo access",
-    note: "Commands may include lxc exec, host interface counters, qdisc, ethtool, sysctl, lsof, or other privileged evidence."
-  }
-};
-
-function cloneThresholds() {
-  return Object.fromEntries(Object.entries(EXPERT_DEFAULT_THRESHOLDS).map(([metric, threshold]) => [metric, { ...threshold }]));
-}
 
 const initialPrefs = loadPrefs();
 
@@ -359,6 +157,7 @@ let state = {
   openExportMenuPos: null,
   openTableSettings: false,
   openTableSettingsPos: null,
+  tableColumnSearch: "",
   openDashboardPresetMenu: false,
   dashboardPresetBeforeOpen: null,
   openConversationInsightKey: null,
@@ -382,8 +181,13 @@ let state = {
     filteredRows: null,
     optionKey: "",
     optionSets: null,
+    anomalyMapKey: "",
+    anomaliesBySocketId: null,
+    socketMapKey: "",
+    socketsById: null,
     visibleHistoryKey: "",
     visibleHistoryRows: null,
+    visibleHistoryRowsByKey: new Map(),
     microburstKey: "",
     microburstSummary: null,
     tailLatencyKey: "",
@@ -507,6 +311,13 @@ function loadTableState(pageSize = prefsDefault.defaultPageSize) {
 function saveTableState() {
   state.table = normalizeTableState(state.table, TABLE_COLUMNS, tableDefaults());
   localStorage.setItem(TABLE_STATE_STORAGE_KEY, JSON.stringify(tableStateSnapshot(state.table)));
+}
+
+function clearVisibleHistoryCache() {
+  if (!state?.cache) return;
+  state.cache.visibleHistoryKey = "";
+  state.cache.visibleHistoryRows = null;
+  state.cache.visibleHistoryRowsByKey?.clear();
 }
 
 function loadAnnotations() {
@@ -866,8 +677,11 @@ function resetDerivedCaches({ raw = false } = {}) {
   state.cache.filteredRows = null;
   state.cache.optionKey = "";
   state.cache.optionSets = null;
-  state.cache.visibleHistoryKey = "";
-  state.cache.visibleHistoryRows = null;
+  state.cache.anomalyMapKey = "";
+  state.cache.anomaliesBySocketId = null;
+  state.cache.socketMapKey = "";
+  state.cache.socketsById = null;
+  clearVisibleHistoryCache();
   state.cache.microburstKey = "";
   state.cache.microburstSummary = null;
   state.cache.tailLatencyKey = "";
@@ -890,8 +704,9 @@ function recompute() {
   state.sockets = applyRisks(parseAnalysisSockets());
   state.bandwidthIndex = buildSocketBandwidthIndex();
   state.anomalies = analyzeAll(state.sockets);
-  state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
-  if (!state.sockets.some(socket => socket.id === state.activeContextId)) setActiveInvestigation(state, null);
+  const socketIds = new Set(state.sockets.map(socket => socket.id));
+  state.selectedId = socketIds.has(state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
+  if (!socketIds.has(state.activeContextId)) setActiveInvestigation(state, null);
   setZoom(0, 1);
   buildHistory();
   addCollectionAnomalies();
@@ -953,7 +768,7 @@ function buildHistory() {
     return;
   }
   const metrics = chartMetricList();
-  const base = state.sockets.find(s => s.id === state.selectedId) || state.sockets[0];
+  const base = socketsById().get(state.selectedId) || state.sockets[0];
   const syntheticStart = Date.now();
   state.history = Array.from({ length: state.prefs.graphWindow }, (_, i) => {
     const wobble = Math.sin(i / 2.7) * 0.16 + Math.cos(i / 4.3) * 0.09;
@@ -1007,7 +822,7 @@ const EXPERT_CORRELATIONS = [
 function buildHistoryFromTimestampedSnapshots() {
   const snapshots = parsedTimestampSnapshots();
   if (!snapshots.length) return [];
-  const selected = state.sockets.find(s => s.id === state.selectedId) || state.sockets[0];
+  const selected = socketsById().get(state.selectedId) || state.sockets[0];
   if (!selected) return [];
   return addBandwidthDerivatives(buildSocketHistoryFromSnapshots(snapshots, selected));
 }
@@ -1388,7 +1203,7 @@ function makeFinding({ id, severity, title, pattern, sockets, confidence, why, n
 function buildAdvisorFindings() {
   if (!state.sockets.length) return [];
   const findings = [];
-  const selected = state.sockets.find(socket => socket.id === state.selectedId) || state.sockets[0];
+  const selected = socketsById().get(state.selectedId) || state.sockets[0];
   const highSend = socketsWhere(socket => socket.sendQ > thresholdFor("sendQ").warn);
   const highRecv = socketsWhere(socket => socket.recvQ > thresholdFor("recvQ").warn);
   const txPressure = socketsWhere(socket => socket.details.skmem.tb && ((socket.details.skmem.t || 0) + (socket.details.skmem.w || 0)) / socket.details.skmem.tb > 0.75);
@@ -1582,13 +1397,11 @@ function severityRank(severity) {
 }
 
 function getColumn(key) {
-  return TABLE_COLUMNS.find(col => col.key === key) || TABLE_COLUMNS[0];
+  return TABLE_COLUMN_BY_KEY.get(key) || TABLE_COLUMNS[0];
 }
 
 function visibleColumns() {
-  const ordered = state.table.order.filter(key => state.table.visible.includes(key));
-  const pinned = ordered.filter(key => state.table.pinned.includes(key));
-  return [...pinned, ...ordered.filter(key => !pinned.includes(key))].map(getColumn);
+  return buildVisibleColumnOrder(state.table, TABLE_COLUMNS, tableDefaults()).map(getColumn);
 }
 
 function tableLayoutSnapshot(name) {
@@ -1607,9 +1420,10 @@ function tableLayoutSnapshot(name) {
 
 function applyTableLayout(profile) {
   if (!profile) return;
-  const allKeys = TABLE_COLUMNS.map(col => col.key);
-  state.table.order = [...new Set([...(profile.order || []), ...allKeys])].filter(key => allKeys.includes(key));
-  state.table.visible = (profile.visible || allKeys).filter(key => allKeys.includes(key));
+  const allKeys = DEFAULT_TABLE_ORDER;
+  const allKeySet = new Set(allKeys);
+  state.table.order = [...new Set([...(profile.order || []), ...allKeys])].filter(key => allKeySet.has(key));
+  state.table.visible = (profile.visible || allKeys).filter(key => allKeySet.has(key));
   if (!state.table.visible.length) state.table.visible = ["risk"];
   state.table.pinned = (profile.pinned || []).filter(key => state.table.visible.includes(key));
   state.table.sortKey = profile.sortKey || state.table.sortKey;
@@ -1644,7 +1458,7 @@ function applyDashboardPreset(presetId) {
 }
 
 function applyAnalysisTemplate(templateId) {
-  const allColumns = TABLE_COLUMNS.map(col => col.key);
+  const allColumns = DEFAULT_TABLE_ORDER;
   applyTemplateProfile(state, templateId, allColumns, chartMetricList);
   savePrefs();
 }
@@ -1661,60 +1475,60 @@ function moveTableColumn(sourceKey, targetKey) {
   return true;
 }
 
-function socketMatchesFilters(socket) {
-  const f = state.table.filters;
-  const haystack = [
-    socket.state,
-    socket.family,
-    socket.local,
-    socket.peer,
-    socket.details.process?.name,
-    socket.details.process?.pid,
-    socket.raw
-  ].join(" ").toLowerCase();
-  if (f.text && !socketMatchesAdvancedQuery(socket, f.text, { metricValue, socketBandwidth })) return false;
-  if (f.process && !String(socket.details.process?.name || "").toLowerCase().includes(f.process.toLowerCase())) return false;
-  if (f.risk !== "all" && socket.risk !== f.risk) return false;
-  if (f.state !== "all" && socket.state !== f.state) return false;
-  if (f.family !== "all" && socket.family !== f.family) return false;
-  if (f.minRecvQ !== "" && socket.recvQ < Number(f.minRecvQ)) return false;
-  if (f.minSendQ !== "" && socket.sendQ < Number(f.minSendQ)) return false;
-  if (f.minRtt !== "" && metricValue(socket, "rtt") < Number(f.minRtt)) return false;
-  if (f.srcIp && !socket.localAddress.host.toLowerCase().includes(f.srcIp.toLowerCase())) return false;
-  if (f.dstIp && !socket.peerAddress.host.toLowerCase().includes(f.dstIp.toLowerCase())) return false;
-  if (f.srcPort && String(socket.localAddress.port || "").toLowerCase() !== f.srcPort.toLowerCase()) return false;
-  if (f.dstPort && String(socket.peerAddress.port || "").toLowerCase() !== f.dstPort.toLowerCase()) return false;
-  if (f.onlyAnomalies && !state.anomalies.some(a => a.socketId === socket.id)) return false;
-  return true;
+function createSocketFilterMatcher(filters = state.table.filters) {
+  const f = filters || {};
+  const text = String(f.text || "").trim();
+  const process = String(f.process || "").trim().toLowerCase();
+  const srcIp = String(f.srcIp || "").trim().toLowerCase();
+  const dstIp = String(f.dstIp || "").trim().toLowerCase();
+  const srcPort = String(f.srcPort || "").trim().toLowerCase();
+  const dstPort = String(f.dstPort || "").trim().toLowerCase();
+  const risk = f.risk || "all";
+  const socketState = f.state || "all";
+  const family = f.family || "all";
+  const minRecvQ = f.minRecvQ == null || f.minRecvQ === "" ? null : Number(f.minRecvQ);
+  const minSendQ = f.minSendQ == null || f.minSendQ === "" ? null : Number(f.minSendQ);
+  const minRtt = f.minRtt == null || f.minRtt === "" ? null : Number(f.minRtt);
+  const anomalySocketIds = f.onlyAnomalies ? anomaliesBySocketId() : null;
+
+  return socket => {
+    if (text && !socketMatchesAdvancedQuery(socket, text, { metricValue, socketBandwidth })) return false;
+    if (process && !String(socket.details.process?.name || "").toLowerCase().includes(process)) return false;
+    if (risk !== "all" && socket.risk !== risk) return false;
+    if (socketState !== "all" && socket.state !== socketState) return false;
+    if (family !== "all" && socket.family !== family) return false;
+    if (Number.isFinite(minRecvQ) && socket.recvQ < minRecvQ) return false;
+    if (Number.isFinite(minSendQ) && socket.sendQ < minSendQ) return false;
+    if (Number.isFinite(minRtt) && metricValue(socket, "rtt") < minRtt) return false;
+    if (srcIp && !socket.localAddress.host.toLowerCase().includes(srcIp)) return false;
+    if (dstIp && !socket.peerAddress.host.toLowerCase().includes(dstIp)) return false;
+    if (srcPort && String(socket.localAddress.port || "").toLowerCase() !== srcPort) return false;
+    if (dstPort && String(socket.peerAddress.port || "").toLowerCase() !== dstPort) return false;
+    if (anomalySocketIds && !anomalySocketIds.has(socket.id)) return false;
+    return true;
+  };
 }
 
 function sortedFilteredSockets() {
-  const cacheKey = JSON.stringify({
-    version: state.dataVersion,
-    filters: state.table.filters,
-    sortKey: state.table.sortKey,
-    sortDir: state.table.sortDir
-  });
+  const cacheKey = [
+    state.dataVersion,
+    tableFilterCacheKey(state.table.filters),
+    state.table.sortKey,
+    state.table.sortDir
+  ].join("\u001e");
   if (state.cache.filteredKey === cacheKey && state.cache.filteredRows) return state.cache.filteredRows;
   const col = getColumn(state.table.sortKey);
   const factor = state.table.sortDir === "asc" ? 1 : -1;
-  const rows = state.sockets.filter(socketMatchesFilters).sort((a, b) => {
+  const matchesFilters = createSocketFilterMatcher(state.table.filters);
+  const rows = state.sockets.filter(matchesFilters).sort((a, b) => {
     const av = col.value(a);
     const bv = col.value(b);
     if (typeof av === "number" && typeof bv === "number") return (av - bv) * factor;
-    return String(av).localeCompare(String(bv), "fr", { numeric: true }) * factor;
+    return TABLE_SORT_COLLATOR.compare(String(av), String(bv)) * factor;
   });
   state.cache.filteredKey = cacheKey;
   state.cache.filteredRows = rows;
   return rows;
-}
-
-function uniqueValues(key) {
-  return [...new Set(state.sockets.map(s => s[key]).filter(Boolean))].sort();
-}
-
-function uniqueSocketValues(selector) {
-  return [...new Set(state.sockets.map(selector).filter(Boolean).map(String))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
 }
 
 function renderDatalist(id, values) {
@@ -1730,6 +1544,7 @@ function pagedRows(rows) {
 
 function groupedSockets() {
   const map = new Map();
+  const anomalyMap = anomaliesBySocketId();
   for (const socket of sortedFilteredSockets()) {
     const key = socketKey(socket);
     if (!map.has(key)) {
@@ -1754,7 +1569,7 @@ function groupedSockets() {
     group.maxRtt = Math.max(group.maxRtt, metricValue(socket, "rtt"));
     group.maxRto = Math.max(group.maxRto, metricValue(socket, "rto"));
     group.maxDrops = Math.max(group.maxDrops, metricValue(socket, "skmem.d"));
-    group.anomalies += state.anomalies.filter(a => a.socketId === socket.id).length;
+    group.anomalies += anomalyMap.get(socket.id)?.length || 0;
   }
   return [...map.values()].sort((a, b) => riskRank(b.maxRisk) - riskRank(a.maxRisk) || b.anomalies - a.anomalies || b.maxSendQ - a.maxSendQ);
 }
@@ -1764,12 +1579,25 @@ function conversationKey(socket) {
 }
 
 function anomaliesBySocketId() {
+  const key = `${state.dataVersion}|${state.anomalies.length}`;
+  if (state.cache.anomalyMapKey === key && state.cache.anomaliesBySocketId) return state.cache.anomaliesBySocketId;
   const map = new Map();
   for (const anomaly of state.anomalies) {
     if (!anomaly.socketId) continue;
     if (!map.has(anomaly.socketId)) map.set(anomaly.socketId, []);
     map.get(anomaly.socketId).push(anomaly);
   }
+  state.cache.anomalyMapKey = key;
+  state.cache.anomaliesBySocketId = map;
+  return map;
+}
+
+function socketsById() {
+  const key = `${state.dataVersion}|${state.sockets.length}`;
+  if (state.cache.socketMapKey === key && state.cache.socketsById) return state.cache.socketsById;
+  const map = new Map(state.sockets.map(socket => [socket.id, socket]));
+  state.cache.socketMapKey = key;
+  state.cache.socketsById = map;
   return map;
 }
 
@@ -1870,7 +1698,7 @@ function compareConversationFallback(a, b) {
     b.drops - a.drops ||
     b.sendQ - a.sendQ ||
     b.txBps - a.txBps ||
-    String(a.key).localeCompare(String(b.key), "fr", { numeric: true });
+    CONVERSATION_SORT_COLLATOR.compare(String(a.key), String(b.key));
 }
 
 function sortConversations(conversations) {
@@ -1884,7 +1712,7 @@ function sortConversations(conversations) {
     if (typeof av === "number" && typeof bv === "number") {
       result = av - bv;
     } else {
-      result = String(av).localeCompare(String(bv), "fr", { numeric: true, sensitivity: "base" });
+      result = CONVERSATION_SORT_COLLATOR.compare(String(av), String(bv));
     }
     return result * factor || compareConversationFallback(a.conv, b.conv) || a.index - b.index;
   }).map(item => item.conv);
@@ -1920,8 +1748,9 @@ function conversationAnomalySummary(conv) {
 function buildExpertInformation() {
   const rank = { critical: 4, high: 3, medium: 2, low: 1 };
   const map = new Map();
+  const socketLookup = socketsById();
   for (const anomaly of filteredAnomalies(state.anomalies)) {
-    const socket = state.sockets.find(item => item.id === anomaly.socketId);
+    const socket = socketLookup.get(anomaly.socketId);
     const key = `${anomaly.severity}|${anomaly.metric || "socket"}|${anomaly.title}`;
     if (!map.has(key)) {
       map.set(key, {
@@ -1952,7 +1781,7 @@ function buildTimelineEvents() {
   const rank = { critical: 4, high: 3, medium: 2, low: 1 };
   const events = [];
   const rows = state.history || [];
-  const selected = state.sockets.find(socket => socket.id === state.selectedId) || state.sockets[0];
+  const selected = socketsById().get(state.selectedId) || state.sockets[0];
   const metrics = ["rto", "rtt", "sendQ", "recvQ", "skmem.d", "skmem.d_rate", "cwnd", "tx_bps", "rx_bps"];
   for (const row of rows) {
     for (const metric of metrics) {
@@ -2144,6 +1973,7 @@ function mapNodeTitle(node) {
 
 function buildServiceMap() {
   const sockets = sortedFilteredSockets().slice(0, 120);
+  const anomalyMap = anomaliesBySocketId();
   const processNodes = new Map();
   const localNodes = new Map();
   const peerNodes = new Map();
@@ -2171,7 +2001,7 @@ function buildServiceMap() {
     const process = ensure(processNodes, `process:${processLabel}`, processLabel, "process");
     const local = ensure(localNodes, `local:${socket.local}`, socket.local, "local", socket.local);
     const peer = ensure(peerNodes, `peer:${socket.peer}`, socket.peer, "peer", socket.peer);
-    const anomalyCount = state.anomalies.filter(a => a.socketId === socket.id).length;
+    const anomalyCount = anomalyMap.get(socket.id)?.length || 0;
     for (const node of [process, local, peer]) {
       node.count += 1;
       node.anomalies += anomalyCount;
@@ -2191,7 +2021,7 @@ function buildServiceMap() {
   const sortNodes = nodes => [...nodes.values()].sort((a, b) => {
     const groupA = a.topologyGroup?.name || "\uffff";
     const groupB = b.topologyGroup?.name || "\uffff";
-    return groupA.localeCompare(groupB, "en", { numeric: true })
+    return SERVICE_MAP_SORT_COLLATOR.compare(groupA, groupB)
       || riskRank(b.risk) - riskRank(a.risk)
       || b.anomalies - a.anomalies
       || b.count - a.count;
@@ -2431,13 +2261,12 @@ function render() {
 }
 
 function selectedSocket() {
-  return state.activeContextId ? state.sockets.find(socket => socket.id === state.activeContextId) || null : null;
+  return state.activeContextId ? socketsById().get(state.activeContextId) || null : null;
 }
 
 function syncChartHistoryToSelection() {
   buildHistory();
-  state.cache.visibleHistoryKey = "";
-  state.cache.visibleHistoryRows = null;
+  clearVisibleHistoryCache();
 }
 
 function focusSocket(socketId, reason = "Selected by user") {
@@ -2503,7 +2332,7 @@ function guidedChecklistItems(socket = selectedSocket()) {
   if (!socket) return [];
   const lens = tailLatencyLens();
   const burst = microburstSummary();
-  const anomalies = state.anomalies.filter(item => item.socketId === socket.id);
+  const anomalies = anomaliesBySocketId().get(socket.id) || [];
   const v = socket.details.values;
   const m = socket.details.skmem;
   const recvPressure = socket.recvQ >= thresholdFor("recvQ").warn || (m.rb && m.r && m.r / m.rb > 0.75);
@@ -2621,9 +2450,10 @@ function renderGuidedChecklistPanel(socket = selectedSocket()) {
 function executiveSummarySignal() {
   const rows = sortedFilteredSockets();
   const focusSocket = pickExecutiveFocusSocket(selectedSocket(), rows.length ? rows : state.sockets);
+  const anomalyMap = anomaliesBySocketId();
   const summary = buildExecutiveSummary({
     focusSocket,
-    anomalies: focusSocket ? state.anomalies.filter(item => item.socketId === focusSocket.id) : state.anomalies,
+    anomalies: focusSocket ? anomalyMap.get(focusSocket.id) || [] : state.anomalies,
     advisorFindings: state.advisorFindings || [],
     microburst: microburstSummary(),
     tailLatency: tailLatencyLens(),
@@ -2642,8 +2472,9 @@ function renderExecutiveSummary() {
   const summary = executiveSummarySignal();
   if (!summary) return "";
   const focusSocket = summary.focusSocket;
+  const anomalyMap = anomaliesBySocketId();
   const visibleAnomalies = focusSocket
-    ? state.anomalies.filter(item => item.socketId === focusSocket.id).length
+    ? anomalyMap.get(focusSocket.id)?.length || 0
     : state.anomalies.length;
   const criticalCount = state.anomalies.filter(item => item.severity === "critical").length;
   const checklist = focusSocket ? guidedChecklistItems(focusSocket) : [];
@@ -2862,7 +2693,7 @@ function renderAnalysisPage() {
 function renderChartsPage() {
   const metrics = chartMetricList();
   const metricOptions = alphabeticalMetrics(metrics);
-  const selected = state.sockets.find(s => s.id === state.selectedId);
+  const selected = socketsById().get(state.selectedId);
   const layout = state.prefs.chartLayout;
   const columns = clampChartColumns(layout.columns);
   const realTimeline = hasRealTimestampHistory();
@@ -3334,84 +3165,36 @@ function renderAnalysisTemplates() {
 }
 
 function renderSocketTable() {
-  if (!state.sockets.length) return `<div class="empty">Paste ss output, then run parsing.</div>`;
-  const allRows = sortedFilteredSockets();
-  const page = pagedRows(allRows);
-  const columns = visibleColumns();
-  const pager = renderPagination(allRows.length, page.totalPages, page.start);
-  const topPager = ["top", "both"].includes(state.prefs.paginationPosition) ? pager : "";
-  const bottomPager = ["bottom", "both"].includes(state.prefs.paginationPosition) ? pager : "";
-  return html`${renderGridControls(allRows.length)}${topPager}<div class="table-wrap table-wrap--settings"><table>
-    <thead><tr><th class="action-head">Actions</th>${columns.map(col => renderHeader(col)).join("")}<th class="table-settings-head">${renderTableSettingsTrigger()}</th></tr></thead>
-    <tbody>
-      ${page.rows.map(s => `<tr data-socket="${escapeHtml(s.id)}" class="${s.id === state.selectedId ? "selected" : ""}">
-        <td>${renderRowActions(s)}</td>
-        ${columns.map(col => `<td class="${state.table.pinned.includes(col.key) ? "pinned-cell" : ""}">${col.render(s)}</td>`).join("")}
-        <td class="table-settings-cell"></td>
-      </tr>`).join("")}
-    </tbody>
-  </table>${renderTableSettingsMenu()}</div>${bottomPager}`;
+  return renderSocketTableView({
+    state,
+    html,
+    escapeHtml,
+    renderGridControls,
+    renderPagination,
+    sortedFilteredSockets,
+    pagedRows,
+    visibleColumns,
+    renderHeader,
+    renderRowActions,
+    renderTableSettingsTrigger,
+    renderTableSettingsMenu
+  });
+}
+
+function tableSettingsViewContext() {
+  return { state, tableColumns: TABLE_COLUMNS, tableDefaults, icons, escapeHtml, formatNumber };
 }
 
 function renderTableSettingsTrigger() {
-  return `<button class="icon table-settings-trigger" data-table-settings-menu title="Table columns and sorting" aria-label="Table columns and sorting">${icons.settings}</button>`;
-}
-
-function renderTableSettingsContent({ includeHead = true } = {}) {
-  const visibleCount = state.table.visible.length;
-  const controls = tableColumnControlModels(state.table, TABLE_COLUMNS, tableDefaults());
-  return `${includeHead ? `<header class="table-settings-menu-head">
-      <strong>${icons.columns} Columns</strong>
-      <span>${formatNumber(visibleCount)} visible</span>
-    </header>` : `<div class="table-settings-summary"><strong>${formatNumber(visibleCount)} visible columns</strong></div>`}
-    <div class="table-settings-actions">
-      <button data-table-menu-action="clearSort">${icons.sortNeutral} Reset sort</button>
-      <button data-table-menu-action="resetColumns">${icons.reset} Reset columns</button>
-    </div>
-    <div class="table-settings-column-list">
-      ${controls.map(({ key, label, visible, pinned }) => {
-        return `<div class="table-column-toggle-row ${visible ? "active" : ""}">
-          <button type="button" class="table-column-toggle" data-menu-visible-col="${key}" role="checkbox" aria-checked="${visible ? "true" : "false"}" title="${visible ? "Hide column" : "Show column"}: ${escapeHtml(label)}">
-            <span class="filter-toggle-mark" aria-hidden="true"></span>
-            <span class="table-column-label">${escapeHtml(label)}</span>
-          </button>
-          <button type="button" class="table-column-pin ${pinned ? "active" : ""}" data-menu-pin-col="${key}" title="${pinned ? "Unpin column" : "Pin column"}" aria-label="${pinned ? "Unpin column" : "Pin column"}" ${visible ? "" : "disabled"}>${pinned ? icons.unpin : icons.pin}</button>
-        </div>`;
-      }).join("")}
-    </div>`;
+  return renderTableSettingsTriggerView({ icons });
 }
 
 function renderTableSettingsDrawer() {
-  return `<div class="table-settings-drawer">${renderTableSettingsContent({ includeHead: false })}</div>`;
+  return renderTableSettingsDrawerView(tableSettingsViewContext());
 }
 
 function renderTableSettingsMenu() {
-  const pos = state.openTableSettings && state.openTableSettingsPos
-    ? `style="left:${state.openTableSettingsPos.left}px;top:${state.openTableSettingsPos.top}px"`
-    : "";
-  return `<div class="row-menu table-settings-menu ${state.openTableSettings ? "open" : ""}" ${pos}>
-    ${renderTableSettingsContent()}
-  </div>`;
-}
-
-function tableSettingsPlacement(button) {
-  const viewportWidth = window.innerWidth || 0;
-  const viewportHeight = window.innerHeight || 0;
-  const menuWidth = Math.min(320, Math.max(240, viewportWidth - 16));
-  const menuHeight = Math.min(540, Math.max(260, viewportHeight - 16));
-  if (viewportWidth < 360 || viewportHeight < 420) return { drawer: true };
-
-  const rect = button.getBoundingClientRect();
-  const maxLeft = viewportWidth - menuWidth - 8;
-  const left = clampValue(rect.right - menuWidth, 8, maxLeft);
-  const belowTop = rect.bottom + 6;
-  const aboveTop = rect.top - menuHeight - 6;
-  const top = belowTop + menuHeight <= viewportHeight - 8
-    ? belowTop
-    : aboveTop >= 8
-      ? aboveTop
-      : clampValue(rect.top, 8, viewportHeight - menuHeight - 8);
-  return { drawer: false, left: Math.round(left), top: Math.round(top) };
+  return renderTableSettingsMenuView(tableSettingsViewContext());
 }
 
 function renderRowActions(socket) {
@@ -3454,95 +3237,29 @@ function renderPeerCell(socket) {
 }
 
 function renderHeader(col) {
-  const sorted = state.table.sortKey === col.key;
-  const sortIcon = sorted ? (state.table.sortDir === "asc" ? icons.sortAsc : icons.sortDesc) : icons.sortNeutral;
-  const pinned = state.table.pinned.includes(col.key);
-  return `<th class="${pinned ? "pinned-head" : ""}" draggable="true" data-col-key="${col.key}">
-    <span class="drag-handle" aria-hidden="true">${icons.drag}</span>
-    <span class="th-compact">
-      <button class="th-sort ${sorted ? "active" : ""}" data-sort="${col.key}">${escapeHtml(col.label)} <span class="sort-indicator ${sorted ? state.table.sortDir : ""}" aria-hidden="true">${sortIcon}</span></button>
-    </span>
-    <span class="col-tools">
-      <button class="mini th-pin ${pinned ? "active" : ""}" data-pin-col="${col.key}" title="${pinned ? "Unpin column" : "Pin column"}" aria-label="${pinned ? "Unpin column" : "Pin column"}">${pinned ? icons.unpin : icons.pin}</button>
-    </span>
-    ${renderColumnTooltip(col)}
-  </th>`;
+  return renderTableHeader(col, { state, icons, escapeHtml, renderColumnTooltip });
 }
 
-function columnMetric(key) {
-  return {
-    recvQ: "recvQ",
-    sendQ: "sendQ",
-    rtt: "rtt",
-    rto: "rto",
-    rttvar: "rttvar",
-    cwnd: "cwnd",
-    ato: "ato",
-    tx_bps: "tx_bps",
-    rx_bps: "rx_bps",
-    pacing_rate: "pacing_rate",
-    delivery_rate: "delivery_rate",
-    bytes_acked: "bytes_acked",
-    bytes_received: "bytes_received",
-    segs_out: "segs_out",
-    segs_in: "segs_in",
-    backoff: "backoff",
-    retrans: "retrans",
-    "skmem.r": "skmem.r",
-    "skmem.t": "skmem.t",
-    "skmem.d": "skmem.d"
-  }[key] || null;
+function columnHelpContext() {
+  return { fieldDocs: FIELD_DOCS, thresholdFor, formatMetricValue, escapeHtml };
 }
 
 function columnHelp(col) {
-  const metric = columnMetric(col.key);
-  const threshold = metric ? thresholdFor(metric) : null;
-  const metricDoc = metric ? EXPERT_DEFAULT_THRESHOLDS[metric]?.rationale : "";
-  const generic = COLUMN_HELP[col.key] || {
-    summary: FIELD_DOCS[col.key] || `${col.label} extracted from the parsed ss snapshot.`,
-    detail: metricDoc || "Use this column together with queue, timer, process, and endpoint context. A single point can be noisy; repeated elevation across samples is much stronger evidence.",
-    use: "Sort, filter, and correlate this field with the same socket in the chart pane."
-  };
-  return { ...generic, metric, threshold };
+  return columnHelpView(col, columnHelpContext());
 }
 
 function renderThresholdSummary(help) {
-  if (!help.threshold) return `<span class="tooltip-none">No threshold configured for this column.</span>`;
-  const t = help.threshold;
-  if (!Number.isFinite(t.warn) && !Number.isFinite(t.danger)) {
-    return `<span class="tooltip-none">Monitoring metric: no universal warning or critical threshold is applied.</span>`;
-  }
-  return `<div class="tooltip-thresholds">
-    <span class="comfort"><b>Comfort</b>${formatMetricValue(help.metric, t.comfort)}</span>
-    <span class="warning"><b><i class="ri-alert-line"></i> Warning</b>${formatMetricValue(help.metric, t.warn)}</span>
-    <span class="danger"><b><i class="ri-alarm-warning-line"></i> Critical</b>${formatMetricValue(help.metric, t.danger)}</span>
-    ${t.inverse ? `<small>Lower values are worse.</small>` : `<small>Higher values are worse.</small>`}
-  </div>`;
+  return renderThresholdSummaryView(help, columnHelpContext());
 }
 
 function renderColumnTooltip(col) {
-  const help = columnHelp(col);
-  return `<div class="column-tooltip" role="tooltip">
-    <div class="tooltip-kicker">Column intelligence</div>
-    <strong>${escapeHtml(col.label)}</strong>
-    <p>${escapeHtml(help.summary)}</p>
-    ${renderThresholdSummary(help)}
-    <button data-column-help="${col.key}" type="button"><i class="ri-expand-diagonal-line"></i> Expand guide</button>
-  </div>`;
+  return renderColumnTooltipView(col, columnHelpContext());
 }
 
 function gridOptionSets() {
   const key = `${state.dataVersion}|${state.sockets.length}`;
   if (state.cache.optionKey === key && state.cache.optionSets) return state.cache.optionSets;
-  const optionSets = {
-    states: uniqueValues("state"),
-    families: uniqueValues("family"),
-    srcIps: uniqueSocketValues(s => s.localAddress.host),
-    dstIps: uniqueSocketValues(s => s.peerAddress.host),
-    srcPorts: uniqueSocketValues(s => s.localAddress.port),
-    dstPorts: uniqueSocketValues(s => s.peerAddress.port),
-    processes: uniqueSocketValues(s => s.details.process?.name)
-  };
+  const optionSets = buildSocketOptionSets(state.sockets);
   state.cache.optionKey = key;
   state.cache.optionSets = optionSets;
   return optionSets;
@@ -4104,7 +3821,7 @@ function renderFieldHealth(key) {
 }
 
 function renderRightPane() {
-  const selected = state.sockets.find(s => s.id === state.selectedId);
+  const selected = socketsById().get(state.selectedId);
   return html`
     <section class="section">
       <h2>Priority anomalies</h2>
@@ -4189,7 +3906,7 @@ function renderChartAnnotationMenu() {
   </div>`;
 }
 function renderDrawer() {
-  const selected = state.sockets.find(s => s.id === state.selectedId);
+  const selected = socketsById().get(state.selectedId);
   const title = state.drawer === "prefs" ? "Preferences"
     : state.drawer === "guide" ? "Expert guide"
       : state.drawer === "thresholds" ? "Threshold configuration"
@@ -4310,438 +4027,71 @@ function renderTimeZoneOptions() {
 }
 
 function renderGuide() {
-  const tab = state.guideTab || "best";
-  const hostEvidence = isAnalystRole()
-    ? envCommand("ip -s link show\nbridge link\ntc -s qdisc show\nethtool -S <iface> | egrep -i 'drop|err|timeout|reset|miss|crc'", { host: true })
-    : isLxcProfile()
-      ? "ip -s link show\nbridge link\nlxc network list\nlxc config show <container> --expanded\ntc -s qdisc show"
-      : "ip -s link show\ntc -s qdisc show\nethtool -S <iface>";
-  const commands = [
-    ["Maximum collection", envCommand("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all")],
-    ["Established TCP with timers", envCommand("ss -HOntepmi --tos --cgroup --inet-sockopt -o state established")],
-    ["Sampling every t seconds", envCommand("t=5; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done | tee -a ss-timeseries.log")],
-    ["Sampling every t milliseconds", envCommand("t_ms=250; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$(awk \\\"BEGIN { print $t_ms / 1000 }\\\")\"; done | tee -a ss-timeseries-ms.log")],
-    ["Epoch timestamp in milliseconds", envCommand("t_ms=500; while true; do printf 'EPOCH_MS=%s\\n' \"$(date +%s%3N)\"; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$(awk \\\"BEGIN { print $t_ms / 1000 }\\\")\"; done >> ss-epoch-ms.log")],
-    ["Quick kernel summary", envCommand("ss -s")],
-    ["Top listening ports", envCommand("ss -Hlnptu")],
-    [isAnalystRole() ? "Ops handoff: host-side evidence to request" : "Host-side LXD evidence", hostEvidence],
-    ["Compressed long-running collection", envCommand("t=10; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done | gzip -c >> ss-timeseries.log.gz")]
-  ];
-  return html`<div class="guide-shell">
-    <div class="tabs guide-tabs">
-      ${[
-        ["best", "Best practices"],
-        ["cases", "Use cases"],
-        ["commands", "Commands"],
-        ["fields", "Fields"],
-        ["refs", "References"]
-      ].map(([key, label]) => `<button class="tab ${tab === key ? "active" : ""}" data-guide-tab="${key}">${label}</button>`).join("")}
-    </div>
-    <div class="guide-list">
-      <article class="guide-card system-context"><strong>${escapeHtml(linuxProfileLabel())} / ${escapeHtml(accessRoleLabel())} / ${escapeHtml(ubuntuProfileLabel())}</strong><p>${escapeHtml(ACCESS_ROLES[state.prefs.accessRole]?.note || ACCESS_ROLES.analyst.note)}</p><p>${escapeHtml(LINUX_PROFILES[state.prefs.linuxProfile]?.note || LINUX_PROFILES.lxc.note)}</p></article>
-      ${tab === "best" ? renderGuideBestPractices() : ""}
-      ${tab === "cases" ? renderGuideUseCases() : ""}
-      ${tab === "commands" ? commands.map(([title, cmd], index) => renderGuideCommandCard(title, cmd, index)).join("") : ""}
-      ${tab === "fields" ? renderFields() : ""}
-      ${tab === "refs" ? renderGuideReferences() : ""}
-    </div>
-  </div>`;
+  return createGuideView({
+    state,
+    html,
+    icons,
+    escapeHtml,
+    isAnalystRole,
+    isLxcProfile,
+    envCommand,
+    linuxProfileLabel,
+    accessRoleLabel,
+    ubuntuProfileLabel,
+    renderFields,
+    commandForPeer
+  }).renderGuide();
 }
 
-function renderGuideCommandCard(title, command, index) {
-  const key = `guide-command-${index}`;
-  const copied = state.copiedGuideCommand === key;
-  return `<article class="guide-card guide-command-card" data-guide-command-card>
-    <header class="guide-command-head">
-      <strong>${escapeHtml(title)}</strong>
-      <button class="copy-command-button ${copied ? "copied" : ""}" data-action="copyGuideCommand" data-command-key="${escapeHtml(key)}" title="Copy command to clipboard" aria-label="Copy ${escapeHtml(title)} command">
-        ${copied ? `<i class="ri-check-line"></i> Copied` : `${icons.copy} Copy`}
-      </button>
-    </header>
-    <pre class="code">${escapeHtml(command)}</pre>
-  </article>`;
+function modalView() {
+  return createModalView({
+    state,
+    html,
+    icons,
+    escapeHtml,
+    sortedFilteredSockets,
+    aliasForEndpoint,
+    normalizeAliasStore,
+    topologyScopeKey,
+    topologyGroupForEndpoint,
+    selectedSocket,
+    renderSocketDetail,
+    renderPrefs,
+    renderGuide,
+    renderThresholdConfig,
+    renderTableSettingsDrawer,
+    metricLabel,
+    renderColumnChooser,
+    renderLayoutPrefs,
+    renderPreImportFilters,
+    renderFields,
+    getColumn,
+    columnHelp,
+    renderThresholdSummary,
+    expertDefaultThresholds: EXPERT_DEFAULT_THRESHOLDS,
+    annotationSocketId,
+    currentSourceAnnotations,
+    visibleHistory,
+    annotationTypeList,
+    buildAnnotationDraft,
+    timeLabel,
+    annotationAnchorOptions,
+    annotationMetricChoices,
+    formatMetricValue,
+    annotationDefaultLabel,
+    annotationTypeLabel,
+    chartStats,
+    formatNumber,
+    renderPercentileDistribution,
+    renderDatalist
+  });
 }
 
-function renderGuideBestPractices() {
-  return `
-    <article class="guide-card"><strong>1. Collect the right fields first</strong><p>Start with -H -O -n -t -u -e -p -m -i --tos --cgroup --inet-sockopt -a -A all. In analyst mode, run it from inside the container without sudo; process fields may be partial. Ops/root can add sudo or lxc exec when needed.</p></article>
-    ${isLxcProfile() ? `<article class="guide-card"><strong>2. LXC/LXD namespace rule</strong><p>${isAnalystRole() ? "Default analyst mode: run ss, ip route, and local checks inside the container. If symptoms point to host path loss, request host veth, bridge, qdisc, ethtool, and softnet evidence from ops/root." : "Ops/root mode: collect socket evidence with lxc exec, then collect route, veth, bridge, qdisc, ethtool, and softnet evidence on the LXD host."}</p></article>` : ""}
-    <article class="guide-card"><strong>2. Keep collection overhead under control</strong><p>For thousands of sockets, prefer -n -H -O, filter by state/sport/dport/dev/cgroup, and increase the sampling interval. Avoid name resolution and expensive BPF details unless needed.</p></article>
-    <article class="guide-card"><strong>3. Always timestamp snapshots</strong><p>Use date --iso-8601=ns or EPOCH_MS before every ss snapshot so queues, RTT, RTO, drops, and buffer pressure can be correlated over time.</p></article>
-    <article class="guide-card microburst-guide-card">
-      <strong>4. Microburst guide</strong>
-      <p>Microbursts are short receive-side pressure windows where RX bandwidth, Recv-Q, socket receive memory, and drops rise together. In Charts, NetworkExpert marks the detected window with yellow bands so you can align the burst across several metrics at once.</p>
-      <div class="guide-card-actions">
-        <button class="primary" data-action="sampleMicroburst">${icons.chart} Load microburst sample</button>
-      </div>
-    </article>
-    <article class="guide-card microburst-guide-card">
-      <strong>5. Tail latency guide</strong>
-      <p>Tail latency is about the extremes, not the average. Use it when short RTT or RTO spikes matter more than the median. The Tail latency lens highlights the worst short window, shows P95/P99/P99.9 behavior, and lets you jump straight to the sharpest degradation.</p>
-      <div class="guide-card-actions">
-        <button class="primary" data-action="sampleTailLatency">${icons.chart} Load tail latency sample</button>
-      </div>
-    </article>
-    <article class="guide-card"><strong>6. Receive backlog sanity check</strong><p>If socket drops say "dropped before demultiplexing" during RX bursts, check sysctl net.core.netdev_max_backlog. A value of 1000 is plausible on Ubuntu defaults and can be too small for burst-heavy NIC/GRO/LRO delivery. Confirm with /proc/net/softnet_stat first; then test sudo sysctl -w net.core.netdev_max_backlog=10000 and persist only after before/after evidence.</p></article>
-    <article class="guide-card"><strong>7. Store raw evidence</strong><p>Write to .log, .gz, or .zip so you can re-run analysis offline and compare with application, host, and network telemetry.</p></article>`;
-}
-
-function renderGuideUseCases() {
-  const cases = [
-    {
-      title: "1. Slow consumer or congested send path",
-      summary: "Start here when Send-Q, skmem.t, or transmit memory grows. The key question is whether the peer is slow, the path is congested, or the local application is overproducing.",
-      signals: ["Send-Q rising over time", "skmem.t or skmem.w near transmit limits", "TX bandwidth flat or falling", "RTO/backoff rising", "cwnd or pacing_rate collapsing"],
-      decide: [
-        "Send-Q high + RTO/backoff high + low cwnd: investigate network loss, shaping, qdisc, MTU, or route instability.",
-        "Send-Q high + RTO normal + one peer affected: suspect peer slow-consumption or peer-side application latency.",
-        "Send-Q high across many peers + local process writes heavily: suspect local producer/backpressure design.",
-        "TX bandwidth low while delivery_rate/pacing_rate low: TCP is limiting the flow, not just the application."
-      ],
-      next: ["Open Charts: Send-Q vs TX bandwidth, Send-Q vs RTO, cwnd vs pacing rate.", "Group by peer. If one peer dominates, investigate that remote side first.", "On LXC/LXD, confirm host veth/bridge/qdisc/NIC counters before tuning container buffers."],
-      commands: [commandForPeer(state.sockets[0]), envCommand("ss -tinpm state established"), envCommand("ip -s route get <peer-ip>", { host: true }), envCommand("tc -s qdisc show", { host: true }), envCommand("nstat -az | egrep 'Retrans|Timeout|TCPLoss|TCPAbort'", { host: true })],
-      mitigation: "Apply backpressure or rate limits first. Increase tcp_wmem only after proving memory headroom and after ruling out loss/qdisc/peer slowness."
-    },
-    {
-      title: "2. Local application not reading fast enough",
-      summary: "Use this path when Recv-Q or receive socket memory grows. The likely owner is often the local process, runtime, scheduler, or worker pool.",
-      signals: ["Recv-Q sustained above warning", "skmem.r or skmem.rb high", "RX bandwidth continues while application-level throughput stalls", "Drops appear after receive bursts", "One process or one local port dominates"],
-      decide: [
-        "Recv-Q high + process concentrated on one service: inspect that PID, event loop, worker pool, GC, blocking I/O, or database/file dependencies.",
-        "Recv-Q high + CPU run queue or pidstat pressure: suspect CPU starvation or scheduler latency.",
-        "Recv-Q high + skmem.d increasing: receive-side buffering is failing; collect host softnet/NIC/drop evidence.",
-        "Recv-Q high across many services: suspect host/container CPU, memory pressure, or shared network namespace bottleneck."
-      ],
-      next: ["Group by process and local port.", "Chart Recv-Q vs RX bandwidth and Recv-Q vs skmem.r.", "Compare socket symptoms with application logs at the same timestamps."],
-      commands: [envCommand("ss -tinpm state established"), envCommand("pidstat -druwt -p <pid> 1"), envCommand("top -H -p <pid>"), envCommand("strace -tt -p <pid> -e trace=network"), envCommand("sysctl net.ipv4.tcp_rmem net.core.rmem_max")],
-      mitigation: "Fix the read loop, worker saturation, or backpressure. Tune rmem only as a controlled burst-absorption change, not as a substitute for draining data."
-    },
-    {
-      title: "3. Packet loss, jitter, or path instability",
-      summary: "This path is for RTO spikes, RTT variance, retransmission timers, backoff, low cwnd, pacing collapse, or socket drops.",
-      signals: ["RTO jumps above warning/danger", "RTT variance rises before timeout", "backoff non-zero", "retrans timer count grows", "cwnd drops sharply", "skmem.d non-zero"],
-      decide: [
-        "High RTO + high RTT variance: suspect jitter, delayed ACKs, overloaded peer, or unstable path.",
-        "High RTO + backoff + low cwnd: prioritize packet loss or congestion-control recovery.",
-        "Only one destination affected: check route, peer network, firewall, load balancer, or remote host.",
-        "Many destinations affected: check host interface, qdisc, bridge/veth, NIC, virtualization, or upstream network."
-      ],
-      next: ["Use expert correlation RTT variance vs RTO, then Backoff vs RTO.", "Compare a bad peer with a healthy peer collected at the same time.", "Collect route, qdisc, NIC, and softnet counters from the correct namespace/host."],
-      commands: [envCommand("ss -ti dst <peer-ip>"), envCommand("ip -s route get <peer-ip>", { host: true }), envCommand("ip -s link show dev <iface>", { host: true }), envCommand("ethtool -S <iface> | egrep -i 'drop|err|timeout|reset|miss|crc'", { host: true }), envCommand("tracepath <peer-ip>", { host: true })],
-      mitigation: "Do not hide loss by blindly increasing buffers. Fix drops, qdisc shaping, MTU mismatch, overloaded virtual bridge, NIC errors, or peer/network instability."
-    },
-    {
-      title: "4. Socket buffer and memory pressure",
-      summary: "Use this when skmem.r, skmem.t, rb/tb, w, bl, or d are high. The goal is to know whether buffers are absorbing a burst or masking a sustained bottleneck.",
-      signals: ["skmem.r high with Recv-Q high", "skmem.t or skmem.w high with Send-Q high", "skmem.d increasing", "rb/tb close to configured limits", "Many sockets consuming memory at once"],
-      decide: [
-        "High skmem.r + high Recv-Q: local receiver is not draining fast enough.",
-        "High skmem.t + high Send-Q: peer/path cannot drain outbound data fast enough.",
-        "Drops with high memory pressure: collect kernel memory, softnet, NIC, and backlog evidence immediately.",
-        "Buffers high but queues stable and no drops: may be normal burst absorption; watch trend before tuning."
-      ],
-      next: ["Open socket details and compare r/rb/t/tb/w/bl/d.", "Chart skmem.r, skmem.t, drops, Send-Q, and Recv-Q together.", "Check system-wide memory and TCP buffer sysctls."],
-      commands: [envCommand("ss -tinpm"), envCommand("sysctl net.core.netdev_max_backlog net.ipv4.tcp_rmem net.ipv4.tcp_wmem net.ipv4.tcp_mem net.core.rmem_max net.core.wmem_max"), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("nstat -az | egrep 'Prune|Collapse|Rcv|Drop|Memory'", { host: true }), envCommand("cat /proc/net/sockstat /proc/net/sockstat6", { host: true })],
-      mitigation: "Tune backlog and buffers with guardrails: if softnet drops rise and netdev_max_backlog is 1000, test 10000 before larger socket buffers; define memory/latency budget and keep before/after ss timelines."
-    },
-    {
-      title: "5. LXC/LXD namespace split: container symptom or host network problem?",
-      summary: "In LXC/LXD, ss inside the container sees the container network namespace. Host bridge, veth, qdisc, NIC, and route evidence may live outside the container.",
-      signals: ["Container sockets show queues but host counters show drops", "Only containers on one bridge are affected", "veth/bridge qdisc backlog grows", "Container route differs from host route", "Missing process or cgroup context"],
-      decide: [
-        "Only one container/service affected: start with container process, Recv-Q/Send-Q, cgroup, and local port.",
-        "Several containers on same bridge affected: inspect LXD bridge, veth pairs, host qdisc, firewall, and MTU.",
-        "Host NIC errors/drops increase: continue on the host/network path, not only inside the container.",
-        isAnalystRole() ? "Container ss lacks process ownership: keep the gap explicit, or ask ops/root for privileged recollection." : "Container ss lacks process ownership: recollect with lxc exec and sufficient privileges."
-      ],
-      next: isAnalystRole()
-        ? ["Collect container-local ss and route evidence for the same incident window.", "If host evidence is needed, hand off a precise request to ops/root.", "Keep timestamps aligned across analyst and ops collections."]
-        : ["Collect both container-local ss and host-side interface/qdisc evidence for the same incident window.", "Map container interface to host veth/bridge.", "Keep timestamps aligned across container and host collections."],
-      commands: [
-        envCommand("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all"),
-        envCommand("ip route"),
-        envCommand("ip addr show"),
-        envCommand("lxc list", { host: true }),
-        envCommand("lxc config show <container> --expanded", { host: true }),
-        envCommand("ip -s link show", { host: true }),
-        envCommand("bridge link", { host: true }),
-        envCommand("tc -s qdisc show", { host: true })
-      ],
-      mitigation: "Avoid container-only tuning when host-side veth/bridge/NIC evidence points elsewhere. Escalate with both namespaces in the evidence bundle."
-    },
-    {
-      title: "6. Exposed listeners and missing ownership",
-      summary: "Use this when LISTEN sockets are wildcard-bound, unexpected, or missing process ownership. It is a security and operability check, not only a performance check.",
-      signals: ["LISTEN on 0.0.0.0 or ::", "Unknown process field", "Unexpected public service port", "Many listeners in a container", "Port bound in the wrong namespace"],
-      decide: [
-        "Wildcard listener is expected and firewalled: document it and keep ownership visible.",
-        "Wildcard listener unexpected: check service config, systemd unit, container profile, and firewall exposure.",
-        "Process missing: rerun with sudo -p or container-local privileges.",
-        "Listener appears in container but not host: verify LXD proxy/device/network exposure."
-      ],
-      next: ["Filter LISTEN sockets by local port and process.", "Validate bind address against intended exposure model.", "Check firewall and LXD profile/device configuration."],
-      commands: [envCommand("ss -Hlnptu"), envCommand("ss -HOntepmi --cgroup --inet-sockopt -a -A all"), envCommand("lsof -nP -iTCP -sTCP:LISTEN", { host: true }), envCommand("systemctl status <service>", { host: true }), envCommand("lxc config show <container> --expanded", { host: true })],
-      mitigation: "Bind explicitly where possible, document intentional wildcard listeners, and keep process attribution in routine collections."
-    }
-  ];
-  return `<div class="usecase-grid">${cases.map(item => `<article class="guide-card usecase-card">
-    <strong>${escapeHtml(item.title)}</strong>
-    <p>${escapeHtml(item.summary)}</p>
-    <div class="usecase-sections">
-      <section><h4><i class="ri-radar-line"></i> Signals</h4><ul>${item.signals.map(text => `<li>${escapeHtml(text)}</li>`).join("")}</ul></section>
-      <section><h4><i class="ri-route-line"></i> How to choose the next path</h4><ul>${item.decide.map(text => `<li>${escapeHtml(text)}</li>`).join("")}</ul></section>
-      <section><h4><i class="ri-focus-3-line"></i> Next investigation</h4><ul>${item.next.map(text => `<li>${escapeHtml(text)}</li>`).join("")}</ul></section>
-    </div>
-    <details>
-      <summary><i class="ri-terminal-box-line"></i> Evidence commands</summary>
-      <pre class="code">${escapeHtml(item.commands.join("\n"))}</pre>
-    </details>
-    <p class="mitigation"><i class="ri-shield-check-line"></i> ${escapeHtml(item.mitigation)}</p>
-  </article>`).join("")}</div>`;
-}
-
-function renderGuideReferences() {
-  return `
-    <article class="guide-card"><strong>ss option coverage</strong><p>The interface covers options from the recent iproute2 man page: formats, families, tables, filters, BPF, contexts, namespaces, diag exports, and event mode.</p></article>
-    <article class="guide-card"><strong>Reference links</strong><p><a href="https://manpages.debian.org/testing/iproute2/ss.8.en.html" target="_blank" rel="noreferrer">Debian testing ss(8), iproute2 6.19</a> - command options, filters, tables, and output modes.</p><p><a href="https://man7.org/linux/man-pages/man7/tcp.7.html" target="_blank" rel="noreferrer">man7 tcp(7)</a> - TCP socket options and TCP_INFO background.</p><p><a href="https://docs.kernel.org/next/networking/ip-sysctl.html" target="_blank" rel="noreferrer">Linux kernel IP sysctl documentation</a> - tcp_rmem, tcp_wmem, tcp_mem, pacing, SACK, ECN, and tuning knobs.</p><p><a href="https://docs.kernel.org/6.12/networking/proc_net_tcp.html" target="_blank" rel="noreferrer">Linux kernel /proc/net/tcp documentation</a> - raw kernel socket table fields.</p></article>`;
-}
-
-function serviceAliasEndpointOptions() {
-  const endpoints = new Set();
-  for (const socket of sortedFilteredSockets()) {
-    if (socket.local) endpoints.add(socket.local);
-    if (socket.peer) endpoints.add(socket.peer);
-    if (endpoints.size > 2000) break;
-  }
-  for (const alias of Object.values(state.serviceAliases)) {
-    if (alias.endpoint) endpoints.add(alias.endpoint);
-  }
-  return [...endpoints].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
-}
-
-function selectedAliasEndpoint(endpoints) {
-  if (state.aliasEditKey && endpoints.includes(state.aliasEditKey)) return state.aliasEditKey;
-  const firstAlias = Object.values(state.serviceAliases).find(alias => alias.endpoint)?.endpoint;
-  return firstAlias || endpoints[0] || "";
-}
-
-function renderServiceAliasesModal() {
-  const endpoints = serviceAliasEndpointOptions();
-  const selectedEndpoint = selectedAliasEndpoint(endpoints);
-  const alias = aliasForEndpoint(state.serviceAliases, selectedEndpoint) || { label: "", role: "", note: "" };
-  const aliases = Object.values(state.serviceAliases).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  const suggestions = endpoints.filter(endpoint => !aliasForEndpoint(state.serviceAliases, endpoint)).slice(0, 8);
-  return `<div class="service-alias-modal">
-    <section class="service-alias-editor">
-      <div class="field-card">
-        <strong>Endpoint identity</strong>
-        <label>Endpoint<input id="aliasEndpoint" list="aliasEndpointOptions" placeholder="10.0.0.5:9100" value="${escapeHtml(selectedEndpoint)}" /></label>
-        ${renderDatalist("aliasEndpointOptions", endpoints)}
-        <label>Business name<input id="aliasLabel" placeholder="FIX stream - Aggregator A" value="${escapeHtml(alias.label)}" /></label>
-        <label>Role / component<input id="aliasRole" placeholder="FIX streaming port, market data, container..." value="${escapeHtml(alias.role)}" /></label>
-        <label>Notes<textarea id="aliasNote" class="alias-note" placeholder="Owner, environment, expected traffic, incident hint...">${escapeHtml(alias.note)}</textarea></label>
-        <div class="toolbar">
-          <button class="primary" data-action="saveServiceAlias"><i class="ri-price-tag-3-line"></i> Save label</button>
-          <button data-action="deleteServiceAlias">${icons.trash} Delete label</button>
-        </div>
-      </div>
-      <div class="field-card">
-        <strong>Unlabelled endpoints</strong>
-        <div class="alias-suggestions">
-          ${suggestions.length ? suggestions.map(endpoint => `<button data-alias-pick="${escapeHtml(endpoint)}"><span>${escapeHtml(endpoint)}</span><small>add label</small></button>`).join("") : `<p class="hint">Every visible endpoint already has a label.</p>`}
-        </div>
-      </div>
-    </section>
-    <section class="service-alias-list">
-      <strong>Saved labels</strong>
-      ${aliases.length ? aliases.map(item => `<article class="alias-card">
-        <div><b>${escapeHtml(item.label || item.endpoint)}</b><span>${escapeHtml(item.endpoint)}</span></div>
-        ${item.role ? `<small>${escapeHtml(item.role)}</small>` : ""}
-        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
-        <button data-alias-pick="${escapeHtml(item.endpoint)}"><i class="ri-edit-line"></i> Edit</button>
-      </article>`).join("") : `<div class="empty">No saved service labels yet.</div>`}
-    </section>
-  </div>`;
-}
-
-function topologyMatchOptions() {
-  const endpoints = serviceAliasEndpointOptions();
-  const hosts = [...new Set(endpoints.map(endpointHost).filter(Boolean))];
-  return [...hosts, ...endpoints];
-}
-
-function topologyColorOptions(selected) {
-  return ["cyan", "blue", "green", "orange", "pink", "violet"]
-    .map(color => `<option value="${color}" ${selected === color ? "selected" : ""}>${color}</option>`)
-    .join("");
-}
-
-function renderTopologyModal() {
-  const groups = normalizeTopologyProfile(state.topology).groups;
-  const selected = groups.find(group => group.id === state.topologyEditId) || null;
-  const matchValue = selected?.match || state.topologyDraftMatch || "";
-  const suggestions = topologyMatchOptions().filter(Boolean).slice(0, 16);
-  return `<div class="topology-modal">
-    <section class="topology-editor">
-      <article class="field-card">
-        <strong>Recording topology</strong>
-        <p class="hint">Scope: ${escapeHtml(state.sourceName)}. A host rule such as 192.168.145.115 groups every visible port on that host; IP:port and wildcards are also accepted.</p>
-        <label>Group name<input id="topologyName" placeholder="Market data simulators" value="${escapeHtml(selected?.name || "")}" /></label>
-        <label>Match hosts or endpoints<input id="topologyMatch" list="topologyMatchOptions" placeholder="192.168.145.115, 192.168.145.204:57067" value="${escapeHtml(matchValue)}" /></label>
-        ${renderDatalist("topologyMatchOptions", suggestions)}
-        <label>Color<select id="topologyColor">${topologyColorOptions(selected?.color || "cyan")}</select></label>
-        <label>Notes<textarea id="topologyNote" class="alias-note" placeholder="Business role, owner, recording-specific context...">${escapeHtml(selected?.note || "")}</textarea></label>
-        <div class="toolbar">
-          <button class="primary" data-action="saveTopologyGroup"><i class="ri-node-tree"></i> Save group</button>
-          <button data-action="deleteTopologyGroup">${icons.trash} Delete group</button>
-        </div>
-      </article>
-      <article class="field-card">
-        <strong>Fast host picks</strong>
-        <div class="topology-suggestions">
-          ${suggestions.slice(0, 10).map(value => `<button data-topology-suggest="${escapeHtml(value)}"><span>${escapeHtml(value)}</span><small>use</small></button>`).join("")}
-        </div>
-      </article>
-    </section>
-    <section class="topology-group-list">
-      <strong>Groups for this recording</strong>
-      ${groups.length ? groups.map(group => `<article class="topology-group-card ${escapeHtml(group.color)}">
-        <div><b>${escapeHtml(group.name)}</b><span>${escapeHtml(group.match)}</span></div>
-        ${group.note ? `<p>${escapeHtml(group.note)}</p>` : ""}
-        <button data-topology-edit="${escapeHtml(group.id)}"><i class="ri-edit-line"></i> Edit</button>
-      </article>`).join("") : `<div class="empty">No topology group for this recording yet.</div>`}
-    </section>
-  </div>`;
-}
-
-function renderModal() {
-  const modalTitle = state.modal === "columns" ? "Columns and order"
-    : state.modal === "thresholds" ? "Threshold configuration"
-      : state.modal === "layout" ? "Chart layout preferences"
-        : state.modal === "preImport" ? "Pre-import filters"
-          : state.modal === "columnHelp" ? "Column guide"
-            : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
-              : state.modal === "serviceAliases" ? "Service labels"
-                : state.modal === "topology" ? "Recording topology"
-                  : state.modal === "annotation" ? "Annotations"
-                    : "ss field documentation";
-  const modalBody = state.modal === "columns" ? renderColumnChooser()
-    : state.modal === "thresholds" ? renderThresholdConfig()
-      : state.modal === "layout" ? renderLayoutPrefs()
-        : state.modal === "preImport" ? renderPreImportFilters()
-          : state.modal === "columnHelp" ? renderColumnHelpDetail()
-            : state.modal === "chartStats" ? renderChartStatsModal()
-              : state.modal === "serviceAliases" ? renderServiceAliasesModal()
-                : state.modal === "topology" ? renderTopologyModal()
-                  : state.modal === "annotation" ? renderAnnotationModal()
-                    : renderFields();
-  return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
-    <section class="modal ${state.modal || ""}">
-      <header><strong>${modalTitle}</strong><button class="icon" data-action="closeModal">${icons.x}</button></header>
-      <div class="body">${modalBody}</div>
-    </section>
-  </div>`;
-}
-
-function renderColumnHelpDetail() {
-  const col = getColumn(state.helpColumn);
-  const help = columnHelp(col);
-  return `<div class="column-help-detail">
-    <article class="field-card">
-      <strong>${escapeHtml(col.label)}</strong>
-      <p>${escapeHtml(help.summary)}</p>
-      <p>${escapeHtml(help.detail)}</p>
-      <p><b>Best use:</b> ${escapeHtml(help.use)}</p>
-    </article>
-    <article class="field-card">
-      <strong>Current thresholds</strong>
-      ${renderThresholdSummary(help)}
-      ${help.metric ? `<p class="hint">${escapeHtml(EXPERT_DEFAULT_THRESHOLDS[help.metric]?.rationale || "")}</p>` : `<p class="hint">This column is contextual and has no numeric comfort/warning/danger range.</p>`}
-    </article>
-  </div>`;
-}
-
-function renderAnnotationModal() {
-  const socket = selectedSocket();
-  const socketId = annotationSocketId();
-  const items = currentSourceAnnotations(null, socketId, visibleHistory());
-  const types = annotationTypeList();
-  const draft = state.annotationDraft || buildAnnotationDraft({ sourceName: state.sourceName, socketId, metric: state.prefs.graphMetric });
-  const clickedEpoch = Number(draft.epochMs);
-  const cursorAnchor = draft.anchor === "cursor" && Number.isFinite(clickedEpoch)
-    ? [{ id: "cursor", label: `Clicked chart point - ${timeLabel(0, clickedEpoch)}`, epochMs: clickedEpoch }]
-    : [];
-  const anchors = [...cursorAnchor, ...annotationAnchorOptions()];
-  const metrics = annotationMetricChoices();
-  const context = state.annotationContext;
-  return `<div class="annotation-modal">
-    <section class="annotation-editor">
-      <div class="annotation-context">
-        <strong>${socket ? `${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}` : "No active socket"}</strong>
-        <span class="hint">Attach a note to the current socket, or target one metric so the marker appears only on the related charts.</span>
-      </div>
-      ${context ? `<div class="annotation-click-context">
-        <span class="tooltip-kicker">Chart right-click context</span>
-        <strong>${escapeHtml(metricLabel(context.metric))} at ${escapeHtml(timeLabel(0, context.epochMs))}</strong>
-        <span>${escapeHtml(formatMetricValue(context.metric, context.value ?? 0))} - marker will be pinned to this exact captured sample.</span>
-      </div>` : ""}
-      <div class="annotation-grid">
-        <label><span>Marker type</span><select id="annotationKind">${types.map(item => `<option value="${item.id}" ${draft.kind === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
-        <label><span>Target metric</span><select id="annotationMetric">${metrics.map(item => `<option value="${item.value}" ${draft.metric === item.value ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
-        <label><span>Anchor time</span><select id="annotationAnchor">${anchors.map(item => `<option value="${item.id}" ${draft.anchor === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select></label>
-        <label><span>Label</span><input id="annotationLabel" value="${escapeHtml(draft.label || annotationDefaultLabel(draft.kind))}" placeholder="Short label" /></label>
-      </div>
-      <label class="annotation-note"><span>Analyst note</span><textarea id="annotationNote" rows="4" placeholder="Optional context: failover, queue reset, peer switch, burst start...">${escapeHtml(draft.note || "")}</textarea></label>
-      <div class="toolbar annotation-actions">
-        <button class="primary" data-action="saveAnnotation">${icons.note} Save annotation</button>
-        <button data-action="closeModal">Cancel</button>
-      </div>
-    </section>
-    <section class="annotation-history">
-      <div class="annotation-history-head"><strong>Current annotations</strong><span class="hint">${items.length} item(s) on this socket and source</span></div>
-      ${items.length ? `<div class="annotation-list">${items.slice().reverse().map(item => `<article class="annotation-item"><header><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(annotationTypeLabel(item.kind))}</span></header><small>${escapeHtml(item.metric === "*" ? "all charts" : metricLabel(item.metric))} * ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</small>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}<footer><button class="danger subtle" data-action="deleteAnnotation" data-annotation-id="${escapeHtml(item.id)}" title="Delete this annotation">${icons.trash} Delete</button></footer></article>`).join("")}</div>` : `<div class="empty">No annotation yet for this socket.</div>`}
-    </section>
-  </div>`;
-}
-function renderChartStatsModal() {
-  const metric = state.statsMetric || state.prefs.graphMetric;
-  const stats = chartStats(metric);
-  if (!stats.count) return `<div class="empty">No visible numeric data for ${escapeHtml(metricLabel(metric))}.</div>`;
-  const rows = [
-    ["Min", 0, stats.min],
-    ["Median", 50, stats.p50],
-    ["P95", 95, stats.p95],
-    ["P90", 90, stats.p90],
-    ["P99", 99, stats.p99],
-    ["P99.9", 99.9, stats.p999],
-    ["P99.99", 99.99, stats.p9999],
-    ["Max", 100, stats.max]
-  ];
-  return `<div class="chart-stats-layout">
-    <article class="stats-summary-card">
-      <div>
-        <span class="tooltip-kicker">${escapeHtml(metricLabel(metric))}</span>
-        <strong>${formatNumber(stats.count)} visible sample(s)</strong>
-        <p class="hint">Computed on the current chart window with real captured values, before any visual rendering reduction.</p>
-      </div>
-      <div class="stats-window">
-        <span>${escapeHtml(timeLabel(stats.first?.t || 0, stats.first?.epochMs))}</span>
-        <i class="ri-arrow-right-line"></i>
-        <span>${escapeHtml(timeLabel(stats.last?.t || 0, stats.last?.epochMs))}</span>
-      </div>
-    </article>
-    <article class="stats-table-card">
-      <strong>Percentile table</strong>
-      <table class="stats-table">
-        <tbody>${rows.map(([label, percentile, value]) => `<tr tabindex="0" data-percentile-row="${percentile}" data-percentile-label="${escapeHtml(label)}" data-percentile-value="${value}"><th>${escapeHtml(label)}</th><td>${formatMetricValue(metric, value)}</td></tr>`).join("")}</tbody>
-      </table>
-    </article>
-    <article class="stats-dist-card">
-      <strong>Percentile distribution</strong>
-      ${renderPercentileDistribution(metric, stats)}
-    </article>
-  </div>`;
-}
+function serviceAliasEndpointOptions() { return modalView().serviceAliasEndpointOptions(); }
+function selectedAliasEndpoint(endpoints) { return modalView().selectedAliasEndpoint(endpoints); }
+function renderServiceAliasesModal() { return modalView().renderServiceAliasesModal(); }
+function renderTopologyModal() { return modalView().renderTopologyModal(); }
+function renderModal() { return modalView().renderModal(); }
 
 function renderPreImportFilters() {
   const h = state.filterHistory;
@@ -4889,7 +4239,7 @@ function resolvedNumberLocale() {
 function resolvedTimeZone() {
   return state?.prefs?.chartTimeZone && state.prefs.chartTimeZone !== "auto"
     ? state.prefs.chartTimeZone
-    : Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    : BROWSER_TIME_ZONE;
 }
 
 function timeZoneOptions() {
@@ -4897,24 +4247,60 @@ function timeZoneOptions() {
   return [...new Set([resolvedTimeZone(), ...COMMON_TIME_ZONES, ...supported])].filter(Boolean);
 }
 
+function rememberBounded(cache, key, create, limit = 32) {
+  if (cache.has(key)) return cache.get(key);
+  const value = create();
+  cache.set(key, value);
+  if (cache.size > limit) cache.delete(cache.keys().next().value);
+  return value;
+}
+
+function numberFormatterWith(minimumFractionDigits, maximumFractionDigits) {
+  const locale = resolvedNumberLocale();
+  const grouping = state?.prefs?.numberGrouping !== false;
+  const key = `${locale}|${grouping ? 1 : 0}|${minimumFractionDigits}|${maximumFractionDigits}`;
+  return rememberBounded(numberFormatterCache, key, () => new Intl.NumberFormat(locale, {
+    useGrouping: grouping,
+    minimumFractionDigits,
+    maximumFractionDigits
+  }));
+}
+
+function numberFormatter(maximumFractionDigits) {
+  return numberFormatterWith(0, maximumFractionDigits);
+}
+
+function numberSeparators() {
+  const locale = resolvedNumberLocale();
+  return rememberBounded(numberSeparatorCache, locale, () => {
+    const sample = new Intl.NumberFormat(locale).formatToParts(12345.6);
+    return {
+      group: sample.find(part => part.type === "group")?.value || ",",
+      decimal: sample.find(part => part.type === "decimal")?.value || "."
+    };
+  });
+}
+
+function dateTimeFormatter(locale, options, cacheId = "") {
+  const key = `${cacheId}|${locale}|${options.timeZone || ""}|${options.year || ""}|${options.month || ""}|${options.day || ""}|${options.hour || ""}|${options.minute || ""}|${options.second || ""}|${options.hour12 ?? ""}`;
+  return rememberBounded(dateTimeFormatterCache, key, () => new Intl.DateTimeFormat(locale, options));
+}
+
 function formatNumber(value) {
   const numeric = Number(value || 0);
   const decimals = Number.isInteger(numeric) ? 0 : 2;
-  return new Intl.NumberFormat(resolvedNumberLocale(), {
-    useGrouping: state?.prefs?.numberGrouping !== false,
-    maximumFractionDigits: decimals
-  }).format(numeric);
+  return numberFormatter(decimals).format(numeric);
 }
 
 function formatTimelineTime(event) {
   if (!event?.epochMs) return "snapshot";
   try {
-    return new Intl.DateTimeFormat(resolvedNumberLocale(), {
+    return dateTimeFormatter(resolvedNumberLocale(), {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
       timeZone: resolvedTimeZone()
-    }).format(new Date(event.epochMs));
+    }, "timeline").format(new Date(event.epochMs));
   } catch {
     return "snapshot";
   }
@@ -4934,11 +4320,8 @@ function metricFractionDigits(metric, value) {
 
 function formatMetricNumber(metric, value) {
   const digits = metricFractionDigits(metric, value);
-  return new Intl.NumberFormat(resolvedNumberLocale(), {
-    useGrouping: state?.prefs?.numberGrouping !== false,
-    minimumFractionDigits: ["rtt", "rto", "ato"].includes(metric) && Math.abs(Number(value || 0)) > 0 && Math.abs(Number(value || 0)) < 10 ? digits : 0,
-    maximumFractionDigits: digits
-  }).format(Number(value || 0));
+  const minimumDigits = ["rtt", "rto", "ato"].includes(metric) && Math.abs(Number(value || 0)) > 0 && Math.abs(Number(value || 0)) < 10 ? digits : 0;
+  return numberFormatterWith(minimumDigits, digits).format(Number(value || 0));
 }
 
 function formatBitsPerSecond(value) {
@@ -4952,11 +4335,7 @@ function formatBitsPerSecond(value) {
     unitIndex += 1;
   }
   const digits = unitIndex === 0 ? 0 : scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
-  const formatted = new Intl.NumberFormat(resolvedNumberLocale(), {
-    useGrouping: state?.prefs?.numberGrouping !== false,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: digits
-  }).format(sign * scaled);
+  const formatted = numberFormatter(digits).format(sign * scaled);
   return `${formatted} ${units[unitIndex]}`;
 }
 
@@ -4977,9 +4356,7 @@ function renderTableMetricCell(metric, value) {
 
 function parseFormattedNumber(value) {
   if (typeof value === "number") return value;
-  const sample = new Intl.NumberFormat(resolvedNumberLocale()).formatToParts(12345.6);
-  const group = sample.find(part => part.type === "group")?.value || ",";
-  const decimal = sample.find(part => part.type === "decimal")?.value || ".";
+  const { group, decimal } = numberSeparators();
   const normalized = String(value || "")
     .split(group).join("")
     .replace(/\s|\u202f|\u00a0/g, "")
@@ -5178,12 +4555,15 @@ function visibleHistory(metric = null) {
   if (rows.length <= 2) return rows;
   const zoom = chartZoomFor(metric);
   const cacheKey = `${state.dataVersion}|${state.selectedId}|${metric || "shared"}|${rows.length}|${rows[0]?.epochMs || 0}|${rows[rows.length - 1]?.epochMs || 0}|${zoom.start}|${zoom.end}`;
-  if (state.cache.visibleHistoryKey === cacheKey && state.cache.visibleHistoryRows) return state.cache.visibleHistoryRows;
+  const historyCache = state.cache.visibleHistoryRowsByKey || (state.cache.visibleHistoryRowsByKey = new Map());
+  if (historyCache.has(cacheKey)) return historyCache.get(cacheKey);
   const start = Math.floor(zoom.start * (rows.length - 1));
   const end = Math.max(start + 1, Math.ceil(zoom.end * (rows.length - 1)));
   const visibleRows = rows.slice(start, end + 1);
   state.cache.visibleHistoryKey = cacheKey;
   state.cache.visibleHistoryRows = visibleRows;
+  historyCache.set(cacheKey, visibleRows);
+  if (historyCache.size > 16) historyCache.delete(historyCache.keys().next().value);
   return visibleRows;
 }
 
@@ -5240,12 +4620,12 @@ function preserveExtremesDownsample(rows, metric, budget) {
 
 function timeLabel(seconds, epochMs = null) {
   if (epochMs) {
-    return new Intl.DateTimeFormat(resolvedNumberLocale(), {
+    return dateTimeFormatter(resolvedNumberLocale(), {
       timeZone: resolvedTimeZone(),
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit"
-    }).format(new Date(epochMs));
+    }, "time-label").format(new Date(epochMs));
   }
   if (seconds >= 3600) return `${(seconds / 3600).toFixed(1)}h`;
   if (seconds >= 60) return `${(seconds / 60).toFixed(1)}m`;
@@ -5253,7 +4633,7 @@ function timeLabel(seconds, epochMs = null) {
 }
 
 function dateTimePartsInZone(epochMs) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  const parts = dateTimeFormatter("en-CA", {
     timeZone: resolvedTimeZone(),
     year: "numeric",
     month: "2-digit",
@@ -5262,14 +4642,14 @@ function dateTimePartsInZone(epochMs) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false
-  }).formatToParts(new Date(epochMs));
+  }, "parts-zone").formatToParts(new Date(epochMs));
   const value = type => parts.find(part => part.type === type)?.value || "00";
   const hour = value("hour") === "24" ? "00" : value("hour");
   return `${value("year")}-${value("month")}-${value("day")}T${hour}:${value("minute")}:${value("second")}`;
 }
 
 function timeZoneOffsetMs(timeZone, epochMs) {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const parts = dateTimeFormatter("en-US", {
     timeZone,
     year: "numeric",
     month: "2-digit",
@@ -5278,7 +4658,7 @@ function timeZoneOffsetMs(timeZone, epochMs) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false
-  }).formatToParts(new Date(epochMs));
+  }, "offset").formatToParts(new Date(epochMs));
   const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
   const hour = map.hour === "24" ? "00" : map.hour;
   return Date.UTC(Number(map.year), Number(map.month) - 1, Number(map.day), Number(hour), Number(map.minute), Number(map.second)) - epochMs;
@@ -5301,8 +4681,7 @@ function setZoom(start, end, metric = null) {
   const next = clampZoomRange(start, end);
   if (metric) state.chartZoomByMetric[metric] = next;
   else state.chartZoom = next;
-  state.cache.visibleHistoryKey = "";
-  state.cache.visibleHistoryRows = null;
+  clearVisibleHistoryCache();
 }
 function applyChartZoomAction(action, metric = null) {
   const result = applyChartZoomOperation({
@@ -5315,8 +4694,7 @@ function applyChartZoomAction(action, metric = null) {
   state.chartZoomByMetric = result.chartZoomByMetric;
   state.activeChartMetric = result.activeChartMetric || metric || state.prefs.graphMetric;
   state.activeChartAction = result.activeChartAction;
-  state.cache.visibleHistoryKey = "";
-  state.cache.visibleHistoryRows = null;
+  clearVisibleHistoryCache();
 }
 
 function orderedChartMetrics() {
@@ -5446,8 +4824,13 @@ function resetAllState() {
     filteredRows: null,
     optionKey: "",
     optionSets: null,
+    anomalyMapKey: "",
+    anomaliesBySocketId: null,
+    socketMapKey: "",
+    socketsById: null,
     visibleHistoryKey: "",
     visibleHistoryRows: null,
+    visibleHistoryRowsByKey: new Map(),
     microburstKey: "",
     microburstSummary: null,
     tailLatencyKey: "",
@@ -5462,7 +4845,7 @@ function resetAllState() {
     sortDir: "desc",
     pinned: ["risk", "state", "local"],
     visible: defaultTableColumns(),
-    order: TABLE_COLUMNS.map(c => c.key),
+    order: [...DEFAULT_TABLE_ORDER],
     filters: { text: "", risk: "all", state: "all", family: "all", minRecvQ: "", minSendQ: "", minRtt: "", srcIp: "", dstIp: "", srcPort: "", dstPort: "", process: "", onlyAnomalies: false }
   };
 }
@@ -5930,7 +5313,7 @@ function reportChartWindowLabel(rows = visibleHistory()) {
 function reportDefaultChartMetrics(limit = 4) {
   const selected = selectedSocket();
   const anomalyMetrics = (selected
-    ? state.anomalies.filter(item => item.socketId === selected.id)
+    ? anomaliesBySocketId().get(selected.id) || []
     : reportRelevantAnomalies()).map(item => item.metric).filter(Boolean);
   const preferred = [
     state.prefs.graphMetric,
@@ -6101,8 +5484,9 @@ function buildIncidentReportHtml(chartCaptures = []) {
   const filters = reportFilterTokens();
   const comparison = state.baseline ? buildComparison() : null;
   const now = new Date();
-  const selectedAnomalies = selected ? state.anomalies.filter(item => item.socketId === selected.id) : [];
+  const selectedAnomalies = selected ? anomaliesBySocketId().get(selected.id) || [] : [];
   const topMetric = selectedAnomalies[0]?.metric ? metricLabel(selectedAnomalies[0].metric) : "none";
+  const socketLookup = socketsById();
   const summaryCards = [
     ["Source", state.sourceName],
     ["Visible sockets", formatNumber(sockets.length)],
@@ -6246,7 +5630,7 @@ function buildIncidentReportHtml(chartCaptures = []) {
                   <h3>Top anomalies in current scope</h3>
                   ${anomalies.length ? `<div class="report-list">
                     ${anomalies.slice(0, 8).map(item => {
-                      const socket = state.sockets.find(socketItem => socketItem.id === item.socketId);
+                      const socket = socketLookup.get(item.socketId);
                       return `<article class="${escapeHtml(item.severity)}">
                         <header>
                           <strong>${escapeHtml(item.title)}</strong>
@@ -6592,7 +5976,7 @@ async function buildIncidentReportPdf(chartAssets = []) {
   if (anomalies.length) {
     rightLines.push("Top anomalies:");
     anomalies.slice(0, 5).forEach(item => {
-      const socket = state.sockets.find(socketItem => socketItem.id === item.socketId);
+      const socket = socketsById().get(item.socketId);
       rightLines.push(`${item.severity.toUpperCase()} - ${item.title}${socket ? ` - ${socket.local} -> ${socket.peer}` : ""}`);
     });
   }
@@ -7205,7 +6589,7 @@ function bindEvents() {
         sortDir: "desc",
         pinned: ["risk", "state", "local"],
         visible: defaultTableColumns(),
-        order: TABLE_COLUMNS.map(c => c.key),
+        order: [...DEFAULT_TABLE_ORDER],
         filters: { text: "", risk: "all", state: "all", family: "all", minRecvQ: "", minSendQ: "", minRtt: "", srcIp: "", dstIp: "", srcPort: "", dstPort: "", process: "", onlyAnomalies: false }
       };
       saveTableState();
@@ -7336,7 +6720,7 @@ function bindEvents() {
   document.querySelectorAll("[data-context-action]").forEach(btn => btn.addEventListener("click", event => {
     const action = event.currentTarget.dataset.contextAction;
     const socket = selectedSocket();
-    const suggestedMetric = socket ? state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric : null;
+    const suggestedMetric = socket ? anomaliesBySocketId().get(socket.id)?.[0]?.metric : null;
     const previousSelectedId = state.selectedId;
     applyContextAction(state, action, socket, { chartMetrics: chartMetricList(), suggestedMetric });
     if (action !== "clear" && state.selectedId && state.selectedId !== previousSelectedId) syncChartHistoryToSelection();
@@ -7397,7 +6781,7 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-map-edge-action]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
-    const socket = state.sockets.find(item => item.id === event.currentTarget.dataset.socketId);
+    const socket = socketsById().get(event.currentTarget.dataset.socketId);
     if (!socket) return;
     const action = event.currentTarget.dataset.mapEdgeAction;
     focusSocket(socket.id, "Chosen from map link");
@@ -7406,7 +6790,7 @@ function bindEvents() {
     }
     if (action === "chart") {
       state.view = "charts";
-      const metric = state.anomalies.find(anomaly => anomaly.socketId === socket.id)?.metric || "rtt";
+      const metric = anomaliesBySocketId().get(socket.id)?.[0]?.metric || "rtt";
       if (chartMetricList().includes(metric)) {
         state.prefs.graphMetric = metric;
         state.chartMetrics = [...new Set([metric, ...state.chartMetrics])];
@@ -7471,13 +6855,30 @@ function bindEvents() {
       } else {
         state.drawer = state.drawer === "tableSettings" ? null : state.drawer;
         state.openTableSettings = true;
-        state.openTableSettingsPos = { left: placement.left, top: placement.top };
+        state.openTableSettingsPos = { left: placement.left, top: placement.top, width: placement.width, height: placement.height };
       }
     }
     renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll(".table-settings-menu").forEach(menu => menu.addEventListener("click", event => {
     event.stopPropagation();
+  }));
+  document.querySelectorAll("[data-table-column-search]").forEach(input => input.addEventListener("input", event => {
+    event.stopPropagation();
+    state.tableColumnSearch = event.currentTarget.value;
+    applyTableColumnSearchFilter(event.currentTarget.closest(".table-settings-menu, .table-settings-drawer"), state.tableColumnSearch);
+  }));
+  document.querySelectorAll("[data-table-column-search-clear]").forEach(btn => btn.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    state.tableColumnSearch = "";
+    const panel = event.currentTarget.closest(".table-settings-menu, .table-settings-drawer");
+    const input = panel?.querySelector("[data-table-column-search]");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+    applyTableColumnSearchFilter(panel, "");
   }));
   document.querySelectorAll("[data-table-menu-action]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
@@ -7573,7 +6974,7 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-conversation-action]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
-    const socket = state.sockets.find(s => s.id === event.currentTarget.dataset.socketId);
+    const socket = socketsById().get(event.currentTarget.dataset.socketId);
     if (!socket) return;
     const action = event.currentTarget.dataset.conversationAction;
     const metric = event.currentTarget.dataset.metric || "rtt";
@@ -7603,7 +7004,7 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-row-action]").forEach(btn => btn.addEventListener("click", async event => {
     event.stopPropagation();
-    const socket = state.sockets.find(s => s.id === event.currentTarget.dataset.socketId);
+    const socket = socketsById().get(event.currentTarget.dataset.socketId);
     if (!socket) return;
     const action = event.currentTarget.dataset.rowAction;
     focusSocket(socket.id, "Chosen from row action");
