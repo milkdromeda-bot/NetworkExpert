@@ -2868,19 +2868,19 @@ function renderChartsPage() {
       <div class="panel-head"><div class="panel-title">Correlation between two stats</div></div>
       <div class="panel-body">
         <div class="chart-controls correlation-controls">
-          <label class="chart-field expert-correlation-field">
-            <span>Expert correlations ${renderChartInfo("Expert correlations", "Pre-ranked metric pairs selected for common TCP diagnosis workflows. They complement the manual X/Y controls rather than replacing them.", "Start at the top when triaging: Send-Q vs TX bandwidth for slow consumers or path congestion, then RTT variance vs RTO for loss/jitter, then cwnd vs pacing for congestion-control limits.")}</span>
+          <label class="chart-field">
+            <span>Correlation</span>
             <select id="corrPreset">
-              <option value="custom" ${activeCorrelation ? "" : "selected"}>Custom manual selection</option>
+              <option value="custom" ${activeCorrelation ? "" : "selected"}>Custom</option>
               ${EXPERT_CORRELATIONS.map(item => `<option value="${item.id}" ${activeCorrelation?.id === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
             </select>
           </label>
           <label class="chart-field">
-            <span>X axis ${renderChartInfo("X axis metric", "Metric used on the horizontal axis. Choose the suspected driver or limiting factor here.", "Good X-axis drivers are Send-Q, Recv-Q, cwnd, pacing_rate, RTT variance, or backoff depending on the hypothesis.")}</span>
+            <span>X axis</span>
             <select id="corrX">${metricOptions.map(m => `<option value="${m}" ${state.correlation.x === m ? "selected" : ""}>${escapeHtml(metricLabel(m))}</option>`).join("")}</select>
           </label>
           <label class="chart-field">
-            <span>Y axis ${renderChartInfo("Y axis metric", "Metric used on the vertical axis. Choose the symptom or outcome you want to explain.", "Good Y-axis outcomes are TX/RX bandwidth, RTO, drops, socket memory, delivery_rate, or queue size.")}</span>
+            <span>Y axis</span>
             <select id="corrY">${metricOptions.map(m => `<option value="${m}" ${state.correlation.y === m ? "selected" : ""}>${escapeHtml(metricLabel(m))}</option>`).join("")}</select>
           </label>
         </div>
@@ -5153,31 +5153,20 @@ function renderChartThresholdOverlay(items, pad, w, h) {
     .map(item => ({ ...item, lineY: item.y, label: `${item.name} ${item.formatted}` }))
     .sort((a, b) => a.lineY - b.lineY);
   if (!labels.length) return "";
-  const top = pad.t + 12;
-  const bottom = h - pad.b - 10;
-  const gap = 16;
-  for (const label of labels) label.labelY = Math.max(top, Math.min(bottom, label.lineY - 6));
-  for (let i = 1; i < labels.length; i += 1) {
-    if (labels[i].labelY - labels[i - 1].labelY < gap) labels[i].labelY = labels[i - 1].labelY + gap;
-  }
-  for (let i = labels.length - 1; i >= 0; i -= 1) {
-    if (labels[i].labelY > bottom) labels[i].labelY = bottom;
-    if (i > 0 && labels[i].labelY - labels[i - 1].labelY < gap) labels[i - 1].labelY = labels[i].labelY - gap;
-  }
-  const labelRight = w - pad.r - 6;
+  const midY = (pad.t + h - pad.b) / 2;
   return `<g class="threshold-overlay">
     ${labels.map(label => {
-      const width = Math.min(150, Math.max(76, label.label.length * 6.2 + 14));
-      const x = labelRight - width;
-      const y = label.labelY - 10;
-      const connector = Math.abs(label.labelY - label.lineY) > 7
-        ? `<path d="M${x - 5},${label.labelY - 3} C${x - 18},${label.labelY - 3} ${x - 18},${label.lineY} ${labelRight - 4},${label.lineY}" fill="none" stroke="${label.color}" stroke-width="1" opacity=".52"/>`
-        : "";
+      const textWidth = Math.min(130, Math.max(60, label.label.length * 6 + 12));
+      const pillX = pad.l + 6;
+      // Place label on the side with more space (away from data center)
+      const above = label.lineY > midY;
+      const pillY = above ? label.lineY - 19 : label.lineY + 4;
+      const textY = above ? label.lineY - 8 : label.lineY + 15;
       return `<g>
-        <line x1="${pad.l}" x2="${w - pad.r}" y1="${label.lineY}" y2="${label.lineY}" stroke="${label.color}" stroke-dasharray="${label.dash}" opacity=".82"/>
-        ${connector}
-        <rect x="${x}" y="${y}" width="${width}" height="16" rx="7" fill="#07101a" stroke="${label.color}" opacity=".92"/>
-        <text x="${labelRight - 7}" y="${label.labelY + 2}" text-anchor="end" fill="${label.color}" font-size="10" font-weight="700">${escapeHtml(label.label)}</text>
+        <line x1="${pad.l}" x2="${w - pad.r}" y1="${label.lineY}" y2="${label.lineY}" stroke="${label.color}" stroke-dasharray="${label.dash}" opacity=".45"/>
+        <rect x="${pillX}" y="${pillY}" width="${textWidth}" height="15" rx="7.5" fill="#070b14" opacity=".85"/>
+        <rect x="${pillX}" y="${pillY}" width="${textWidth}" height="15" rx="7.5" fill="${label.color}" opacity=".25"/>
+        <text x="${pillX + 7}" y="${textY}" fill="${label.color}" font-size="9.5" font-weight="600" opacity=".95">${escapeHtml(label.label)}</text>
       </g>`;
     }).join("")}
   </g>`;
@@ -7701,9 +7690,14 @@ function bindEvents() {
   }
   document.querySelectorAll("[data-chart-metric]").forEach(input => input.addEventListener("change", event => {
     const metric = event.currentTarget.dataset.chartMetric;
-    state.chartMetrics = event.currentTarget.checked
+    const wasChecked = event.currentTarget.checked;
+    state.chartMetrics = wasChecked
       ? [...new Set([...state.chartMetrics, metric])]
       : state.chartMetrics.filter(item => item !== metric);
+    if (!wasChecked) {
+      const card = document.querySelector(`[data-chart-card="${metric}"]`);
+      if (card) { card.remove(); return; }
+    }
     renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-chart-stats]").forEach(btn => btn.addEventListener("click", event => {
