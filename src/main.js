@@ -225,7 +225,7 @@ const icons = {
   threshold: `<i class="ri-speed-up-fill"></i>`,
   layout: `<i class="ri-dashboard-3-line"></i>`,
   stats: `<i class="ri-bar-chart-box-line"></i>`,
-  incidentCloud: `<span class="incident-cloud-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="incident-triangle" d="M16 3.5 29 26.5H3L16 3.5Z"/><path class="incident-cloud" d="M11.2 20.8h8.7a3.4 3.4 0 0 0 .6-6.8 5.3 5.3 0 0 0-10.1-1.5 4.2 4.2 0 0 0 .8 8.3Zm1.5-3.3 2.2-2.2h-1.8l3.6-3.6-.9 2.8h2.1l-5.2 3Z"/></svg></span>`,
+  incidentWarning: `<span class="incident-warning-icon" aria-hidden="true"><i class="ri-error-warning-fill"></i></span>`,
   pin: `<i class="ri-pushpin-2-line"></i>`,
   unpin: `<i class="ri-pushpin-2-fill"></i>`,
   hide: `<i class="ri-eye-off-line"></i>`,
@@ -2265,7 +2265,7 @@ function render() {
             ].map(([key, label]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}">${label}</button>`).join("")}
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
-          <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentCloud : ""}${formatNumber(state.anomalies.length)} anomalies</span>
+          <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
           <button class="danger" data-action="resetAll">${icons.x} Reset all</button>
         </div>
       </header>

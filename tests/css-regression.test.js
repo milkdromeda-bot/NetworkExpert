@@ -37,3 +37,11 @@ test("import progress is shown in the ss stats header while loading", () => {
   assert.match(css, /\.import-status span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
   assert.match(css, /@media \(max-width:\s*760px\)\s*\{[\s\S]*?\.ingest-source-head\s*\{[^}]*flex-direction:\s*column;/s);
 });
+
+test("topbar anomaly pill uses a compact warning icon", () => {
+  assert.match(main, /incidentWarning/);
+  assert.doesNotMatch(main, /incidentCloud/);
+  assert.doesNotMatch(css, /incident-cloud-icon/);
+  assert.match(css, /\.incident-warning-icon\s*\{[^}]*width:\s*15px;[^}]*height:\s*15px;/s);
+  assert.match(css, /\.incident-warning-icon i\s*\{[^}]*font-size:\s*15px;/s);
+});
