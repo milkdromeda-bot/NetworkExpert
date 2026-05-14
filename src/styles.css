@@ -2916,6 +2916,22 @@ th:focus-within .column-tooltip,
   font-size: 12px;
   font-weight: 800;
 }
+.diagnosis-learn-more {
+  background:
+    linear-gradient(135deg, rgba(112, 157, 255, .08), transparent 56%),
+    #060a10;
+}
+.diagnosis-learn-more ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.diagnosis-learn-more li {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+}
 .advisor-empty {
   min-height: 260px;
   display: grid;

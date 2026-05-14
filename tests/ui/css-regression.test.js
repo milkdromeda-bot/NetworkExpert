@@ -108,3 +108,14 @@ test("ss editor offers calm themes and defaults to pastel", () => {
   assert.doesNotMatch(css, /\.cm-container \.cm-keyword\s*\{[^}]*#4cde8a/s);
   assert.doesNotMatch(css, /\.cm-container \.cm-string\s*\{[^}]*#e06cff/s);
 });
+
+test("diagnostic cards expose optional deep explanations", () => {
+  assert.match(main, /item\.learnMore\?\.length/);
+  assert.match(main, /class="diagnosis-learn-more"/);
+  assert.match(main, /En savoir plus/);
+  assert.match(main, /ri-book-open-line/);
+  assert.match(main, /item\.learnMore\.map\(entry => `<li>\$\{escapeHtml\(entry\)\}<\/li>`\)\.join\(""\)/);
+  assert.match(css, /\.diagnosis-learn-more\s*\{/);
+  assert.match(css, /\.diagnosis-learn-more ul\s*\{[^}]*line-height:\s*1\.5;/s);
+  assert.match(css, /\.diagnosis-learn-more li\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+});

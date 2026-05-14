@@ -3355,6 +3355,10 @@ function renderDiagnosticHypothesis(item) {
       <summary><i class="ri-terminal-box-line"></i> Validation commands</summary>
       <pre class="code">${escapeHtml(item.commands.join("\n"))}</pre>
     </details>
+    ${item.learnMore?.length ? `<details class="diagnosis-learn-more">
+      <summary><i class="ri-book-open-line"></i> En savoir plus</summary>
+      <ul>${item.learnMore.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>
+    </details>` : ""}
     <footer>
       ${item.topSocketId ? `<button data-jump="${escapeHtml(item.topSocketId)}">${icons.focus} Show context row</button>` : ""}
     </footer>

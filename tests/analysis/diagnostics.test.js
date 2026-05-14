@@ -63,6 +63,33 @@ test("diagnostics parses receiver-window limited ss fields", () => {
   assert.equal(socket.details.values.rcv_space, 4096);
 });
 
+test("diagnostics detects receiver-side window collapse from rcv_space and skmem receive pressure", () => {
+  const hypotheses = diagnose("ESTAB 300000 0 10.0.0.1:9200 10.0.0.2:443 users:((\"java\",pid=42,fd=9)) skmem:(r290000,rb300000,t0,tb100,w0,d0) rcv_space:2048 rcv_wnd:4096 rto:200 rtt:1/0.1 cwnd:20");
+
+  const receiveWindow = byId(hypotheses, "local-receive-window-collapse");
+
+  assert.equal(receiveWindow.severity, "high");
+  assert.equal(receiveWindow.confidence, "high");
+  assert.match(receiveWindow.summary, /TCP backpressure/i);
+  assert.match(receiveWindow.summary, /not by IP congestion/i);
+  assert.equal(receiveWindow.evidence.some(item => item.includes("rcv_space")), true);
+  assert.equal(receiveWindow.evidence.some(item => item.includes("skmem:r")), true);
+  assert.equal(receiveWindow.counterEvidence.some(item => item.includes("not, by itself, packet loss")), true);
+  assert.match(receiveWindow.learnMore.join(" "), /rcv_space falling near zero/i);
+  assert.match(receiveWindow.learnMore.join(" "), /TCP flow-control backpressure/i);
+  assert.match(receiveWindow.learnMore.join(" "), /JVM pauses, GC, blocked threads/i);
+  assert.equal(receiveWindow.commands.some(command => command.includes("epoll_wait")), true);
+});
+
+test("diagnostics marks receiver-side zero window as critical when rcv_wnd is zero", () => {
+  const hypotheses = diagnose("ESTAB 700000 0 10.0.0.1:9200 10.0.0.2:443 users:((\"java\",pid=42,fd=9)) skmem:(r690000,rb700000,t0,tb100,w0,d0) rcv_space:0 rcv_wnd:0 rto:200 rtt:1/0.1 cwnd:20");
+
+  const receiveWindow = byId(hypotheses, "local-receive-window-collapse");
+
+  assert.equal(receiveWindow.severity, "critical");
+  assert.equal(receiveWindow.evidence.some(item => item.includes("rcv_wnd is zero")), true);
+});
+
 test("diagnostics treats rwnd_limited alone as receiver-window limited but ambiguous", () => {
   const hypotheses = diagnose("ESTAB 0 20 10.0.0.1:9200 10.0.0.2:443 busy:10000ms rwnd_limited:4500ms(45.0%) rto:200 rtt:1/0.1 cwnd:20");
 
@@ -82,6 +109,33 @@ test("diagnostics detects Zero Window from persist timer and backoff", () => {
   assert.equal(window.confidence, "high");
   assert.match(window.summary, /Zero Window/i);
   assert.equal(window.evidence.some(item => item.includes("persist")), true);
+  assert.equal(window.counterEvidence.some(item => item.includes("backoff + persist")), true);
+  assert.match(window.learnMore.join(" "), /rwnd_limited is useful but ambiguous/i);
+  assert.match(window.learnMore.join(" "), /slow consumer \/ receiver saturation/i);
+  assert.equal(byId(hypotheses, "path-congestion-or-loss"), undefined);
+});
+
+test("diagnostics treats short isolated backoff as watch-only", () => {
+  const hypotheses = diagnose("ESTAB 0 0 10.0.0.1:9200 10.0.0.2:443 rto:200 backoff:1 rtt:12/1 cwnd:20");
+
+  const watch = byId(hypotheses, "tcp-backoff-watch");
+
+  assert.equal(watch.severity, "low");
+  assert.equal(watch.confidence, "high");
+  assert.match(watch.summary, /watch signal/i);
+  assert.match(watch.counterEvidence.join(" "), /not proof/i);
+  assert.match(watch.learnMore.join(" "), /does not automatically mean the network is bad/i);
+  assert.match(watch.learnMore.join(" "), /backoff:6\+ with multi-second RTO/i);
+  assert.equal(byId(hypotheses, "path-congestion-or-loss"), undefined);
+});
+
+test("diagnostics escalates frequent backoff 2-3 to watch but not network blame", () => {
+  const hypotheses = diagnose("ESTAB 0 0 10.0.0.1:9200 10.0.0.2:443 rto:240 backoff:3 rtt:10/1 cwnd:20");
+
+  const watch = byId(hypotheses, "tcp-backoff-watch");
+
+  assert.equal(watch.severity, "medium");
+  assert.match(watch.counterEvidence.join(" "), /retrans\/RTO\/RTT\/cwnd/i);
 });
 
 test("diagnostics separates network congestion from Zero Window when cwnd drops and RTO rises", () => {
@@ -92,6 +146,8 @@ test("diagnostics separates network congestion from Zero Window when cwnd drops 
   assert.equal(path.title, "Network congestion is probable");
   assert.equal(path.severity, "critical");
   assert.equal(path.confidence, "high");
+  assert.match(path.learnMore.join(" "), /retransmission or RTO pressure plus RTT growth and a reduced cwnd/i);
+  assert.match(path.learnMore.join(" "), /differs from Zero Window/i);
   assert.equal(byId(hypotheses, "zero-window-or-slow-consumer"), undefined);
 });
 
@@ -105,6 +161,7 @@ test("diagnostics marks increasing backoff and retrans as serious", () => {
 
   assert.equal(path.evidence.some(item => item.includes("backoff increased from 1 to 4")), true);
   assert.equal(path.evidence.some(item => item.includes("retrans increased by 4")), true);
+  assert.equal(path.evidence.some(item => item.includes("approximate wait")), true);
 });
 
 test("diagnostics detects peer dead or blackhole pattern from huge backoff", () => {
@@ -116,6 +173,8 @@ test("diagnostics detects peer dead or blackhole pattern from huge backoff", () 
   assert.equal(blackhole.confidence, "high");
   assert.match(blackhole.summary, /blackhole/i);
   assert.match(blackhole.counterEvidence.join(" "), /does not by itself/i);
+  assert.match(blackhole.counterEvidence.join(" "), /peer freeze|firewall blackhole/i);
+  assert.equal(blackhole.evidence.some(item => item.includes("approximate wait")), true);
 });
 
 test("diagnostics raises egress confidence when Send-Q is paired with RTO recovery", () => {
