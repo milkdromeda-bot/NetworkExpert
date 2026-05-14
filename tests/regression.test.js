@@ -162,10 +162,14 @@ test("timestampBlocks keeps multiple socket lines inside the same block", () => 
 
 test("normalizeAliasStore normalizes endpoint keys from raw records", () => {
   const store = normalizeAliasStore({
-    "endpoint:WRONG": { endpoint: " 10.0.0.5:9100 ", label: " FIX " }
+    scopes: {
+      sample: {
+        "endpoint:WRONG": { endpoint: " 10.0.0.5:9100 ", label: " FIX " }
+      }
+    }
   });
 
-  assert.equal(aliasForEndpoint(store, "10.0.0.5:9100").label, "FIX");
+  assert.equal(aliasForEndpoint(store, "10.0.0.5:9100", "sample").label, "FIX");
 });
 
 test("upsertEndpointAlias can store role-only metadata", () => {

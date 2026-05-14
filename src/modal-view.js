@@ -6,7 +6,11 @@ export function createModalView(context) {
     escapeHtml,
     sortedFilteredSockets,
     aliasForEndpoint,
+    aliasListForSource,
     normalizeAliasStore,
+    currentApplicationService,
+    inferredApplicationService,
+    serviceOverrideForSocket,
     topologyScopeKey,
     topologyGroupForEndpoint,
     selectedSocket,
@@ -48,33 +52,44 @@ export function createModalView(context) {
       if (socket.peer) endpoints.add(socket.peer);
       if (endpoints.size > 2000) break;
     }
-    for (const alias of Object.values(state.serviceAliases)) {
+    for (const alias of aliasListForSource(state.serviceAliases, state.sourceName)) {
       if (alias.endpoint) endpoints.add(alias.endpoint);
     }
     return [...endpoints].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
   }
   
-  function selectedAliasEndpoint(endpoints) {
-    if (state.aliasEditKey && endpoints.includes(state.aliasEditKey)) return state.aliasEditKey;
-    const firstAlias = Object.values(state.serviceAliases).find(alias => alias.endpoint)?.endpoint;
-    return firstAlias || endpoints[0] || "";
+  function selectedAliasTarget(endpoints) {
+    if (state.aliasEditKey && endpoints.includes(state.aliasEditKey)) {
+      return {
+        endpoint: state.aliasEditKey,
+        scope: state.aliasEditScope === "global" ? "global" : "source"
+      };
+    }
+    const firstAlias = aliasListForSource(state.serviceAliases, state.sourceName)
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+    if (firstAlias?.endpoint) return { endpoint: firstAlias.endpoint, scope: firstAlias.scope };
+    return { endpoint: endpoints[0] || "", scope: "source" };
   }
   
   function renderServiceAliasesModal() {
     const endpoints = serviceAliasEndpointOptions();
-    const selectedEndpoint = selectedAliasEndpoint(endpoints);
-    const alias = aliasForEndpoint(state.serviceAliases, selectedEndpoint) || { label: "", role: "", note: "" };
-    const aliases = Object.values(state.serviceAliases).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    const suggestions = endpoints.filter(endpoint => !aliasForEndpoint(state.serviceAliases, endpoint)).slice(0, 8);
+    const selected = selectedAliasTarget(endpoints);
+    const selectedEndpoint = selected.endpoint;
+    const selectedScope = selected.scope;
+    const alias = aliasForEndpoint(state.serviceAliases, selectedEndpoint, state.sourceName, { scope: selectedScope }) || { label: "", role: "", note: "" };
+    const aliases = aliasListForSource(state.serviceAliases, state.sourceName).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const suggestions = endpoints.filter(endpoint => !aliasForEndpoint(state.serviceAliases, endpoint, state.sourceName)).slice(0, 8);
     return `<div class="service-alias-modal">
       <section class="service-alias-editor">
         <div class="field-card">
           <strong>Endpoint identity</strong>
+          <p class="hint">Scope: ${escapeHtml(state.sourceName || "workspace")}. Labels are local to this recording unless global is explicitly enabled.</p>
           <label>Endpoint<input id="aliasEndpoint" list="aliasEndpointOptions" placeholder="10.0.0.5:9100" value="${escapeHtml(selectedEndpoint)}" /></label>
           ${renderDatalist("aliasEndpointOptions", endpoints)}
           <label>Business name<input id="aliasLabel" placeholder="FIX stream - Aggregator A" value="${escapeHtml(alias.label)}" /></label>
           <label>Role / component<input id="aliasRole" placeholder="FIX streaming port, market data, container..." value="${escapeHtml(alias.role)}" /></label>
           <label>Notes<textarea id="aliasNote" class="alias-note" placeholder="Owner, environment, expected traffic, incident hint...">${escapeHtml(alias.note)}</textarea></label>
+          <label class="check alias-scope-check"><input id="aliasGlobal" type="checkbox" ${selectedScope === "global" ? "checked" : ""} /> Use this label globally</label>
           <div class="toolbar">
             <button class="primary" data-action="saveServiceAlias"><i class="ri-price-tag-3-line"></i> Save label</button>
             <button data-action="deleteServiceAlias">${icons.trash} Delete label</button>
@@ -83,7 +98,7 @@ export function createModalView(context) {
         <div class="field-card">
           <strong>Unlabelled endpoints</strong>
           <div class="alias-suggestions">
-            ${suggestions.length ? suggestions.map(endpoint => `<button data-alias-pick="${escapeHtml(endpoint)}"><span>${escapeHtml(endpoint)}</span><small>add label</small></button>`).join("") : `<p class="hint">Every visible endpoint already has a label.</p>`}
+            ${suggestions.length ? suggestions.map(endpoint => `<button data-alias-pick="${escapeHtml(endpoint)}" data-alias-scope="source"><span>${escapeHtml(endpoint)}</span><small>add local label</small></button>`).join("") : `<p class="hint">Every visible endpoint already has a label for this recording.</p>`}
           </div>
         </div>
       </section>
@@ -91,9 +106,10 @@ export function createModalView(context) {
         <strong>Saved labels</strong>
         ${aliases.length ? aliases.map(item => `<article class="alias-card">
           <div><b>${escapeHtml(item.label || item.endpoint)}</b><span>${escapeHtml(item.endpoint)}</span></div>
+          <small>${escapeHtml(item.scope === "global" ? "global label" : `recording: ${item.scopeLabel}`)}</small>
           ${item.role ? `<small>${escapeHtml(item.role)}</small>` : ""}
           ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
-          <button data-alias-pick="${escapeHtml(item.endpoint)}"><i class="ri-edit-line"></i> Edit</button>
+          <button data-alias-pick="${escapeHtml(item.endpoint)}" data-alias-scope="${escapeHtml(item.scope)}"><i class="ri-edit-line"></i> Edit</button>
         </article>`).join("") : `<div class="empty">No saved service labels yet.</div>`}
       </section>
     </div>`;
@@ -148,6 +164,56 @@ export function createModalView(context) {
       </section>
     </div>`;
   }
+
+  function serviceOverrideSocket() {
+    const id = state.serviceOverrideSocketId || state.activeContextId || state.selectedId || "";
+    return sortedFilteredSockets().find(socket => socket.id === id) || selectedSocket() || sortedFilteredSockets()[0] || null;
+  }
+
+  function renderServiceOverrideModal() {
+    const socket = serviceOverrideSocket();
+    if (!socket) return `<div class="empty">No socket selected.</div>`;
+    const inferred = inferredApplicationService(socket);
+    const current = currentApplicationService(socket);
+    const override = serviceOverrideForSocket(state.serviceOverrides, socket, state.sourceName, inferred);
+    const side = inferred?.side || "peer";
+    const endpoint = side === "local" ? socket.local : socket.peer;
+    const port = inferred?.port || Number(side === "local" ? socket.localAddress?.port : socket.peerAddress?.port) || "";
+    const transport = inferred?.transport || (String(socket.family || "tcp").includes("udp") ? "udp" : "tcp");
+    const selectedTarget = override?.target || "port";
+    const selectedScope = override?.scope || "source";
+    const hidden = Boolean(override?.hidden);
+    const label = override && !hidden ? override.label : "";
+    return `<div class="service-override-modal">
+      <article class="field-card">
+        <strong>Current classification</strong>
+        <p class="hint">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</p>
+        <div class="service-override-current">
+          <span><b>Inferred</b>${inferred ? `${escapeHtml(inferred.label)} on ${escapeHtml(inferred.side)} port ${escapeHtml(inferred.port)}` : "none"}</span>
+          <span><b>Shown</b>${current ? escapeHtml(current.source === "suppressed" ? "service hidden" : current.label) : "none"}</span>
+        </div>
+      </article>
+      <article class="field-card">
+        <strong>Service classification override</strong>
+        <p class="hint">Scope: ${escapeHtml(state.sourceName || "workspace")}. Use a recording rule for cases like stunnel on 9200; keep global only for conventions that are truly stable.</p>
+        <label>Service name<input id="serviceOverrideLabel" placeholder="stunnel" value="${escapeHtml(label)}" ${hidden ? "disabled" : ""} /></label>
+        <label>Apply to<select id="serviceOverrideTarget">
+          <option value="port" ${selectedTarget === "port" ? "selected" : ""}>All ${escapeHtml(transport)} port ${escapeHtml(port)} in this recording</option>
+          <option value="endpoint" ${selectedTarget === "endpoint" ? "selected" : ""}>Only endpoint ${escapeHtml(endpoint)}</option>
+        </select></label>
+        <input id="serviceOverrideEndpoint" type="hidden" value="${escapeHtml(endpoint)}" />
+        <input id="serviceOverridePort" type="hidden" value="${escapeHtml(port)}" />
+        <input id="serviceOverrideTransport" type="hidden" value="${escapeHtml(transport)}" />
+        <label>Notes<textarea id="serviceOverrideNote" class="alias-note" placeholder="Why the port heuristic is wrong here...">${escapeHtml(override?.note || "")}</textarea></label>
+        <label class="check alias-scope-check"><input id="serviceOverrideHidden" type="checkbox" ${hidden ? "checked" : ""} /> Hide inferred service instead of renaming it</label>
+        <label class="check alias-scope-check"><input id="serviceOverrideGlobal" type="checkbox" ${selectedScope === "global" ? "checked" : ""} /> Use this override globally</label>
+        <div class="toolbar">
+          <button class="primary" data-action="saveServiceOverride"><i class="ri-check-line"></i> Save override</button>
+          <button data-action="deleteServiceOverride">${icons.trash} Delete override</button>
+        </div>
+      </article>
+    </div>`;
+  }
   
   function renderModal() {
     const modalTitle = state.modal === "columns" ? "Columns and order"
@@ -157,9 +223,10 @@ export function createModalView(context) {
             : state.modal === "columnHelp" ? "Column guide"
               : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
                 : state.modal === "serviceAliases" ? "Service labels"
-                  : state.modal === "topology" ? "Recording topology"
-                    : state.modal === "annotation" ? "Annotations"
-                      : "ss field documentation";
+                  : state.modal === "serviceOverride" ? "Service classification"
+                    : state.modal === "topology" ? "Recording topology"
+                      : state.modal === "annotation" ? "Annotations"
+                        : "ss field documentation";
     const modalBody = state.modal === "columns" ? renderColumnChooser()
       : state.modal === "thresholds" ? renderThresholdConfig()
         : state.modal === "layout" ? renderLayoutPrefs()
@@ -167,9 +234,10 @@ export function createModalView(context) {
             : state.modal === "columnHelp" ? renderColumnHelpDetail()
               : state.modal === "chartStats" ? renderChartStatsModal()
                 : state.modal === "serviceAliases" ? renderServiceAliasesModal()
-                  : state.modal === "topology" ? renderTopologyModal()
-                    : state.modal === "annotation" ? renderAnnotationModal()
-                      : renderFields();
+                  : state.modal === "serviceOverride" ? renderServiceOverrideModal()
+                    : state.modal === "topology" ? renderTopologyModal()
+                      : state.modal === "annotation" ? renderAnnotationModal()
+                        : renderFields();
     return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
       <section class="modal ${state.modal || ""}">
         <header><strong>${modalTitle}</strong><button class="icon" data-action="closeModal">${icons.x}</button></header>
@@ -278,5 +346,5 @@ export function createModalView(context) {
     </div>`;
   }
 
-  return { renderModal, serviceAliasEndpointOptions, selectedAliasEndpoint, renderServiceAliasesModal, renderTopologyModal };
+  return { renderModal, serviceAliasEndpointOptions, selectedAliasTarget, renderServiceAliasesModal, renderServiceOverrideModal, renderTopologyModal };
 }

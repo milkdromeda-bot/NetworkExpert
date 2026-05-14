@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, endpointAliasKey, normalizeAliasStore, upsertEndpointAlias } from "../src/aliases.js";
+import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource, deleteEndpointAlias, endpointAliasKey, normalizeAliasStore, upsertEndpointAlias } from "../src/aliases.js";
 
 test("endpoint alias keys are stable across spaces and case", () => {
   assert.equal(endpointAliasKey(" [::FFFF:10.0.0.1]:9100 "), "endpoint:[::ffff:10.0.0.1]:9100");
@@ -58,14 +58,57 @@ test("deleteEndpointAlias removes only the selected endpoint", () => {
   assert.equal(aliasForEndpoint(next, "10.0.0.3:9100").label, "fix");
 });
 
-test("normalizeAliasStore drops invalid and empty records", () => {
+test("normalizeAliasStore drops invalid and empty scoped records", () => {
   const store = normalizeAliasStore({
-    "endpoint:10.0.0.1:80": { endpoint: "10.0.0.1:80", label: "" },
-    "process:java": { label: "ignored" },
-    "endpoint:10.0.0.2:443": { endpoint: "10.0.0.2:443", label: "ingress" }
+    global: {
+      "endpoint:10.0.0.1:80": { endpoint: "10.0.0.1:80", label: "" },
+      "process:java": { label: "ignored" },
+      "endpoint:10.0.0.2:443": { endpoint: "10.0.0.2:443", label: "ingress" }
+    }
   });
 
-  assert.deepEqual(Object.keys(store), ["endpoint:10.0.0.2:443"]);
+  assert.deepEqual(Object.keys(store.global), ["endpoint:10.0.0.2:443"]);
+  assert.deepEqual(Object.keys(store.scopes), []);
+});
+
+test("normalizeAliasStore ignores legacy flat endpoint labels", () => {
+  const store = normalizeAliasStore({
+    "endpoint:10.0.0.2:443": { endpoint: "10.0.0.2:443", label: "old global shape" }
+  });
+
+  assert.equal(aliasForEndpoint(store, "10.0.0.2:443"), null);
+});
+
+test("source labels do not bleed into other recordings", () => {
+  const store = upsertEndpointAlias({}, "10.0.0.2:443", { label: "LALO" }, 1, { sourceName: "capture-a" });
+
+  assert.equal(aliasDisplay("10.0.0.2:443", store, "capture-a"), "LALO");
+  assert.equal(aliasDisplay("10.0.0.2:443", store, "capture-b"), "10.0.0.2:443");
+});
+
+test("global labels are explicit fallbacks", () => {
+  const store = upsertEndpointAlias({}, "10.0.0.2:443", { label: "shared ingress" }, 1, { scope: "global" });
+
+  assert.equal(aliasDisplay("10.0.0.2:443", store, "capture-a"), "shared ingress");
+  assert.equal(aliasForEndpoint(store, "10.0.0.2:443", "capture-a", { scope: "source" }), null);
+  assert.equal(aliasForEndpoint(store, "10.0.0.2:443", "capture-a", { scope: "global" }).label, "shared ingress");
+});
+
+test("local labels override global labels for the same endpoint", () => {
+  const global = upsertEndpointAlias({}, "10.0.0.2:443", { label: "shared ingress" }, 1, { scope: "global" });
+  const local = upsertEndpointAlias(global, "10.0.0.2:443", { label: "LALO" }, 2, { sourceName: "capture-a" });
+
+  assert.equal(aliasDisplay("10.0.0.2:443", local, "capture-a"), "LALO");
+  assert.equal(aliasDisplay("10.0.0.2:443", local, "capture-b"), "shared ingress");
+});
+
+test("alias list and count are scoped to the active recording", () => {
+  const global = upsertEndpointAlias({}, "10.0.0.2:443", { label: "shared ingress" }, 1, { scope: "global" });
+  const store = upsertEndpointAlias(global, "10.0.0.3:9100", { label: "FIX stream" }, 2, { sourceName: "capture-a" });
+
+  assert.deepEqual(aliasListForSource(store, "capture-b").map(item => item.label), ["shared ingress"]);
+  assert.equal(aliasCountForSource(store, "capture-a"), 2);
+  assert.equal(aliasCountForSource(store, "capture-a", { includeGlobal: false }), 1);
 });
 
 test("aliasDisplay falls back to the raw endpoint when no label exists", () => {

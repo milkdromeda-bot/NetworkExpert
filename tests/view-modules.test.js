@@ -145,6 +145,7 @@ test("modal view renders service aliases and delegates modal body", () => {
     modal: "serviceAliases",
     serviceAliases: {},
     aliasEditKey: "",
+    aliasEditScope: "source",
     sourceName: "sample",
     topology: { groups: [] },
     topologyDraftMatch: "",
@@ -157,6 +158,7 @@ test("modal view renders service aliases and delegates modal body", () => {
     escapeHtml,
     sortedFilteredSockets: () => [{ local: "127.0.0.1:22", peer: "10.0.0.1:443" }],
     aliasForEndpoint: () => null,
+    aliasListForSource: () => [],
     normalizeAliasStore: store => store,
     topologyScopeKey: sourceName => sourceName,
     topologyGroupForEndpoint: () => null,
@@ -193,4 +195,78 @@ test("modal view renders service aliases and delegates modal body", () => {
   });
   assert.deepEqual(view.serviceAliasEndpointOptions(), ["10.0.0.1:443", "127.0.0.1:22"]);
   assert.match(view.renderModal(), /Service labels/);
+});
+
+test("modal view renders service override as recording scoped classification", () => {
+  const socket = {
+    id: "s1",
+    family: "tcp",
+    local: "10.0.0.1:50000",
+    peer: "10.0.0.2:9200",
+    localAddress: { host: "10.0.0.1", port: "50000" },
+    peerAddress: { host: "10.0.0.2", port: "9200" },
+    details: { values: {}, skmem: {} }
+  };
+  const state = {
+    modal: "serviceOverride",
+    serviceOverrideSocketId: "s1",
+    serviceOverrides: {},
+    sourceName: "capture-a",
+    serviceAliases: {},
+    aliasEditKey: "",
+    aliasEditScope: "source",
+    topology: { groups: [] },
+    topologyDraftMatch: "",
+    topologyEditId: ""
+  };
+  const view = createModalView({
+    state,
+    html,
+    icons,
+    escapeHtml,
+    sortedFilteredSockets: () => [socket],
+    aliasForEndpoint: () => null,
+    aliasListForSource: () => [],
+    normalizeAliasStore: store => store,
+    currentApplicationService: () => ({ label: "Elasticsearch", source: "inferred", port: 9200, side: "peer" }),
+    inferredApplicationService: () => ({ label: "Elasticsearch", source: "inferred", port: 9200, side: "peer", transport: "tcp" }),
+    serviceOverrideForSocket: () => null,
+    topologyScopeKey: sourceName => sourceName,
+    topologyGroupForEndpoint: () => null,
+    selectedSocket: () => socket,
+    renderSocketDetail: () => "",
+    renderPrefs: () => "",
+    renderGuide: () => "",
+    renderThresholdConfig: () => "",
+    renderTableSettingsDrawer: () => "",
+    metricLabel: metric => metric,
+    renderColumnChooser: () => "",
+    renderLayoutPrefs: () => "",
+    renderPreImportFilters: () => "",
+    renderFields: () => "",
+    getColumn: key => ({ key, label: key }),
+    columnHelp: () => ({ summary: "", detail: "", use: "", metric: null, threshold: null }),
+    renderThresholdSummary: () => "",
+    expertDefaultThresholds: EXPERT_DEFAULT_THRESHOLDS,
+    annotationSocketId: () => "",
+    currentSourceAnnotations: () => [],
+    visibleHistory: () => [],
+    annotationTypeList: () => [],
+    buildAnnotationDraft: () => ({}),
+    timeLabel: () => "now",
+    annotationAnchorOptions: () => [],
+    annotationMetricChoices: () => [],
+    formatMetricValue: (metric, value) => `${metric}:${value}`,
+    annotationDefaultLabel: () => "",
+    annotationTypeLabel: value => value,
+    chartStats: () => ({ count: 0 }),
+    formatNumber: String,
+    renderPercentileDistribution: () => "",
+    renderDatalist: () => ""
+  });
+
+  const modal = view.renderModal();
+  assert.match(modal, /Service classification/);
+  assert.match(modal, /stunnel/);
+  assert.match(modal, /All tcp port 9200 in this recording/);
 });

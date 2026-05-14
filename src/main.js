@@ -11,7 +11,7 @@ import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHi
 import { detectMicroburstWindow } from "./microburst.js";
 import { detectTailLatencyLens } from "./tail-latency.js";
 import { applyContextAction, setActiveInvestigation } from "./navigation.js";
-import { aliasDisplay, aliasForEndpoint, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
+import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
@@ -19,7 +19,8 @@ import { commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
 import { applyChartZoomOperation, clampZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "./chart-zoom.js";
-import { applicationServiceSortKey, inferApplicationService } from "./services.js";
+import { inferApplicationService } from "./services.js";
+import { applyServiceOverride, deleteServiceOverride, normalizeServiceOverrideStore, serviceOverrideForSocket, upsertServiceOverride } from "./service-overrides.js";
 import { TABLE_STATE_STORAGE_KEY, buildSocketOptionSets, buildVisibleColumnOrder, normalizeTableState, resetTableColumns, resetTableSort, setTableColumnVisibility, tableFilterCacheKey, tableStateSnapshot, toggleTableColumnPin, toggleTableColumnVisibility } from "./table-state.js";
 import { ACCESS_ROLES, COMMON_TIME_ZONES, EXPERT_DEFAULT_THRESHOLDS, INGEST_RAW_EAGER_LIMIT, LINUX_PROFILES, UBUNTU_PROFILES, cloneThresholds } from "./expert-config.js";
 import { applyTableColumnSearchFilter, renderTableSettingsDrawer as renderTableSettingsDrawerView, renderTableSettingsMenu as renderTableSettingsMenuView, renderTableSettingsTrigger as renderTableSettingsTriggerView, tableSettingsPlacement } from "./table-settings-view.js";
@@ -32,7 +33,7 @@ import { createModalView } from "./modal-view.js";
 const TABLE_COLUMNS = createTableColumns({
   riskRank,
   escapeHtml,
-  applicationServiceSortKey,
+  applicationServiceSortKey: currentApplicationServiceSortKey,
   renderApplicationServiceChip,
   renderTableMetricCell,
   socketBandwidth,
@@ -124,6 +125,9 @@ let state = {
   activeDashboardPreset: dashboardPresetIdOrDefault(initialPrefs.defaultDashboardPreset),
   serviceAliases: loadServiceAliases(),
   aliasEditKey: "",
+  aliasEditScope: "source",
+  serviceOverrides: loadServiceOverrides(),
+  serviceOverrideSocketId: "",
   topologyProfiles: loadTopologyProfiles(),
   topology: loadTopologyForSource("built-in sample"),
   topologyEditId: "",
@@ -457,6 +461,18 @@ function loadServiceAliases() {
 
 function saveServiceAliases() {
   localStorage.setItem("networkExpertServiceAliases", JSON.stringify(normalizeAliasStore(state.serviceAliases)));
+}
+
+function loadServiceOverrides() {
+  try {
+    return normalizeServiceOverrideStore(JSON.parse(localStorage.getItem("networkExpertServiceOverrides") || "{}"));
+  } catch {
+    return normalizeServiceOverrideStore({});
+  }
+}
+
+function saveServiceOverrides() {
+  localStorage.setItem("networkExpertServiceOverrides", JSON.stringify(normalizeServiceOverrideStore(state.serviceOverrides)));
 }
 
 function loadTopologyProfiles() {
@@ -1616,7 +1632,7 @@ function buildConversations() {
         family: socket.family,
         states: new Set(),
         processes: new Set(),
-        application: applicationServiceSortKey(socket),
+        application: currentApplicationServiceSortKey(socket),
         count: 0,
         maxRisk: "low",
         anomalies: 0,
@@ -1759,7 +1775,7 @@ function buildExpertInformation() {
         count: 0,
         sockets: [],
         processes: new Set(),
-        application: applicationServiceSortKey(socket),
+        application: currentApplicationServiceSortKey(socket),
         peers: new Set()
       });
     }
@@ -1819,7 +1835,7 @@ function buildTimelineEvents() {
 }
 
 function endpointPresentation(endpoint) {
-  const alias = aliasForEndpoint(state.serviceAliases, endpoint);
+  const alias = currentAliasForEndpoint(endpoint);
   return {
     endpoint,
     label: alias?.label || endpoint,
@@ -1827,6 +1843,14 @@ function endpointPresentation(endpoint) {
     note: alias?.note || "",
     alias
   };
+}
+
+function currentAliasForEndpoint(endpoint, options = {}) {
+  return aliasForEndpoint(state.serviceAliases, endpoint, state.sourceName, options);
+}
+
+function currentAliasDisplay(endpoint, options = {}) {
+  return aliasDisplay(endpoint, state.serviceAliases, state.sourceName, options);
 }
 
 function nodeLabel(node) {
@@ -1895,12 +1919,15 @@ function edgeAnomalies(edge) {
 function renderHotPaths(hotPaths) {
   return `<aside class="map-side-panel hot-paths">
     <strong>Hot paths</strong>
-    ${hotPaths.map(edge => `<article class="hot-path ${edge.risk}" data-socket="${escapeHtml(edge.socket.id)}">
+    ${hotPaths.map(edge => {
+      const peerAlias = currentAliasForEndpoint(edge.socket.peer);
+      return `<article class="hot-path ${edge.risk}" data-socket="${escapeHtml(edge.socket.id)}">
       <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
-      <p>${escapeHtml(edge.socket.details.process?.name || "unknown")} -> ${escapeHtml(aliasDisplay(edge.socket.peer, state.serviceAliases))}</p>
-      ${aliasForEndpoint(state.serviceAliases, edge.socket.peer)?.role ? `<em>${escapeHtml(aliasForEndpoint(state.serviceAliases, edge.socket.peer).role)}</em>` : ""}
+      <p>${escapeHtml(edge.socket.details.process?.name || "unknown")} -> ${escapeHtml(currentAliasDisplay(edge.socket.peer))}</p>
+      ${peerAlias?.role ? `<em>${escapeHtml(peerAlias.role)}</em>` : ""}
       <small>${formatNumber(edge.anomalies)} anomaly signal(s), Send-Q ${formatMetricValue("sendQ", edge.socket.sendQ)}, RTT ${formatMetricValue("rtt", metricValue(edge.socket, "rtt"))}</small>
-    </article>`).join("")}
+    </article>`;
+    }).join("")}
   </aside>`;
 }
 
@@ -1923,7 +1950,7 @@ function renderMapEdgeInsight(edge) {
       <span class="tooltip-kicker">Link intelligence</span>
       <button class="icon" data-map-edge-close title="Close link inspector">${icons.x}</button>
     </header>
-    <h3>${escapeHtml(aliasDisplay(socket.local, state.serviceAliases))} -> ${escapeHtml(aliasDisplay(socket.peer, state.serviceAliases))}</h3>
+    <h3>${escapeHtml(currentAliasDisplay(socket.local))} -> ${escapeHtml(currentAliasDisplay(socket.peer))}</h3>
     <p class="link-endpoints">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</p>
     <div class="link-badges">
       <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
@@ -2192,6 +2219,7 @@ function scheduleAnomalyBadgeSettle() {
 }
 
 function render() {
+  hideAppServiceTooltip();
   if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
   const app = document.querySelector("#app");
@@ -2321,12 +2349,41 @@ function renderInvestigationContext() {
   </section>`;
 }
 
+function inferredApplicationService(socket) {
+  return inferApplicationService(socket);
+}
+
+function currentApplicationService(socket) {
+  return applyServiceOverride(socket, state.serviceOverrides, state.sourceName, inferredApplicationService(socket));
+}
+
+function currentApplicationServiceSortKey(socket = {}) {
+  const app = currentApplicationService(socket);
+  if (!app || app.source === "suppressed") return "";
+  return `${app.label} ${app.port || ""}`.trim();
+}
+
 function renderApplicationServiceChip(socket, extraClass = "") {
-  const app = inferApplicationService(socket);
+  const app = currentApplicationService(socket);
   if (!app) return "";
   const side = app.side === "local" ? "local port" : "peer port";
-  const title = `${app.label} inferred from ${side} ${app.port}. ${app.description} Confidence: ${app.confidence}.`;
-  return `<span class="app-service-chip ${escapeHtml(extraClass)}" title="${escapeHtml(title)}"><i class="ri-stack-line"></i><b>APP</b> ${escapeHtml(app.label)}</span>`;
+  const source = app.source === "override"
+    ? "Analyst override"
+    : app.source === "suppressed"
+      ? "Port heuristic suppressed"
+      : "Inferred from port";
+  const title = app.source === "override"
+    ? `${app.label} set by analyst override for this recording. ${app.description}`
+    : app.source === "suppressed"
+      ? `Port-based inference hidden by analyst override. Original heuristic is no longer shown for this scope.`
+      : `${app.label} inferred from ${side} ${app.port}. ${app.description} Confidence: ${app.confidence}.`;
+  const label = app.source === "suppressed" ? "Hidden" : app.label;
+  const scopeLabel = app.override?.scope === "global" ? "global rule" : app.source === "override" || app.source === "suppressed" ? "recording rule" : `${side} ${app.port}`;
+  return `<button type="button" class="app-service-chip ${escapeHtml(extraClass)} ${app.source === "override" ? "override" : ""} ${app.source === "suppressed" ? "suppressed" : ""}" data-service-override="${escapeHtml(socket.id)}" data-app-tooltip-label="${escapeHtml(label)}" data-app-tooltip-source="${escapeHtml(source)}" data-app-tooltip-scope="${escapeHtml(scopeLabel)}" data-app-tooltip-detail="${escapeHtml(title)}" aria-label="Correct service classification: ${escapeHtml(label)}">
+    <i class="ri-stack-line"></i>
+    <b>APP</b>
+    <span class="app-service-label">${escapeHtml(label)}</span>
+  </button>`;
 }
 
 function guidedChecklistItems(socket = selectedSocket()) {
@@ -3046,6 +3103,57 @@ function updateChartTooltipPosition(info) {
   tooltip.style.visibility = previousVisibility;
 }
 
+function ensureAppServiceTooltip() {
+  let tooltip = document.querySelector("#appServiceTooltip");
+  if (tooltip) return tooltip;
+  tooltip = document.createElement("div");
+  tooltip.id = "appServiceTooltip";
+  tooltip.className = "app-service-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.innerHTML = `
+    <span class="tooltip-kicker"></span>
+    <strong></strong>
+    <small></small>
+    <p></p>
+    <em></em>
+  `;
+  document.body.appendChild(tooltip);
+  return tooltip;
+}
+
+function positionAppServiceTooltip(chip, tooltip) {
+  if (!tooltip) return;
+  const gutter = 12;
+  tooltip.style.removeProperty("--app-tooltip-top");
+  tooltip.style.removeProperty("--app-tooltip-left");
+
+  const chipRect = chip.getBoundingClientRect();
+  const rect = tooltip.getBoundingClientRect();
+  const below = chipRect.bottom + 8;
+  const above = chipRect.top - rect.height - 8;
+  const top = below + rect.height <= window.innerHeight - gutter ? below : Math.max(gutter, above);
+  const idealLeft = chipRect.left + chipRect.width / 2 - rect.width / 2;
+  const left = Math.min(Math.max(gutter, idealLeft), Math.max(gutter, window.innerWidth - rect.width - gutter));
+
+  tooltip.style.setProperty("--app-tooltip-top", `${Math.round(top)}px`);
+  tooltip.style.setProperty("--app-tooltip-left", `${Math.round(left)}px`);
+}
+
+function showAppServiceTooltip(chip) {
+  const tooltip = ensureAppServiceTooltip();
+  tooltip.querySelector(".tooltip-kicker").textContent = "Service classification";
+  tooltip.querySelector("strong").textContent = chip.dataset.appTooltipLabel || "Service";
+  tooltip.querySelector("small").textContent = `${chip.dataset.appTooltipSource || "Source"} - ${chip.dataset.appTooltipScope || "scope"}`;
+  tooltip.querySelector("p").textContent = chip.dataset.appTooltipDetail || "";
+  tooltip.querySelector("em").textContent = "Click to correct, hide, or scope this service classification.";
+  tooltip.classList.add("open");
+  positionAppServiceTooltip(chip, tooltip);
+}
+
+function hideAppServiceTooltip() {
+  document.querySelector("#appServiceTooltip")?.classList.remove("open");
+}
+
 function bindSmartChartTooltips() {
   document.querySelectorAll(".chart-info").forEach(info => {
     const refresh = () => updateChartTooltipPosition(info);
@@ -3283,7 +3391,7 @@ function renderRowActions(socket) {
 }
 
 function renderEndpointCell(endpoint, extra = "") {
-  const alias = aliasForEndpoint(state.serviceAliases, endpoint);
+  const alias = currentAliasForEndpoint(endpoint);
   if (!alias?.label) return `<span>${escapeHtml(endpoint)}</span>${extra}`;
   return `<div class="endpoint-cell" title="${escapeHtml(endpoint)}">
     <strong>${escapeHtml(alias.label)}</strong>
@@ -3584,7 +3692,7 @@ function renderServiceMap() {
         <article><span>Processes</span><strong>${formatNumber(map.processes.length)}</strong></article>
         <article><span>Local sockets</span><strong>${formatNumber(map.locals.length)}</strong></article>
         <article><span>Peers</span><strong>${formatNumber(map.peers.length)}</strong></article>
-        <article><span>Labels</span><strong>${formatNumber(Object.keys(state.serviceAliases).length)}</strong></article>
+        <article><span>Labels</span><strong>${formatNumber(aliasCountForSource(state.serviceAliases, state.sourceName))}</strong></article>
         <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
       </div>
       <div class="service-map-actions">
@@ -4120,7 +4228,11 @@ function modalView() {
     escapeHtml,
     sortedFilteredSockets,
     aliasForEndpoint,
+    aliasListForSource,
     normalizeAliasStore,
+    currentApplicationService,
+    inferredApplicationService,
+    serviceOverrideForSocket,
     topologyScopeKey,
     topologyGroupForEndpoint,
     selectedSocket,
@@ -4157,8 +4269,9 @@ function modalView() {
 }
 
 function serviceAliasEndpointOptions() { return modalView().serviceAliasEndpointOptions(); }
-function selectedAliasEndpoint(endpoints) { return modalView().selectedAliasEndpoint(endpoints); }
+function selectedAliasTarget(endpoints) { return modalView().selectedAliasTarget(endpoints); }
 function renderServiceAliasesModal() { return modalView().renderServiceAliasesModal(); }
+function renderServiceOverrideModal() { return modalView().renderServiceOverrideModal(); }
 function renderTopologyModal() { return modalView().renderTopologyModal(); }
 function renderModal() { return modalView().renderModal(); }
 
@@ -6708,21 +6821,66 @@ function bindEvents() {
         toast("Endpoint required", "Choose an IP:port endpoint before saving a service label.", "danger");
         return;
       }
+      const scope = document.querySelector("#aliasGlobal")?.checked ? "global" : "source";
       state.serviceAliases = upsertEndpointAlias(state.serviceAliases, endpoint, {
         label: document.querySelector("#aliasLabel")?.value || "",
         role: document.querySelector("#aliasRole")?.value || "",
         note: document.querySelector("#aliasNote")?.value || ""
+      }, Date.now(), {
+        sourceName: state.sourceName,
+        scope
       });
       state.aliasEditKey = endpoint;
+      state.aliasEditScope = scope;
       saveServiceAliases();
-      toast("Service label saved", `${aliasDisplay(endpoint, state.serviceAliases)} is now shown on the map and tables.`);
+      toast("Service label saved", `${currentAliasDisplay(endpoint, { scope })} is now shown ${scope === "global" ? "globally" : "for this recording"}.`);
       render();
     }
     if (action === "deleteServiceAlias") {
       const endpoint = document.querySelector("#aliasEndpoint")?.value?.trim() || "";
-      state.serviceAliases = deleteEndpointAlias(state.serviceAliases, endpoint);
+      const scope = document.querySelector("#aliasGlobal")?.checked ? "global" : "source";
+      state.serviceAliases = deleteEndpointAlias(state.serviceAliases, endpoint, state.sourceName, { scope });
       saveServiceAliases();
-      toast("Service label deleted", endpoint || "Endpoint label removed.");
+      toast("Service label deleted", scope === "global" ? "Global endpoint label removed." : "Recording endpoint label removed.");
+      render();
+    }
+    if (action === "saveServiceOverride") {
+      const hidden = Boolean(document.querySelector("#serviceOverrideHidden")?.checked);
+      const label = document.querySelector("#serviceOverrideLabel")?.value?.trim() || "";
+      if (!hidden && !label) {
+        toast("Service name required", "Set a replacement service name, or choose to hide the inferred service.", "danger");
+        return;
+      }
+      const scope = document.querySelector("#serviceOverrideGlobal")?.checked ? "global" : "source";
+      state.serviceOverrides = upsertServiceOverride(state.serviceOverrides, {
+        target: document.querySelector("#serviceOverrideTarget")?.value || "port",
+        endpoint: document.querySelector("#serviceOverrideEndpoint")?.value || "",
+        port: document.querySelector("#serviceOverridePort")?.value || "",
+        transport: document.querySelector("#serviceOverrideTransport")?.value || "",
+        label,
+        hidden,
+        note: document.querySelector("#serviceOverrideNote")?.value || ""
+      }, Date.now(), {
+        sourceName: state.sourceName,
+        scope
+      });
+      saveServiceOverrides();
+      toast("Service classification saved", hidden ? "The inferred service is hidden for this scope." : `${label} now overrides the port heuristic for this scope.`);
+      render();
+    }
+    if (action === "deleteServiceOverride") {
+      const scope = document.querySelector("#serviceOverrideGlobal")?.checked ? "global" : "source";
+      state.serviceOverrides = deleteServiceOverride(state.serviceOverrides, {
+        target: document.querySelector("#serviceOverrideTarget")?.value || "port",
+        endpoint: document.querySelector("#serviceOverrideEndpoint")?.value || "",
+        port: document.querySelector("#serviceOverridePort")?.value || "",
+        transport: document.querySelector("#serviceOverrideTransport")?.value || ""
+      }, {
+        sourceName: state.sourceName,
+        scope
+      });
+      saveServiceOverrides();
+      toast("Service classification deleted", scope === "global" ? "Global override removed." : "Recording override removed.");
       render();
     }
     if (action === "saveTopologyGroup") {
@@ -6825,6 +6983,7 @@ function bindEvents() {
   }));
   const openMapAliasEditor = target => {
     state.aliasEditKey = target.dataset.mapAlias;
+    state.aliasEditScope = "source";
     state.modal = "serviceAliases";
     render();
   };
@@ -6875,12 +7034,35 @@ function bindEvents() {
   document.querySelectorAll("[data-alias-pick]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     state.aliasEditKey = event.currentTarget.dataset.aliasPick;
+    state.aliasEditScope = event.currentTarget.dataset.aliasScope || "source";
     state.modal = "serviceAliases";
     renderKeepingModalPosition();
   }));
   document.querySelector("#aliasEndpoint")?.addEventListener("change", event => {
     state.aliasEditKey = event.target.value;
     renderKeepingModalPosition();
+  });
+  document.querySelector("#aliasGlobal")?.addEventListener("change", event => {
+    state.aliasEditScope = event.target.checked ? "global" : "source";
+    renderKeepingModalPosition();
+  });
+  document.querySelectorAll("[data-service-override]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    hideAppServiceTooltip();
+    state.serviceOverrideSocketId = event.currentTarget.dataset.serviceOverride;
+    state.modal = "serviceOverride";
+    render();
+  }));
+  document.querySelectorAll(".app-service-chip").forEach(chip => {
+    const show = () => showAppServiceTooltip(chip);
+    chip.addEventListener("mouseenter", show);
+    chip.addEventListener("focus", show);
+    chip.addEventListener("mouseleave", hideAppServiceTooltip);
+    chip.addEventListener("blur", hideAppServiceTooltip);
+  });
+  document.querySelector("#serviceOverrideHidden")?.addEventListener("change", event => {
+    const input = document.querySelector("#serviceOverrideLabel");
+    if (input) input.disabled = event.target.checked;
   });
   document.querySelectorAll("[data-topology-edit]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
