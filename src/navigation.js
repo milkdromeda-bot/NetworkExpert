@@ -34,6 +34,7 @@ export function applyContextAction(state, action, socket, { chartMetrics = [], s
 
   if (action === "charts") {
     state.view = "charts";
+    state.chartsTab = "charts";
     if (suggestedMetric && chartMetrics.includes(suggestedMetric)) {
       state.prefs.graphMetric = suggestedMetric;
       state.chartMetrics = [...new Set([suggestedMetric, ...state.chartMetrics])];

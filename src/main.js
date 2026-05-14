@@ -141,6 +141,8 @@ let state = {
   prefs: initialPrefs,
   view: "ingest",
   activeTab: "sockets",
+  chartsTab: "charts",
+  openStyleMenu: false,
   anomalyFilters: { severity: "all", metric: "all", text: "", sort: "priority" },
   prefsTab: "display",
   drawer: null,
@@ -669,6 +671,7 @@ function renderExportMenu(scope = "analysis") {
   return `<span class="export-menu-wrap">
     <button data-export-menu="${escapeHtml(scope)}" title="Export report or evidence pack">${icons.pack} Export</button>
     <div class="row-menu export-menu ${open ? "open" : ""}" ${pos}>
+      <button data-action="saveCharts"><i class="ri-image-line"></i><span>Export PNG</span><small>Save visible charts as image</small></button>
       <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>PDF report</span><small>Readable incident snapshot</small></button>
       <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><small>PDF, CSV, JSON and chart PNGs</small></button>
     </div>
@@ -2270,10 +2273,18 @@ function render() {
           <button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace">${icons.resetWorkspace}<span>Reset workspace</span></button>
         </div>
       </header>
-      ${renderInvestigationContext()}
+      ${state.view !== "charts" ? renderInvestigationContext() : ""}
       ${state.view === "ingest" ? `<main class="workspace wide">${renderIngestPage()}</main>` : ""}
       ${state.view === "analysis" ? `<main class="workspace wide">${renderAnalysisPage()}</main>` : ""}
-      ${state.view === "charts" ? `<main class="workspace wide">${renderChartsPage()}</main>` : ""}
+      ${state.view === "charts" ? `<main class="workspace wide">
+        <nav class="charts-sub-tabs" role="tablist">
+          <button class="charts-sub-tab ${state.chartsTab === "charts" ? "active" : ""}" data-charts-tab="charts" role="tab" aria-selected="${state.chartsTab === "charts"}">Charts</button>
+          <button class="charts-sub-tab ${state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="advisor" role="tab" aria-selected="${state.chartsTab === "advisor"}">Advisor</button>
+          ${state.chartsTab === "charts" ? renderDashboardStudioInline() : ""}
+        </nav>
+        ${renderChartsGlobalToolbar()}
+        ${renderChartsPage()}
+      </main>` : ""}
       ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
     </div>
     ${renderChartAnnotationMenu()}
@@ -2763,6 +2774,47 @@ function renderAnalysisPage() {
   `;
 }
 
+function renderChartsGlobalToolbar() {
+  const styles = [
+    { id: "line", icon: "ri-line-chart-line", label: "Line" },
+    { id: "area", icon: "ri-bar-chart-grouped-line", label: "Area" },
+    { id: "bars", icon: "ri-bar-chart-line", label: "Bars" },
+    { id: "points", icon: "ri-drag-move-2-fill", label: "Points" }
+  ];
+  const activeStyle = styles.find(s => s.id === state.prefs.graphStyle) || styles[0];
+  const open = state.openStyleMenu;
+  return `<div class="charts-global-toolbar">
+    <div class="chart-tool-group">
+      <div class="style-picker">
+        <button class="style-picker-trigger" data-style-toggle title="Chart style: ${activeStyle.label}">
+          <i class="${activeStyle.icon}"></i>
+          <span>${activeStyle.label}</span>
+          <i class="ri-arrow-down-s-line"></i>
+        </button>
+        <div class="style-picker-menu ${open ? "open" : ""}" role="listbox">
+          ${styles.map(s => `<button class="style-picker-option ${s.id === state.prefs.graphStyle ? "selected" : ""}" data-style-choice="${s.id}" role="option">
+            <i class="${s.icon}"></i><span>${s.label}</span>
+          </button>`).join("")}
+        </div>
+      </div>
+    </div>
+    <div class="chart-tool-group">
+      <button data-action="thresholds">${icons.threshold} Thresholds</button>
+      ${renderExportMenu("charts")}
+    </div>
+    <div class="chart-tool-group chart-time-group">
+      <label class="chart-time-field">TZ <select id="chartTimeZoneSelect" title="Chart timezone">${renderTimeZoneOptions()}</select></label>
+      <span class="chart-tool-separator" aria-hidden="true"></span>
+      <label class="chart-time-field">Start <input id="startTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("start")}"/></label>
+      <label class="chart-time-field">End <input id="endTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("end")}"/></label>
+    </div>
+    <div class="chart-tool-group">
+      <button data-action="layoutPrefs">${icons.layout} Layout</button>
+      <button class="icon" data-action="details" title="Details">${icons.activity}</button>
+    </div>
+  </div>`;
+}
+
 function renderChartsPage() {
   const metrics = chartMetricList();
   const metricOptions = alphabeticalMetrics(metrics);
@@ -2774,70 +2826,13 @@ function renderChartsPage() {
   const activeCorrelation = EXPERT_CORRELATIONS.find(item => item.x === state.correlation.x && item.y === state.correlation.y);
   const microburst = microburstSummary();
   return html`
-    ${renderDashboardStudio()}
-    ${renderTailLatencyLensPanel()}
-    <section class="panel ${layout.stickyToolbar ? "sticky-chart-panel" : ""}">
-      <div class="panel-head">
-        <div class="panel-title chart-socket-title"><span>Socket charts ${selected ? escapeHtml(selected.local) : ""}</span>${selected ? renderApplicationServiceChip(selected) : ""}</div>
-        <div class="toolbar">
-          <button class="icon" data-chart-stats="${state.prefs.graphMetric}" title="Metric statistics">${icons.stats}</button>
-          <button data-action="layoutPrefs">${icons.layout} Layout</button>
-          <button class="icon" data-action="details" title="Details">${icons.activity}</button>
-        </div>
-      </div>
+    ${state.chartsTab === "advisor" ? `${renderInvestigationContext()}${renderTailLatencyLensPanel()}` : ""}
+    ${state.chartsTab === "charts" ? `<section class="panel ${layout.stickyToolbar ? "sticky-chart-panel" : ""}">
       <div class="panel-body">
-        <div class="chart-controls wide-controls">
-          <label class="chart-field">
-            <span>Primary metric ${renderChartInfo("Primary metric", "Chooses the metric drawn in the large chart. Use bandwidth metrics to inspect throughput evolution, RTT/RTO for latency and recovery, queues for slow consumers, and skmem metrics for socket buffer pressure.", "Changing this does not remove the smaller panels below; it only changes the focus chart. For a socket investigation, compare TX/RX bandwidth with Send-Q, RTT, RTO, cwnd, and pacing rate.")}</span>
-            <select id="metricSelect">${metricOptions.map(m => `<option value="${m}" ${state.prefs.graphMetric === m ? "selected" : ""}>${escapeHtml(metricLabel(m))}</option>`).join("")}</select>
-          </label>
-          <label class="chart-field">
-            <span>Chart style ${renderChartInfo("Chart style", "Controls how the selected time series is rendered. Line is best for trends, area for volume/pressure, bars for discrete bursts, points for sparse data, and XY for correlation-like visual inspection.", "For bandwidth, line or area usually reads best. For drops, retransmission, or backoff, bars and points make spikes easier to see.")}</span>
-            <select id="styleSelect">${["line", "area", "bars", "points", "xy"].map(m => `<option value="${m}" ${state.prefs.graphStyle === m ? "selected" : ""}>${m}</option>`).join("")}</select>
-          </label>
-          ${!realTimeline ? `<label class="chart-field">
-            <span>Synthetic window ${renderChartInfo("Synthetic window", "Number of generated points used only when the imported data has no timestamped snapshots. It keeps charts usable for a single ss capture, but it is a projection, not measured history.", "For real time evolution, collect repeated ss snapshots with timestamps. Increase this only when exploring a single capture visually; it does not create real bandwidth history.")}</span>
-            <input id="windowInput" type="number" min="6" max="240" value="${state.prefs.graphWindow}"/>
-          </label>` : ""}
-          <label class="chart-field">
-            <span>Reference threshold ${renderChartInfo("Reference threshold", "A quick visual reference value for the focused chart. The expert warning and critical thresholds are managed separately in Threshold configuration.", "Use this for temporary investigation marks, for example expected RTT, target bandwidth, or an SLA value. Permanent risk coloring still comes from configured thresholds.")}</span>
-            <input id="thresholdInput" type="number" min="0" value="${state.prefs.graphThreshold}"/>
-          </label>
-          ${!realTimeline ? `<label class="chart-field">
-            <span>Synthetic interval ${renderChartInfo("Synthetic interval", "Expected interval, in seconds, used only when Ultimate Network Expert has to synthesize a local timeline from a single non-timestamped capture. Timestamped imports always use every captured timestamp at its real time.", "Leave this at 1 second for synthetic previews. It does not downsample real collections; real chart resolution comes from the timestamps in the imported data.")}</span>
-            <input id="samplingInput" type="number" min="0.001" max="3600" step="0.001" value="${state.prefs.sampling}"/>
-          </label>` : ""}
-        </div>
-        <div class="chart-toolbar">
-          <div class="chart-tool-group icon-tool-group">
-            <button class="icon-button" data-action="zoomIn" title="Zoom in" aria-label="Zoom in">${icons.zoomIn}</button>
-            <button class="icon-button" data-action="zoomOut" title="Zoom out" aria-label="Zoom out">${icons.zoomOut}</button>
-            <button class="icon-button" data-action="resetZoom" title="Reset zoom" aria-label="Reset zoom">${icons.reset}</button>
-          </div>
-          <div class="chart-tool-group icon-tool-group">
-            <button class="icon-button" data-action="panLeft" title="Pan left" aria-label="Pan left">${icons.arrowLeft}</button>
-            <button class="icon-button" data-action="panRight" title="Pan right" aria-label="Pan right">${icons.arrowRight}</button>
-          </div>
-          <div class="chart-tool-group">
-            <button data-action="thresholds">${icons.threshold} Thresholds</button>
-            <button data-action="saveCharts">${icons.save} Export PNG</button>
-            ${renderExportMenu("charts")}
-          </div>
-          <div class="chart-timezone-group">
-            <label>Time zone ${renderChartInfo("Time zone", "Controls how timestamps are displayed on chart axes, crosshair labels, and date-time zoom fields. The underlying samples are unchanged.", "Use UTC for server-side logs and incident correlation across machines. Use local time when matching an operator timeline, application logs, or monitoring dashboards configured in that zone.")}</label>
-            <select id="chartTimeZoneSelect" title="Chart timezone">${renderTimeZoneOptions()}</select>
-          </div>
-        </div>
-        <div class="time-range">
-          <label class="chart-field"><span>Start time ${renderChartInfo("Start time", "Left boundary of the visible time window. It updates when you drag-zoom a chart and can also be edited manually for precise inspection.", "Use it to isolate an incident window, then compare several metrics under the same synchronized zoom.")}</span><input id="startTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("start")}"/></label>
-          <label class="chart-field"><span>End time ${renderChartInfo("End time", "Right boundary of the visible time window. Together with Start time, it controls the synchronized zoom range for all charts.", "Narrow this around spikes in RTO, Send-Q, drops, TX/RX bandwidth collapse, or backoff to avoid averaging away short incidents.")}</span><input id="endTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("end")}"/></label>
-        </div>
         ${microburst ? `<div class="investigation-note ${microburst.severity}">
           <b>${escapeHtml(microburst.severity)}</b>
           <span>Microburst window ${escapeHtml(formatMicroburstWindow(microburst))} with RX peak ${escapeHtml(formatMetricValue("rx_bps", microburst.peakRxBps))}, Recv-Q ${escapeHtml(formatMetricValue("recvQ", microburst.peakRecvQ))}, skmem.r ${escapeHtml(formatMetricValue("skmem.r", microburst.peakSkmemR))}, and ${escapeHtml(formatMetricValue("skmem.d", microburst.dropDeltaTotal))} new drops.</span>
         </div>` : ""}
-        ${layout.mainChart ? `<svg id="chart" class="chart hero-chart ${layout.density}" role="img" aria-label="Main timeline chart"></svg>` : ""}
-        ${layout.showLegend ? `<div class="chart-legend" id="mainChartLegend">${chartResolutionLabel()} - Shared zoom: ${layout.sharedZoom ? "on" : "off"} - Crosshair: ${layout.showCrosshair ? "on" : "off"} - Thresholds: ${layout.showThresholds ? "on" : "off"}</div>` : ""}
         <div class="metric-picks">
           ${metricOptions.map(m => `<label class="check inline"><input type="checkbox" data-chart-metric="${m}" ${state.chartMetrics.includes(m) ? "checked" : ""}/> ${escapeHtml(metricLabel(m))}</label>`).join("")}
         </div>
@@ -2851,11 +2846,11 @@ function renderChartsPage() {
             ${renderChartMetricTooltip(m)}
           </div>
           <div class="col-tools chart-card-tools">
-            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "zoomIn" ? "active-chart-tool" : ""}" data-chart-zoom="zoomIn" data-chart-zoom-metric="${m}" title="Zoom in" aria-label="Zoom in ${escapeHtml(metricLabel(m))}">${icons.zoomIn}</button>
-            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "zoomOut" ? "active-chart-tool" : ""}" data-chart-zoom="zoomOut" data-chart-zoom-metric="${m}" title="Zoom out" aria-label="Zoom out ${escapeHtml(metricLabel(m))}">${icons.zoomOut}</button>
-            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "panLeft" ? "active-chart-tool" : ""}" data-chart-zoom="panLeft" data-chart-zoom-metric="${m}" title="Pan left" aria-label="Pan left ${escapeHtml(metricLabel(m))}">${icons.arrowLeft}</button>
-            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "panRight" ? "active-chart-tool" : ""}" data-chart-zoom="panRight" data-chart-zoom-metric="${m}" title="Pan right" aria-label="Pan right ${escapeHtml(metricLabel(m))}">${icons.arrowRight}</button>
-            <button class="mini ${state.activeChartMetric === m && state.activeChartAction === "resetZoom" ? "active-chart-tool" : ""}" data-chart-zoom="resetZoom" data-chart-zoom-metric="${m}" title="Reset zoom" aria-label="Reset zoom ${escapeHtml(metricLabel(m))}">${icons.reset}</button>
+            <button class="mini" data-chart-zoom="zoomIn" data-chart-zoom-metric="${m}" title="Zoom in">${icons.zoomIn}</button>
+            <button class="mini" data-chart-zoom="zoomOut" data-chart-zoom-metric="${m}" title="Zoom out">${icons.zoomOut}</button>
+            <button class="mini" data-chart-zoom="resetZoom" data-chart-zoom-metric="${m}" title="Reset zoom">${icons.reset}</button>
+            <button class="mini" data-chart-zoom="panLeft" data-chart-zoom-metric="${m}" title="Pan left">${icons.arrowLeft}</button>
+            <button class="mini" data-chart-zoom="panRight" data-chart-zoom-metric="${m}" title="Pan right">${icons.arrowRight}</button>
             <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
             ${renderChartMoveMenu(m)}
           </div>
@@ -2887,7 +2882,7 @@ function renderChartsPage() {
         <svg id="correlationChart" class="chart" role="img" aria-label="Correlation"></svg>
         <p class="hint">Each point corresponds to a timestamped snapshot or a local projection. Useful for checking whether RTT, queues, drops, or buffers rise together.</p>
       </div>
-    </section>
+    </section>` : ""}
   `;
 }
 
@@ -2918,6 +2913,32 @@ function renderDashboardPresetPicker(activePresetId, presetEntries) {
         <span class="dashboard-preset-icon"><i class="${escapeHtml(dashboardPresetIcon(id))}"></i></span>
         <span class="dashboard-preset-option-copy"><strong>${escapeHtml(preset.name)}</strong><small>${escapeHtml(preset.description)}</small></span>
       </button>`).join("")}
+    </div>
+  </div>`;
+}
+function renderDashboardStudioInline() {
+  const presetEntries = Object.entries(DASHBOARD_PRESETS);
+  const activePresetId = DASHBOARD_PRESETS[state.activeDashboardPreset]
+    ? state.activeDashboardPreset
+    : presetEntries[0]?.[0];
+  const presetPicker = renderDashboardPresetPicker(activePresetId, presetEntries);
+  const savedOptions = state.dashboardProfiles
+    .map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`)
+    .join("");
+  return `<div class="dashboard-studio-inline">
+    <div class="dashboard-inline-control">
+      <span>Preset</span>
+      ${presetPicker}
+    </div>
+    <div class="dashboard-inline-control">
+      <select id="savedDashboardSelect" ${state.dashboardProfiles.length ? "" : "disabled"}>
+        ${state.dashboardProfiles.length ? savedOptions : `<option>No saved</option>`}
+      </select>
+      <button data-action="loadSelectedDashboard" ${state.dashboardProfiles.length ? "" : "disabled"} title="Load">${icons.load}</button>
+    </div>
+    <div class="dashboard-inline-control">
+      <input id="dashboardName" placeholder="Save as..." />
+      <button class="primary" data-action="saveDashboard" title="Save">${icons.saveDisk}</button>
     </div>
   </div>`;
 }
@@ -5382,7 +5403,31 @@ function attachChartContextAnnotation(svg) {
     }
     state.chartAnnotationMenuContext = context;
     state.chartAnnotationMenuPos = chartContextMenuPosition(event);
-    renderKeepingWorkspacePosition();
+    const existing = document.querySelector(".chart-context-menu");
+    if (existing) existing.remove();
+    const pos = state.chartAnnotationMenuPos;
+    const menuHtml = `<div class="chart-context-menu open" style="left:${pos.left}px;top:${pos.top}px" role="menu" aria-label="Chart context menu">
+      <button data-chart-annotation-menu="annotate" role="menuitem" title="${escapeHtml(metricLabel(context.metric))} at ${escapeHtml(timeLabel(context.row?.t || 0, context.row?.epochMs))}">
+        <span class="chart-context-menu-icon">${icons.note}</span>
+        <span class="chart-context-menu-copy">
+          <strong>Annotate here</strong>
+          <small>${escapeHtml(metricLabel(context.metric))} - ${escapeHtml(timeLabel(context.row?.t || 0, context.row?.epochMs))}</small>
+        </span>
+      </button>
+    </div>`;
+    document.body.insertAdjacentHTML("beforeend", menuHtml);
+    const menuEl = document.querySelector(".chart-context-menu");
+    menuEl?.querySelector("[data-chart-annotation-menu]")?.addEventListener("click", () => {
+      const ctx = state.chartAnnotationMenuContext;
+      state.chartAnnotationMenuContext = null;
+      state.chartAnnotationMenuPos = null;
+      menuEl.remove();
+      if (ctx) {
+        state.modal = "annotation";
+        state.annotationDraft = { kind: "custom", label: "Analyst note", note: "", metric: ctx.metric, anchor: "custom", epochMs: ctx.epochMs, sourceName: state.sourceName, socketId: state.selectedId || "" };
+        render();
+      }
+    });
   });
 }
 function attachChartInteractions(svg) {
@@ -6429,6 +6474,10 @@ function closeDashboardPresetMenu(cancel = false) {
 
 function closeFloatingMenus(options = {}) {
   let changed = closeDashboardPresetMenu(Boolean(options.cancelDashboard));
+  if (state.openStyleMenu) {
+    state.openStyleMenu = false;
+    changed = true;
+  }
   if (state.openExportMenu || state.openExportMenuPos) {
     state.openExportMenu = null;
     state.openExportMenuPos = null;
@@ -6470,6 +6519,28 @@ function handleGlobalKeydown(event) {
 function bindEvents() {
   document.onkeydown = handleGlobalKeydown;
   bindSmartChartTooltips();
+  document.querySelectorAll("[data-charts-tab]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      state.chartsTab = event.currentTarget.dataset.chartsTab;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-style-toggle]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
+      state.openStyleMenu = !state.openStyleMenu;
+      const menu = btn.closest(".style-picker")?.querySelector(".style-picker-menu");
+      if (menu) menu.classList.toggle("open", state.openStyleMenu);
+    });
+  });
+  document.querySelectorAll("[data-style-choice]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
+      state.prefs.graphStyle = event.currentTarget.dataset.styleChoice;
+      state.openStyleMenu = false;
+      renderKeepingWorkspacePosition();
+    });
+  });
   document.querySelectorAll("[data-chart-zoom]").forEach(btn => {
     btn.addEventListener("click", event => {
       event.preventDefault();
@@ -6597,6 +6668,7 @@ function bindEvents() {
     if (action === "zoomTailWindow") {
       const preset = event.currentTarget.dataset.dashboardPresetJump;
       state.view = "charts";
+      state.chartsTab = "charts";
       if (preset) applyDashboardPreset(preset);
       if (zoomToTailLatencyWindow()) renderKeepingWorkspacePosition();
       else toast("No tail window", "No significant tail-latency window is available on the current visible history.", "warn");
@@ -7173,10 +7245,16 @@ function bindEvents() {
   document.querySelectorAll("[data-export-menu]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     const scope = event.currentTarget.dataset.exportMenu;
+    const wrap = event.currentTarget.closest(".export-menu-wrap");
+    const menu = wrap?.querySelector(".export-menu");
+    if (!menu) return;
     if (state.openExportMenu === scope) {
       state.openExportMenu = null;
       state.openExportMenuPos = null;
+      menu.classList.remove("open");
+      menu.removeAttribute("style");
     } else {
+      document.querySelectorAll(".export-menu.open").forEach(m => { m.classList.remove("open"); m.removeAttribute("style"); });
       const rect = event.currentTarget.getBoundingClientRect();
       const menuWidth = 260;
       const menuHeight = 110;
@@ -7185,8 +7263,10 @@ function bindEvents() {
       const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
       state.openExportMenu = scope;
       state.openExportMenuPos = { left: Math.round(left), top: Math.round(top) };
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+      menu.classList.add("open");
     }
-    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll(".export-menu").forEach(menu => menu.addEventListener("click", event => {
     event.stopPropagation();
