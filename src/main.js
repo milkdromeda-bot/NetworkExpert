@@ -2659,6 +2659,15 @@ function renderIngestRawPreview() {
   </div>`;
 }
 
+function renderImportStatus() {
+  if (!state.importStatus) return "";
+  return `<div class="import-status" role="status" aria-live="polite">
+    <strong>${escapeHtml(state.importStatus.title)}</strong>
+    <span>${escapeHtml(state.importStatus.detail)}</span>
+    <progress value="${escapeHtml(state.importStatus.progress ?? 0)}" max="100"></progress>
+  </div>`;
+}
+
 function renderIngestPage() {
   const coverage = commandCoverage(state.command, SS_OPTIONS);
   const active = coverage.filter(o => o.active);
@@ -2679,7 +2688,13 @@ function renderIngestPage() {
     </section>
     <section class="ingest-grid ${state.showSsOptions ? "options-open" : ""}">
       <div class="panel">
-        <div class="panel-head"><div class="panel-title">ss stats to parse</div><span class="status-pill">${escapeHtml(state.sourceName)}</span></div>
+        <div class="panel-head ingest-source-head">
+          <div class="ingest-head-main">
+            <div class="panel-title">ss stats to parse</div>
+            ${renderImportStatus()}
+          </div>
+          <span class="status-pill">${escapeHtml(state.sourceName)}</span>
+        </div>
         <div class="panel-body">
           ${shouldEagerRenderIngestRaw()
             ? `<textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>`
@@ -2691,7 +2706,6 @@ function renderIngestPage() {
             <button data-action="clear" class="danger">${icons.clear} Clear</button>
           </div>
           <p class="hint">The file is read locally by the browser. For large logs, use the Analysis page: pagination, filters, sorting, columns, and grouping.</p>
-          ${state.importStatus ? `<div class="import-status"><strong>${escapeHtml(state.importStatus.title)}</strong><span>${escapeHtml(state.importStatus.detail)}</span><progress value="${state.importStatus.progress}" max="100"></progress></div>` : ""}
         </div>
       </div>
       ${state.showSsOptions ? `<div class="panel ss-options-panel">

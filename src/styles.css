@@ -937,6 +937,20 @@ button.mega i {
 .import-actions button {
   min-height: 40px;
 }
+.ingest-source-head {
+  align-items: center;
+}
+.ingest-head-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ingest-head-main .panel-title {
+  flex: 0 0 auto;
+  margin: 0;
+}
 .section h2, .panel-title {
   margin: 0 0 10px;
   font-size: 13px;
@@ -947,21 +961,56 @@ button.mega i {
 .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
 .import-status {
   display: grid;
-  gap: 7px;
-  margin-top: 12px;
-  padding: 11px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 8px;
+  flex: 1 1 320px;
+  min-width: 220px;
+  max-width: min(720px, 58vw);
+  padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #070b11;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(57, 214, 214, .08), rgba(7, 11, 17, .96));
+}
+.import-status strong {
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
 }
 .import-status span {
   color: var(--muted);
   font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .import-status progress {
+  grid-column: 1 / -1;
   width: 100%;
-  height: 10px;
+  height: 7px;
   accent-color: var(--cyan);
+}
+@media (max-width: 760px) {
+  .ingest-source-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .ingest-head-main {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .import-status {
+    flex-basis: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .ingest-source-head .status-pill {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 .command-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
 .command-row input { min-width: 0; }

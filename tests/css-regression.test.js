@@ -27,3 +27,13 @@ test("application service chip tooltip stays viewport-safe and truncates labels"
   assert.match(main, /\[data-service-override\][\s\S]*?hideAppServiceTooltip\(\);[\s\S]*?state\.modal = "serviceOverride";/);
   assert.doesNotMatch(main, /<span class="app-service-tooltip"/);
 });
+
+test("import progress is shown in the ss stats header while loading", () => {
+  assert.match(main, /function renderImportStatus\(\)/);
+  assert.match(main, /<div class="panel-head ingest-source-head">[\s\S]*?<div class="panel-title">ss stats to parse<\/div>[\s\S]*?\$\{renderImportStatus\(\)\}/);
+  assert.doesNotMatch(main, /<p class="hint">The file is read locally[\s\S]*?\$\{state\.importStatus/);
+  assert.match(css, /\.ingest-head-main\s*\{[^}]*display:\s*flex;/s);
+  assert.match(css, /\.import-status\s*\{[^}]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\);/s);
+  assert.match(css, /\.import-status span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+  assert.match(css, /@media \(max-width:\s*760px\)\s*\{[\s\S]*?\.ingest-source-head\s*\{[^}]*flex-direction:\s*column;/s);
+});
