@@ -81,6 +81,24 @@ test("diagnostics detects receiver-side window collapse from rcv_space and skmem
   assert.equal(receiveWindow.commands.some(command => command.includes("epoll_wait")), true);
 });
 
+test("diagnostics adds a capped warning for suspicious TCP window scaling context", () => {
+  const hypotheses = diagnose("ESTAB 0 0 10.0.0.1:20002 10.0.0.2:53000 cubic rtt:100/12 delivery_rate 20000000bps rcv_space:262144 skmem:(r0,rb425984,t0,tb425984,d0)");
+
+  const wscale = byId(hypotheses, "tcp-window-scale-context");
+
+  assert.equal(wscale.severity, "medium");
+  assert.match(wscale.summary, /not a root cause by itself/i);
+  assert.equal(wscale.evidence.some(item => item.includes("BDP exceeds 64 KB")), true);
+  assert.equal(wscale.counterEvidence.some(item => item.includes("never creates a critical")), true);
+  assert.equal(wscale.commands.some(command => command.includes("tcp-handshake-wscale.pcap")), true);
+});
+
+test("diagnostics does not create a wscale anomaly when normal scaling is present", () => {
+  const hypotheses = diagnose("ESTAB 0 0 10.0.0.1:20002 10.0.0.2:53000 cubic wscale:7:7 rtt:1/0.1 delivery_rate 20000000bps rcv_space:262144 skmem:(r0,rb425984,t0,tb425984,d0)");
+
+  assert.equal(byId(hypotheses, "tcp-window-scale-context"), undefined);
+});
+
 test("diagnostics marks receiver-side zero window as critical when rcv_wnd is zero", () => {
   const hypotheses = diagnose("ESTAB 700000 0 10.0.0.1:9200 10.0.0.2:443 users:((\"java\",pid=42,fd=9)) skmem:(r690000,rb700000,t0,tb100,w0,d0) rcv_space:0 rcv_wnd:0 rto:200 rtt:1/0.1 cwnd:20");
 

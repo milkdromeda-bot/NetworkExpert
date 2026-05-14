@@ -59,7 +59,7 @@ export function parseDetails(text) {
   const users = text.match(/users:\(\("([^"]+)",pid=(\d+),fd=(\d+)/);
   if (users) details.process = { name: users[1], pid: Number(users[2]), fd: Number(users[3]) };
 
-  const wscale = text.match(/wscale:(\d+):(\d+)/);
+  const wscale = text.match(/wscale:(\d+)[:,](\d+)/);
   if (wscale) details.values.wscale = { send: Number(wscale[1]), receive: Number(wscale[2]) };
   const rtt = text.match(/rtt:([\d.]+)\/([\d.]+)/);
   if (rtt) details.values.rtt = { avg: Number(rtt[1]), var: Number(rtt[2]) };

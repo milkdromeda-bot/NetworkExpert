@@ -50,7 +50,7 @@ export const SS_OPTIONS = [
 
 export const FIELD_DOCS = {
   ato: "ACK timeout in ms, useful for delayed ACK analysis. High values may accompany application latency.",
-  wscale: "Send/receive window scaling factors. Asymmetric values can limit throughput by direction.",
+  wscale: "TCP Window Scale factors from ss -i: wscale:<snd_wscale>:<rcv_wscale>. Negotiated at handshake; suspicious only with BDP, rcv_space, or path context.",
   rto: "TCP retransmission timeout in ms. High or rising values suggest loss, latency, congestion, or an unstable path.",
   backoff: "Backoff exponent; effective RTO = rto << backoff. Any non-zero backoff deserves attention.",
   rtt: "Average round-trip time and deviation in ms. Core latency diagnostic.",
@@ -82,7 +82,7 @@ export const FIELD_GUIDANCE = {
     metric: "ato"
   },
   wscale: {
-    typical: "Usually negotiated between 0 and 14. Pairs such as 7:7 or 8:9 are common on high-throughput paths."
+    typical: "Usually negotiated between 0 and 14 and stable for the session. First value is Linux snd_wscale; second is rcv_wscale. Interpret with BDP, rcv_space, rwnd_limited, and handshake evidence."
   },
   rto: {
     typical: "Often a few hundred ms on healthy paths, but it is intentionally path and jitter dependent.",

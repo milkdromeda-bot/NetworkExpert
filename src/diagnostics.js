@@ -1,4 +1,5 @@
 import { metricValue } from "./parser.js";
+import { analyzeWscaleContext } from "./wscale-analysis.js";
 
 const SEVERITY_SCORE = { low: 1, medium: 2, high: 3, critical: 4 };
 const CONFIDENCE_SCORE = { low: 1, medium: 2, high: 3 };
@@ -221,6 +222,8 @@ export function buildDiagnosticHypotheses({
   const retransGrowth = historyMetricGrowth(history, "retrans");
   const receiverLimited = withMetrics.filter(({ metrics }) => isReceiverWindowLimited(metrics));
   const networkCongestion = withMetrics.filter(({ metrics }) => isNetworkCongestionPattern(metrics, rtoWarn, cwndWarn));
+  const wscaleAnalyses = withMetrics.map(({ socket }) => analyzeWscaleContext(socket, { history }));
+  const wscaleWarnings = wscaleAnalyses.filter(item => item.status === "warning");
   const blackhole = withMetrics.filter(({ metrics }) =>
     metrics.backoff >= 6 || metrics.rto >= rtoDanger && metrics.retrans >= 3 && !isReceiverWindowLimited(metrics)
   );
@@ -229,6 +232,25 @@ export function buildDiagnosticHypotheses({
   const closeWait = sockets.filter(socket => socket.state === "CLOSE-WAIT");
   const timeWait = sockets.filter(socket => socket.state === "TIME-WAIT");
   const hypotheses = [];
+
+  if (wscaleWarnings.length) {
+    hypotheses.push(makeHypothesis({
+      id: "tcp-window-scale-context",
+      title: "TCP window scaling deserves validation",
+      category: "tcp-flow-control",
+      severity: "medium",
+      confidence: "medium",
+      summary: "wscale is handshake context, not a root cause by itself. The current evidence suggests validating TCP Window Scale against BDP, receive-window pressure, and the SYN/SYN-ACK capture before blaming the network.",
+      sockets: wscaleWarnings.map(item => item.socket),
+      evidence: wscaleWarnings.flatMap(item => item.evidence),
+      counterEvidence: [
+        ...wscaleWarnings.flatMap(item => item.counterEvidence),
+        "This diagnostic is capped at warning level: wscale alone never creates a critical anomaly."
+      ],
+      learnMore: wscaleWarnings.flatMap(item => item.learnMore),
+      commands: wscaleWarnings.flatMap(item => item.commands)
+    }));
+  }
 
   if (localReceiveWindowCollapse.length) {
     const affected = localReceiveWindowCollapse.map(item => item.socket);
