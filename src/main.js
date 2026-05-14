@@ -6686,6 +6686,7 @@ function bindEvents() {
     if (action === "openChecklistCharts") {
       const preset = event.currentTarget.dataset.dashboardPresetJump;
       state.view = "charts";
+      state.chartsTab = "charts";
       if (preset) applyDashboardPreset(preset);
       renderKeepingWorkspacePosition();
     }
@@ -7021,7 +7022,18 @@ function bindEvents() {
       toast("Topology group deleted", "This recording topology was updated.");
       render();
     }
-    if (action === "closeDrawer") { state.drawer = null; render(); }
+    if (action === "closeDrawer") {
+      const wasThresholds = state.drawer === "thresholds";
+      state.drawer = null;
+      if (wasThresholds && state.view === "charts") {
+        const drawerEl = document.querySelector(".drawer-overlay, .drawer");
+        if (drawerEl) drawerEl.remove();
+        const backdrop = document.querySelector(".drawer-backdrop");
+        if (backdrop) backdrop.remove();
+      } else {
+        render();
+      }
+    }
     if (action === "closeModal") { state.modal = null; state.helpColumn = null; state.annotationContext = null; render(); }
     if (action === "savePrefs") {
       state.prefs.severityFloor = document.querySelector("#prefSeverity")?.value || state.prefs.severityFloor;
