@@ -143,6 +143,7 @@ let state = {
   activeTab: "sockets",
   chartsTab: "charts",
   openStyleMenu: false,
+  editorWordWrap: false,
   anomalyFilters: { severity: "all", metric: "all", text: "", sort: "priority" },
   prefsTab: "display",
   drawer: null,
@@ -209,7 +210,7 @@ applyDefaultDashboardPreset();
 
 const icons = {
   activity: `<i class="ri-pulse-line"></i>`,
-  settings: `<i class="ri-equalizer-3-line"></i>`,
+  settings: `<i class="ri-settings-3-line"></i>`,
   book: `<i class="ri-book-open-line"></i>`,
   upload: `<i class="ri-folder-open-line"></i>`,
   load: `<i class="ri-folder-open-line"></i>`,
@@ -2223,6 +2224,33 @@ function scheduleAnomalyBadgeSettle() {
   }, remaining);
 }
 
+let cmInstance = null;
+function initCodeMirror() {
+  const container = document.querySelector("#cmContainer");
+  if (!container || !window.CodeMirror) return;
+  if (container.querySelector(".CodeMirror")) return;
+  cmInstance = CodeMirror(container, {
+    value: state.raw || "",
+    mode: "ss",
+    theme: "default",
+    lineNumbers: true,
+    lineWrapping: state.editorWordWrap,
+    readOnly: false,
+    placeholder: "Paste ss output or a timestamped collection here...",
+    extraKeys: {
+      "Ctrl-F": "findPersistent",
+      "Cmd-F": "findPersistent",
+      "Ctrl-G": "jumpToLine",
+      "Cmd-G": "jumpToLine"
+    }
+  });
+  cmInstance.on("change", () => { state.raw = cmInstance.getValue(); });
+  cmInstance.setSize("100%", "clamp(360px, 58vh, 620px)");
+}
+function syncFromCodeMirror() {
+  if (cmInstance) state.raw = cmInstance.getValue();
+}
+
 function render() {
   hideAppServiceTooltip();
   if (state.analysisDirty) recompute();
@@ -2230,13 +2258,6 @@ function render() {
   const app = document.querySelector("#app");
   app.innerHTML = html`
     <div class="app-shell view-${state.view}">
-      <nav class="rail">
-        <button class="icon ${state.view === "ingest" ? "primary" : ""}" data-view="ingest" title="Import">${icons.upload}</button>
-        <button class="icon ${state.view === "analysis" ? "primary" : ""}" data-view="analysis" title="Analyze">${icons.play}</button>
-        <button class="icon ${state.view === "charts" ? "primary" : ""}" data-view="charts" title="Charts">${icons.chart}</button>
-        <button class="icon" data-action="guide" title="Guide">${icons.book}</button>
-        <button class="icon" data-action="prefs" title="Preferences">${icons.settings}</button>
-      </nav>
       <header class="topbar">
         <div class="title">
           <div class="brand tcp-brand" title="TCP packets travelling between peers">
@@ -2271,7 +2292,8 @@ function render() {
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
-          ${state.sockets.length ? `<button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace">${icons.resetWorkspace}<span>Reset workspace</span></button>` : ""}
+          ${state.view !== "ingest" ? `<button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace">${icons.resetWorkspace}<span>Reset workspace</span></button>` : ""}
+          <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>
         </div>
       </header>
       ${state.view !== "charts" ? renderInvestigationContext() : ""}
@@ -2293,6 +2315,7 @@ function render() {
     ${renderModal()}
   `;
   bindEvents();
+  initCodeMirror();
   if (state.view === "charts") {
     drawChart();
     scheduleMultiChartDraw();
@@ -2709,6 +2732,7 @@ function renderIngestPage() {
           <button data-action="togglePreImportFilters" class="${activePanel === "filter" ? "primary" : ""}"><i class="ri-filter-3-line"></i> Filters</button>
           <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> Capture</button>
           <span class="ingest-toolbar-spacer"></span>
+          <button data-action="toggleWordWrap" class="${state.editorWordWrap ? "primary" : ""}" title="Toggle word wrap"><i class="ri-text-wrap"></i> Wrap</button>
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
           <button class="primary" data-action="parse"><i class="ri-play-line"></i> Analyze</button>
         </div>
@@ -2731,7 +2755,20 @@ function renderIngestPage() {
           </div>
         </div>` : ""}
         ${shouldEagerRenderIngestRaw()
-          ? `<textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>`
+          ? `<div class="cm-search-hints">
+              <span>Quick find:</span>
+              <button data-cm-search="ESTAB">ESTAB</button>
+              <button data-cm-search="CLOSE-WAIT">CLOSE-WAIT</button>
+              <button data-cm-search="TIME-WAIT">TIME-WAIT</button>
+              <button data-cm-search="backoff">backoff</button>
+              <button data-cm-search="retrans">retrans</button>
+              <button data-cm-search="skmem">skmem</button>
+              <button data-cm-search="rtt:">rtt:</button>
+              <button data-cm-search="rto:">rto:</button>
+              <button data-cm-search="cwnd:">cwnd:</button>
+              <button data-cm-search="drops">d[1-9]</button>
+            </div>
+            <div id="cmContainer" class="cm-container"></div>`
           : renderIngestRawPreview()}
       </div>
     </section>
@@ -6507,6 +6544,17 @@ function bindEvents() {
       render();
     });
   });
+  document.querySelectorAll("[data-cm-search]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (!cmInstance) return;
+      const query = btn.dataset.cmSearch;
+      cmInstance.execCommand("findPersistent");
+      setTimeout(() => {
+        const input = document.querySelector(".cm-container .CodeMirror-dialog input");
+        if (input) { input.value = query; input.dispatchEvent(new Event("input")); input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13 })); }
+      }, 50);
+    });
+  });
   document.querySelectorAll("[data-style-toggle]").forEach(btn => {
     btn.addEventListener("click", event => {
       event.stopPropagation();
@@ -6537,7 +6585,7 @@ function bindEvents() {
     const action = event.currentTarget.dataset.action;
     if (action === "parse") {
       const rawInput = document.querySelector("#rawInput");
-      state.raw = rawInput ? rawInput.value : state.raw;
+      state.raw = rawInput ? rawInput.value : (cmInstance ? cmInstance.getValue() : state.raw);
       setActiveInvestigation(state, null);
       resetDerivedCaches({ raw: true });
       recompute();
@@ -6563,6 +6611,10 @@ function bindEvents() {
     if (action === "togglePreImportFilters") {
       state.showPreImportFilters = !state.showPreImportFilters;
       renderKeepingWorkspacePosition();
+    }
+    if (action === "toggleWordWrap") {
+      state.editorWordWrap = !state.editorWordWrap;
+      if (cmInstance) cmInstance.setOption("lineWrapping", state.editorWordWrap);
     }
     if (action === "showRawInput") {
       state.ingestRawExpanded = true;
