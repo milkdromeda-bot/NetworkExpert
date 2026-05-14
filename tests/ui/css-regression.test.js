@@ -135,6 +135,14 @@ test("deep analysis control is rendered as an explicit on off switch", () => {
   assert.match(css, /@media \(max-width:\s*1180px\)[\s\S]*\.analysis-layout \.toolbar\s*\{[^}]*flex-wrap:\s*wrap;/s);
 });
 
+test("analysis conversation stack keeps vertical gaps compact", () => {
+  assert.match(css, /\.analysis-layout \.panel-body\s*\{[^}]*padding-block:\s*10px;/s);
+  assert.match(css, /\.analysis-layout \.grid-controls-shell\s*\{[^}]*padding-bottom:\s*8px;/s);
+  assert.match(css, /\.analysis-layout \.grid-controls\s*\{[^}]*row-gap:\s*8px;/s);
+  assert.match(css, /\.expert-strip\s*\{[^}]*column-gap:\s*8px;[^}]*row-gap:\s*6px;[^}]*margin-bottom:\s*8px;/s);
+  assert.match(css, /\.conversation-workbench,\s*\.expert-workbench,\s*\.timeline-workbench\s*\{[^}]*gap:\s*8px;/s);
+});
+
 test("BDP window module exposes cautious controls and bounded charts", () => {
   assert.match(main, /import \{ analyzeBdpWindowLimit \} from "\.\/bdp-window-analysis\.js";/);
   assert.match(main, /function renderBdpWindowPanel\(\)/);

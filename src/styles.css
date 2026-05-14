@@ -1765,6 +1765,9 @@ button.mega i {
   transform: translateX(16px);
 }
 .panel-body { min-width: 0; padding: 12px; }
+.analysis-layout .panel-body {
+  padding-block: 10px;
+}
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .table-wrap { overflow: auto; max-height: 460px; }
 .table-wrap--settings { position: relative; }
@@ -1788,11 +1791,17 @@ tr:hover, tr.selected { background: #101a27; }
   padding: 0 0 10px;
   background: rgba(11, 16, 24, 0.96);
 }
+.analysis-layout .grid-controls-shell {
+  padding-bottom: 8px;
+}
 .grid-controls {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 10px;
   align-items: stretch;
+}
+.analysis-layout .grid-controls {
+  row-gap: 8px;
 }
 .grid-controls input,
 .grid-controls select {
@@ -3051,8 +3060,9 @@ th:focus-within .column-tooltip,
 .expert-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
+  column-gap: 8px;
+  row-gap: 6px;
+  margin-bottom: 8px;
 }
 .expert-strip article {
   display: grid;
@@ -3079,7 +3089,7 @@ th:focus-within .column-tooltip,
 .expert-workbench,
 .timeline-workbench {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .flow-cell {
   display: inline-grid;
