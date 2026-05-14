@@ -2271,7 +2271,7 @@ function render() {
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
-          <button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace">${icons.resetWorkspace}<span>Reset workspace</span></button>
+          ${state.sockets.length ? `<button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace">${icons.resetWorkspace}<span>Reset workspace</span></button>` : ""}
         </div>
       </header>
       ${state.view !== "charts" ? renderInvestigationContext() : ""}
@@ -2687,66 +2687,53 @@ function renderIngestPage() {
   const best = ["-H", "-O", "-n", "-t", "-e", "-p", "-m", "-i", "--tos", "--cgroup", "--inet-sockopt", "-a", "-A"];
   const featuredOptions = SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1]));
   const selectedOption = selectedSsOption(featuredOptions, active);
+  const activePanel = state.showPreImportFilters ? "filter" : state.showSsOptions ? "capture" : null;
   return html`
     <section class="ingest-hero">
       <div>
         <h2>Import an ss collection</h2>
         <p>Paste captured output or open a file. Analysis reads the text exactly as captured.</p>
       </div>
-      <div class="hero-actions">
-        <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
-        <button class="mega primary" data-action="pickFile">${icons.upload} Open ss file</button>
-        <button class="mega" data-action="parse">${icons.play} Parse now</button>
-      </div>
     </section>
-    <section class="ingest-grid ${state.showSsOptions ? "options-open" : ""}">
-      <div class="panel">
-        <div class="panel-head ingest-source-head">
-          <div class="ingest-head-main">
-            <div class="panel-title">ss stats to parse</div>
-            ${renderImportStatus()}
-          </div>
-          <div class="ingest-quick-filters">
-            <button data-action="togglePreImportFilters" class="${state.showPreImportFilters ? "primary" : ""}" title="Filter by protocol, state, IP, port"><i class="ri-filter-3-line"></i> Filter</button>
-            <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}" title="Build ss capture command"><i class="ri-command-line"></i> Capture</button>
-            <button data-action="pickFile" title="Open ss file from disk"><i class="ri-folder-open-line"></i> Open file</button>
-            <button data-action="sample10m" title="Load a 10-minute sample"><i class="ri-flask-line"></i> Sample</button>
-            <button data-action="parse" class="primary" title="Analyze pasted text"><i class="ri-play-line"></i> Analyze</button>
-          </div>
-          <span class="status-pill">${escapeHtml(state.sourceName)}</span>
-        </div>
-        <div class="panel-body">
-          ${shouldEagerRenderIngestRaw()
-            ? `<textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>`
-            : renderIngestRawPreview()}
-          <div class="toolbar import-actions" style="margin-top:10px">
-            <button data-action="clear" class="clear-input-button" title="Empty the ss text input only">${icons.clear}<span>Clear input</span></button>
-          </div>
-          <p class="hint">The file is read locally by the browser. For large logs, use the Analysis page: pagination, filters, sorting, columns, and grouping.</p>
-          ${state.showPreImportFilters ? renderPreImportFilters() : ""}
-        </div>
+    <section class="panel">
+      <div class="panel-head">
+        <div class="panel-title">ss stats to parse</div>
+        ${renderImportStatus()}
+        <span class="status-pill">${escapeHtml(state.sourceName)}</span>
       </div>
-      ${state.showSsOptions ? `<div class="panel ss-options-panel">
-        <div class="panel-head"><div class="panel-title">Capture command builder</div></div>
-        <div class="panel-body">
+      <div class="panel-body">
+        <div class="ingest-toolbar">
+          <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
+          <button data-action="pickFile"><i class="ri-folder-open-line"></i> Open file</button>
+          <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
+          <button data-action="togglePreImportFilters" class="${activePanel === "filter" ? "primary" : ""}"><i class="ri-filter-3-line"></i> Filters</button>
+          <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> Capture</button>
+          <span class="ingest-toolbar-spacer"></span>
+          <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
+          <button class="primary" data-action="parse"><i class="ri-play-line"></i> Analyze</button>
+        </div>
+        ${activePanel === "filter" ? `<div class="ingest-expand-panel">${renderPreImportFilters()}</div>` : ""}
+        ${activePanel === "capture" ? `<div class="ingest-expand-panel">
           <div class="capture-flow-card">
             <strong><i class="ri-route-line"></i> Collection first, parsing second</strong>
-            <span>These checkboxes only build the <code>ss</code> command used before import. <b>Analyze pasted text</b> parses the text already in the box; it does not re-run <code>ss</code> or reinterpret missing fields.</span>
+            <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
           </div>
           <div class="command-row">
             <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
-            <button class="primary" data-action="applyCommand" title="Apply capture command"><i class="ri-check-line"></i> Apply command</button>
+            <button class="primary" data-action="applyCommand" title="Apply"><i class="ri-check-line"></i> Apply</button>
           </div>
           <div class="chips">${active.map(renderSsOptionChip).join("") || `<span class="chip">no option detected</span>`}</div>
-          <p class="hint">Compact flags such as ss -plunt are decomposed option by option. If an option was not used when collecting, the corresponding metrics may simply be absent from the pasted data.</p>
           <div class="ss-option-card-layout">
             <div class="option-grid" aria-label="ss option toggles">
               ${featuredOptions.map(option => renderSsOptionControl(option, coverage, selectedOption?.key)).join("")}
             </div>
             ${selectedOption ? renderSsOptionDetail(selectedOption) : ""}
           </div>
-        </div>
-      </div>` : ""}
+        </div>` : ""}
+        ${shouldEagerRenderIngestRaw()
+          ? `<textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>`
+          : renderIngestRawPreview()}
+      </div>
     </section>
   `;
 }
@@ -4338,11 +4325,11 @@ function renderPreImportFilters() {
           <option value="">all states</option>
           ${["ESTAB", "LISTEN", "UNCONN", "SYN-SENT", "SYN-RECV", "TIME-WAIT", "CLOSE-WAIT", "FIN-WAIT-1", "FIN-WAIT-2"].map(value => `<option value="${value}" ${f.state === value ? "selected" : ""}>${value}</option>`).join("")}
         </select></label>
-        <input id="preAnyPort" list="histAnyPort" placeholder="any port equals, comma separated" value="${escapeHtml(f.anyPort)}" />
-        <input id="preSrcIp" list="histSrcIp" placeholder="source IP contains" value="${escapeHtml(f.srcIp)}" />
-        <input id="preDstIp" list="histDstIp" placeholder="destination IP contains" value="${escapeHtml(f.dstIp)}" />
-        <input id="preSrcPort" list="histSrcPort" placeholder="source port equals" value="${escapeHtml(f.srcPort)}" />
-        <input id="preDstPort" list="histDstPort" placeholder="destination port equals" value="${escapeHtml(f.dstPort)}" />
+        <label>Any port<input id="preAnyPort" list="histAnyPort" placeholder="comma separated" value="${escapeHtml(f.anyPort)}" /></label>
+        <label>Source IP<input id="preSrcIp" list="histSrcIp" placeholder="contains" value="${escapeHtml(f.srcIp)}" /></label>
+        <label>Dest IP<input id="preDstIp" list="histDstIp" placeholder="contains" value="${escapeHtml(f.dstIp)}" /></label>
+        <label>Source port<input id="preSrcPort" list="histSrcPort" placeholder="equals" value="${escapeHtml(f.srcPort)}" /></label>
+        <label>Dest port<input id="preDstPort" list="histDstPort" placeholder="equals" value="${escapeHtml(f.dstPort)}" /></label>
       </div>
       ${renderDatalist("histAnyPort", [...h.map(x => x.anyPort), ...h.map(x => x.srcPort), ...h.map(x => x.dstPort)])}
       ${renderDatalist("histSrcIp", h.map(x => x.srcIp))}

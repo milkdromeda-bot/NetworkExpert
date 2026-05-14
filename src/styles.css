@@ -906,6 +906,30 @@ button.mega i {
   gap: 14px;
   align-items: start;
 }
+.ingest-two-col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.ingest-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.ingest-toolbar-spacer { flex: 1; }
+.ingest-expand-panel {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+  max-width: fit-content;
+}
 .ingest-grid > .panel {
   min-width: 0;
   overflow: hidden;
@@ -5137,8 +5161,8 @@ th:focus-within .column-tooltip,
   gap: 10px;
 }
 .preimport-presets {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .preimport-presets button {
@@ -5146,7 +5170,8 @@ th:focus-within .column-tooltip,
   gap: 3px;
   justify-items: start;
   text-align: left;
-  min-height: 58px;
+  min-height: 48px;
+  max-width: 220px;
 }
 .preimport-presets button span {
   color: var(--muted);
@@ -5155,8 +5180,22 @@ th:focus-within .column-tooltip,
 }
 .preimport-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 220px));
   gap: 10px;
+}
+.preimport-grid label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.preimport-grid input,
+.preimport-grid select {
+  min-height: 34px;
+  font-size: 13px;
 }
 .pref-grid label {
   display: grid;

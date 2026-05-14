@@ -30,12 +30,9 @@ test("application service chip tooltip stays viewport-safe and truncates labels"
 
 test("import progress is shown in the ss stats header while loading", () => {
   assert.match(main, /function renderImportStatus\(\)/);
-  assert.match(main, /<div class="panel-head ingest-source-head">[\s\S]*?<div class="panel-title">ss stats to parse<\/div>[\s\S]*?\$\{renderImportStatus\(\)\}/);
-  assert.doesNotMatch(main, /<p class="hint">The file is read locally[\s\S]*?\$\{state\.importStatus/);
-  assert.match(css, /\.ingest-head-main\s*\{[^}]*display:\s*flex;/s);
+  assert.match(main, /<div class="panel-head">[\s\S]*?<div class="panel-title">ss stats to parse<\/div>[\s\S]*?\$\{renderImportStatus\(\)\}/);
   assert.match(css, /\.import-status\s*\{[^}]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.import-status span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
-  assert.match(css, /@media \(max-width:\s*760px\)\s*\{[\s\S]*?\.ingest-source-head\s*\{[^}]*flex-direction:\s*column;/s);
 });
 
 test("topbar anomaly pill uses a compact warning icon", () => {
@@ -47,7 +44,7 @@ test("topbar anomaly pill uses a compact warning icon", () => {
 });
 
 test("clear input and reset workspace actions are visually distinct", () => {
-  assert.match(main, /data-action="clear" class="clear-input-button"[^>]*>[\s\S]*Clear input/);
+  assert.match(main, /data-action="clear" class="clear-input-button"[^>]*>[\s\S]*Clear/);
   assert.match(main, /data-action="requestResetWorkspace"[^>]*>[\s\S]*Reset workspace/);
   assert.match(main, /action === "requestResetWorkspace"[\s\S]*state\.modal = "resetWorkspace"/);
   assert.match(main, /action === "confirmResetWorkspace"[\s\S]*resetAllState\(\)/);
