@@ -54,3 +54,14 @@ test("clear input and reset workspace actions are visually distinct", () => {
   assert.match(css, /\.reset-workspace-modal\s*\{/);
   assert.match(css, /\.reset-workspace-actions\s*\{[^}]*justify-content:\s*flex-end;/s);
 });
+
+test("product splash is opened from the version badge and stays bounded", () => {
+  assert.match(main, /const APP_VERSION = "1\.0\.0\.0";/);
+  assert.match(main, /const APP_SPLASH_IMAGE = "\.\/images\/ultimateNetworkExpert\.png";/);
+  assert.match(main, /class="version-pill"[^>]*data-action="showSplash"[\s\S]*v\$\{escapeHtml\(APP_VERSION\)\}/);
+  assert.match(main, /action === "showSplash"[\s\S]*state\.modal = "splash"/);
+  assert.match(css, /\.version-pill\s*\{[^}]*max-width:\s*96px;/s);
+  assert.match(css, /\.modal\.splash\s*\{[^}]*width:\s*min\(940px,\s*calc\(100vw - 30px\)\);/s);
+  assert.match(css, /\.splash-art img\s*\{[^}]*width:\s*100%;[^}]*max-height:\s*min\(62vh,\s*620px\);[^}]*object-fit:\s*contain;/s);
+  assert.match(css, /\.splash-meta p\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+});

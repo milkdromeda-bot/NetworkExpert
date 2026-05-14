@@ -53,6 +53,8 @@ const dateTimeFormatterCache = new Map();
 const numberFormatterCache = new Map();
 const numberSeparatorCache = new Map();
 const BROWSER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+const APP_VERSION = "1.0.0.0";
+const APP_SPLASH_IMAGE = "./images/ultimateNetworkExpert.png";
 
 function defaultTableColumns() {
   return [...DEFAULT_TABLE_VISIBLE_COLUMNS];
@@ -2270,6 +2272,7 @@ function render() {
           <div>
             <h1>
               Ultimate Network Expert
+              <button class="version-pill" data-action="showSplash" title="Show product splash screen and version" aria-label="Show Ultimate Network Expert version">v${escapeHtml(APP_VERSION)}</button>
               <span class="app-title-info" tabindex="0" aria-label="Application details">
                 <i class="ri-information-line"></i>
                 <span class="app-title-tooltip" role="tooltip">
@@ -4330,7 +4333,9 @@ function modalView() {
     chartStats,
     formatNumber,
     renderPercentileDistribution,
-    renderDatalist
+    renderDatalist,
+    appVersion: APP_VERSION,
+    splashImageUrl: APP_SPLASH_IMAGE
   });
 }
 
@@ -6725,6 +6730,10 @@ function bindEvents() {
     }
     if (action === "requestResetWorkspace") {
       state.modal = "resetWorkspace";
+      render();
+    }
+    if (action === "showSplash") {
+      state.modal = "splash";
       render();
     }
     if (action === "confirmResetWorkspace") {

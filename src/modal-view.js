@@ -42,7 +42,9 @@ export function createModalView(context) {
     chartStats,
     formatNumber,
     renderPercentileDistribution,
-    renderDatalist
+    renderDatalist,
+    appVersion = "1.0.0.0",
+    splashImageUrl = "./images/ultimateNetworkExpert.png"
   } = context;
 
   function serviceAliasEndpointOptions() {
@@ -214,6 +216,41 @@ export function createModalView(context) {
       </article>
     </div>`;
   }
+
+  function renderResetWorkspaceModal() {
+    return `<div class="reset-workspace-modal">
+      <div class="reset-workspace-hero">
+        <span class="reset-workspace-icon">${icons.resetWorkspace || icons.reset || icons.trash}</span>
+        <div>
+          <strong>Start from a clean workspace?</strong>
+          <p>This clears imported sockets, anomalies, filters, zoom, charts selection, current investigation, and temporary UI state.</p>
+        </div>
+      </div>
+      <div class="reset-workspace-keep">
+        <strong>Kept</strong>
+        <span>Saved preferences, thresholds, labels, service classifications, and topology rules stay available.</span>
+      </div>
+      <div class="modal-actions reset-workspace-actions">
+        <button data-action="closeModal">Cancel</button>
+        <button class="danger" data-action="confirmResetWorkspace">${icons.resetWorkspace || icons.reset || icons.trash}<span>Reset workspace</span></button>
+      </div>
+    </div>`;
+  }
+
+  function renderSplashModal() {
+    return `<div class="splash-modal">
+      <figure class="splash-art">
+        <img src="${escapeHtml(splashImageUrl)}" alt="Ultimate Network Expert splash screen" loading="lazy" />
+      </figure>
+      <section class="splash-meta">
+        <div>
+          <span>Product version</span>
+          <strong>v${escapeHtml(appVersion)}</strong>
+        </div>
+        <p>Ultimate Network Expert turns Linux <code>ss</code> evidence into socket diagnostics, timelines, conversations, and actionable network hypotheses.</p>
+      </section>
+    </div>`;
+  }
   
   function renderModal() {
     const modalTitle = state.modal === "columns" ? "Columns and order"
@@ -226,6 +263,8 @@ export function createModalView(context) {
                   : state.modal === "serviceOverride" ? "Service classification"
                     : state.modal === "topology" ? "Recording topology"
                       : state.modal === "annotation" ? "Annotations"
+                        : state.modal === "resetWorkspace" ? "Reset workspace"
+                        : state.modal === "splash" ? "Ultimate Network Expert"
                         : "ss field documentation";
     const modalBody = state.modal === "columns" ? renderColumnChooser()
       : state.modal === "thresholds" ? renderThresholdConfig()
@@ -237,6 +276,8 @@ export function createModalView(context) {
                   : state.modal === "serviceOverride" ? renderServiceOverrideModal()
                     : state.modal === "topology" ? renderTopologyModal()
                       : state.modal === "annotation" ? renderAnnotationModal()
+                        : state.modal === "resetWorkspace" ? renderResetWorkspaceModal()
+                        : state.modal === "splash" ? renderSplashModal()
                         : renderFields();
     return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
       <section class="modal ${state.modal || ""}">

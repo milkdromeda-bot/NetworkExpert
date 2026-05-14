@@ -334,3 +334,69 @@ test("modal view renders reset workspace confirmation", () => {
   assert.match(modal, /data-action="confirmResetWorkspace"/);
   assert.match(modal, /Saved preferences, thresholds, labels, service classifications, and topology rules stay available/);
 });
+
+test("modal view renders product splash with version", () => {
+  const state = {
+    modal: "splash",
+    serviceAliases: {},
+    aliasEditKey: "",
+    aliasEditScope: "source",
+    sourceName: "capture-a",
+    topology: { groups: [] },
+    topologyDraftMatch: "",
+    topologyEditId: ""
+  };
+  const view = createModalView({
+    state,
+    html,
+    icons,
+    escapeHtml,
+    sortedFilteredSockets: () => [],
+    aliasForEndpoint: () => null,
+    aliasListForSource: () => [],
+    normalizeAliasStore: store => store,
+    currentApplicationService: () => null,
+    inferredApplicationService: () => null,
+    serviceOverrideForSocket: () => null,
+    topologyScopeKey: sourceName => sourceName,
+    topologyGroupForEndpoint: () => null,
+    selectedSocket: () => null,
+    renderSocketDetail: () => "",
+    renderPrefs: () => "",
+    renderGuide: () => "",
+    renderThresholdConfig: () => "",
+    renderTableSettingsDrawer: () => "",
+    metricLabel: metric => metric,
+    renderColumnChooser: () => "",
+    renderLayoutPrefs: () => "",
+    renderPreImportFilters: () => "",
+    renderFields: () => "",
+    getColumn: key => ({ key, label: key }),
+    columnHelp: () => ({ summary: "", detail: "", use: "", metric: null, threshold: null }),
+    renderThresholdSummary: () => "",
+    expertDefaultThresholds: EXPERT_DEFAULT_THRESHOLDS,
+    annotationSocketId: () => "",
+    currentSourceAnnotations: () => [],
+    visibleHistory: () => [],
+    annotationTypeList: () => [],
+    buildAnnotationDraft: () => ({}),
+    timeLabel: () => "now",
+    annotationAnchorOptions: () => [],
+    annotationMetricChoices: () => [],
+    formatMetricValue: (metric, value) => `${metric}:${value}`,
+    annotationDefaultLabel: () => "",
+    annotationTypeLabel: value => value,
+    chartStats: () => ({ count: 0 }),
+    formatNumber: String,
+    renderPercentileDistribution: () => "",
+    renderDatalist: () => "",
+    appVersion: "1.0.0.0",
+    splashImageUrl: "./images/ultimateNetworkExpert.png"
+  });
+
+  const modal = view.renderModal();
+  assert.match(modal, /Ultimate Network Expert/);
+  assert.match(modal, /src="\.\/images\/ultimateNetworkExpert\.png"/);
+  assert.match(modal, /v1\.0\.0\.0/);
+  assert.match(modal, /class="splash-modal"/);
+});
