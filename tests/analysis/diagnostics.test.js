@@ -99,6 +99,33 @@ test("diagnostics does not create a wscale anomaly when normal scaling is presen
   assert.equal(byId(hypotheses, "tcp-window-scale-context"), undefined);
 });
 
+test("diagnostics adds receive autotuning hypothesis from multi-snapshot rcv_ssthresh decline", () => {
+  const sockets = socketsFrom("ESTAB 300000 0 10.0.0.1:20002 10.0.0.2:53000 timer:(persist,3sec,2) cubic rcv_ssthresh:375680 rcv_space:2048 rtt:1/0.1 skmem:(r390000,rb400000,t0,tb425984,d0)");
+  const [socket] = sockets;
+  const hypotheses = buildDiagnosticHypotheses({
+    sockets,
+    anomalies: analyzeAll(sockets),
+    history: [
+      { socketId: socket.id, epochMs: 1000, rcv_ssthresh: 798320, rcv_space: 65536, recvQ: 20000, "skmem.r": 100000, "skmem.rb": 400000 },
+      { socketId: socket.id, epochMs: 3_121_000, rcv_ssthresh: 375680, rcv_space: 2048, recvQ: 300000, "skmem.r": 390000, "skmem.rb": 400000, timerName: "persist" }
+    ],
+    thresholds
+  });
+
+  const receiveSsthresh = byId(hypotheses, "tcp-receive-ssthresh-trend");
+
+  assert.equal(receiveSsthresh.severity, "high");
+  assert.match(receiveSsthresh.summary, /slow-consumer/i);
+  assert.equal(receiveSsthresh.evidence.some(item => item.includes("52.9%")), true);
+  assert.equal(receiveSsthresh.counterEvidence.some(item => item.includes("single rcv_ssthresh sample")), true);
+});
+
+test("diagnostics does not alert on a single rcv_ssthresh sample", () => {
+  const hypotheses = diagnose("ESTAB 0 0 10.0.0.1:20002 10.0.0.2:53000 cubic rcv_ssthresh:375680 rcv_space:262144 rtt:1/0.1 skmem:(r0,rb400000,t0,tb425984,d0)");
+
+  assert.equal(byId(hypotheses, "tcp-receive-ssthresh-trend"), undefined);
+});
+
 test("diagnostics marks receiver-side zero window as critical when rcv_wnd is zero", () => {
   const hypotheses = diagnose("ESTAB 700000 0 10.0.0.1:9200 10.0.0.2:443 users:((\"java\",pid=42,fd=9)) skmem:(r690000,rb700000,t0,tb100,w0,d0) rcv_space:0 rcv_wnd:0 rto:200 rtt:1/0.1 cwnd:20");
 

@@ -1,4 +1,5 @@
 import { metricValue } from "./parser.js";
+import { analyzeRcvSsthreshTrend } from "./rcv-ssthresh-analysis.js";
 import { analyzeWscaleContext } from "./wscale-analysis.js";
 
 const SEVERITY_SCORE = { low: 1, medium: 2, high: 3, critical: 4 };
@@ -224,6 +225,8 @@ export function buildDiagnosticHypotheses({
   const networkCongestion = withMetrics.filter(({ metrics }) => isNetworkCongestionPattern(metrics, rtoWarn, cwndWarn));
   const wscaleAnalyses = withMetrics.map(({ socket }) => analyzeWscaleContext(socket, { history }));
   const wscaleWarnings = wscaleAnalyses.filter(item => item.status === "warning");
+  const rcvSsthreshAnalyses = withMetrics.map(({ socket }) => analyzeRcvSsthreshTrend(socket, { history, recvWarn }));
+  const rcvSsthreshWarnings = rcvSsthreshAnalyses.filter(item => item.status === "warning");
   const blackhole = withMetrics.filter(({ metrics }) =>
     metrics.backoff >= 6 || metrics.rto >= rtoDanger && metrics.retrans >= 3 && !isReceiverWindowLimited(metrics)
   );
@@ -249,6 +252,33 @@ export function buildDiagnosticHypotheses({
       ],
       learnMore: wscaleWarnings.flatMap(item => item.learnMore),
       commands: wscaleWarnings.flatMap(item => item.commands)
+    }));
+  }
+
+  if (rcvSsthreshWarnings.length) {
+    const top = rcvSsthreshWarnings.reduce((best, item) => item.score > (best?.score || 0) ? item : best, null);
+    const strongSlowConsumer = rcvSsthreshWarnings.some(item => item.hypothesis === "slow-consumer-suspected");
+    const ambiguousPath = rcvSsthreshWarnings.some(item => item.hypothesis === "network-or-receiver-ambiguous");
+    hypotheses.push(makeHypothesis({
+      id: "tcp-receive-ssthresh-trend",
+      title: strongSlowConsumer ? "Receive autotuning drop supports slow-consumer suspicion" : "Receive autotuning threshold changed",
+      category: "tcp-flow-control",
+      severity: rcvSsthreshWarnings.reduce((level, item) => severityScore(item.severity) > severityScore(level) ? item.severity : level, "low"),
+      confidence: rcvSsthreshWarnings.reduce((level, item) => confidenceScore(item.confidence) > confidenceScore(level) ? item.confidence : level, "low"),
+      summary: strongSlowConsumer
+        ? "rcv_ssthresh fell significantly and the same flow shows receive-side pressure. This supports a slow-consumer / receiver backpressure hypothesis, but it still needs process-level confirmation."
+        : ambiguousPath
+          ? "rcv_ssthresh fell, but RTT/retransmission context keeps network or path congestion as a competing hypothesis. Treat this as a correlated warning, not a receiver-only verdict."
+          : "rcv_ssthresh fell across timestamped snapshots. This is receive-window autotuning context and deserves correlation with rcv_space, Recv-Q, skmem, RTT, retransmission, and progress counters.",
+      sockets: rcvSsthreshWarnings.map(item => item.socket),
+      evidence: rcvSsthreshWarnings.flatMap(item => item.evidence),
+      counterEvidence: [
+        ...rcvSsthreshWarnings.flatMap(item => item.counterEvidence),
+        "This diagnostic does not fire from a single rcv_ssthresh sample.",
+        top?.trend?.relativeDropPct ? `Largest observed rcv_ssthresh decline is ${top.trend.relativeDropPct.toFixed(1)}%.` : ""
+      ],
+      learnMore: rcvSsthreshWarnings.flatMap(item => item.learnMore),
+      commands: rcvSsthreshWarnings.flatMap(item => item.commands)
     }));
   }
 

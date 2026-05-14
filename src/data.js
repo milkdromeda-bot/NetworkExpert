@@ -57,7 +57,9 @@ export const FIELD_DOCS = {
   cwnd: "Congestion window. Low cwnd with high RTT can become a throughput bottleneck.",
   ssthresh: "Slow-start threshold. Low values after loss suggest recent congestion.",
   pacing_rate: "TCP pacing rate and pacing cap.",
-  rcv_space: "TCP receive buffer auto-tuning variable.",
+  rcv_space: "TCP receive-space autotuning value. Low sustained values support receiver backpressure / Zero Window risk.",
+  rcv_rtt: "Receive-side RTT estimate used by Linux receive autotuning. Interpret with rcv_space, Recv-Q, and skmem receive pressure.",
+  rcv_ssthresh: "Linux TCP receive-side autotuning threshold / current window clamp. Use trends only; it is not sender congestion ssthresh and not proof of slow consumer by itself.",
   mss: "Maximum segment size.",
   pmtu: "Path MTU, useful for detecting fragmentation or a low path MTU.",
   bytes_acked: "Bytes acknowledged by ACKs.",
@@ -108,6 +110,12 @@ export const FIELD_GUIDANCE = {
   },
   rcv_space: {
     typical: "Auto-tuned by TCP. Interpret with Recv-Q, skmem.r, application read behavior, and workload bursts."
+  },
+  rcv_rtt: {
+    typical: "Receiver-side RTT estimator used by receive-window autotuning. High values matter most when rcv_ssthresh falls and retrans/RTT evidence also points to path recovery."
+  },
+  rcv_ssthresh: {
+    typical: "Trend metric. Stable/high is usually informational; a >30%, >50%, or >70% drop deserves correlation with rcv_space, Recv-Q, skmem:r/rb, rcv_rtt, RTT, retrans, bytes_received, segs_in, drops, and persist."
   },
   mss: {
     typical: "Common Ethernet values are about 1460 bytes for IPv4 and 1440-1448 bytes with extra encapsulation."
