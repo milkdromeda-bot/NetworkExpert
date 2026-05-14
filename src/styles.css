@@ -5356,6 +5356,11 @@ th:focus-within .column-tooltip,
 }
 .layout-row button { min-height: 30px; }
 .layout-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding: 10px 0;
+  background: var(--bg, #1a1520);
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
@@ -7577,4 +7582,30 @@ progress::-webkit-progress-value {
   border-color: #79b8ff;
   background: #2e3442;
   color: #9ccfff;
+}
+
+/* Busy overlay - GPU-composited spinner that never freezes */
+.busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: none;
+  place-items: center;
+  background: rgba(5, 9, 16, .45);
+  pointer-events: none;
+}
+.busy-overlay.visible {
+  display: grid;
+}
+.busy-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,.15);
+  border-top-color: #7dd3fc;
+  border-radius: 50%;
+  will-change: transform;
+  animation: busy-spin .7s linear infinite;
+}
+@keyframes busy-spin {
+  to { transform: rotate(360deg); }
 }

@@ -2317,7 +2317,12 @@ function syncFromCodeMirror() {
   if (cmInstance) state.raw = cmInstance.getValue();
 }
 
+const _busyEl = document.getElementById("busyOverlay");
+function _showBusy() { _busyEl.classList.add("visible"); _busyEl.offsetHeight; }
+function _hideBusy() { _busyEl.classList.remove("visible"); }
+
 function render() {
+  _showBusy();
   hideAppServiceTooltip();
   if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
@@ -2390,6 +2395,7 @@ function render() {
   }
   scheduleAnomalyBadgeSettle();
   scheduleIpIntelEnrichment();
+  _hideBusy();
 }
 
 function scheduleChartPageDraw() {
@@ -4647,6 +4653,7 @@ function renderLayoutPrefs() {
       <label class="check inline"><input id="layoutSharedZoom" type="checkbox" ${l.sharedZoom ? "checked" : ""}/> Shared zoom across charts</label>
       <label class="check inline"><input id="layoutLegend" type="checkbox" ${l.showLegend ? "checked" : ""}/> Show legend/status</label>
       <label class="check inline"><input id="layoutCrosshair" type="checkbox" ${l.showCrosshair ? "checked" : ""}/> Enable crosshair and drag zoom</label>
+      <label class="check inline"><input id="layoutSyncCrosshair" type="checkbox" ${l.syncCrosshair !== false ? "checked" : ""}/> Sync crosshairs across charts</label>
       <label class="range-preference"><span>Crosshair tooltip background</span><input id="layoutTooltipOpacity" type="range" min="0.35" max="1" step="0.05" value="${tooltipOpacity}"/><small><b>${Math.round(tooltipOpacity * 100)}%</b> opacity - keeps the chart slightly visible behind the tooltip.</small></label>
       <label class="check inline"><input id="layoutThresholds" type="checkbox" ${l.showThresholds ? "checked" : ""}/> Show threshold lines and colors</label>
       <label class="check inline"><input id="layoutStickyToolbar" type="checkbox" ${l.stickyToolbar ? "checked" : ""}/> Sticky chart controls</label>
@@ -5949,6 +5956,33 @@ function attachChartInteractions(svg) {
     const p = svgPoint(svg, event);
     const x = clampX(p.x);
     drawOverlay(x, dragging ? x : null);
+    if (!dragging && state.prefs.chartLayout.syncCrosshair !== false) {
+      const b = bounds();
+      const pct = (x - b.left) / Math.max(1, b.right - b.left);
+      document.querySelectorAll("svg.chart[data-interactive='1']").forEach(other => {
+        if (other === svg) return;
+        const ol = other.querySelector("[data-crosshair-layer]");
+        if (!ol) return;
+        const oLeft = Number(other.dataset.plotLeft);
+        const oRight = Number(other.dataset.plotRight);
+        const oTop = Number(other.dataset.plotTop);
+        const oBottom = Number(other.dataset.plotBottom);
+        if (!Number.isFinite(oLeft) || oRight <= oLeft) return;
+        const ox = oLeft + pct * (oRight - oLeft);
+        const m = other.dataset.metric || state.prefs.graphMetric;
+        const rs = other.dataset.renderStyle || state.prefs.graphStyle;
+        const rows = renderableHistory(visibleHistory(m), m, rs, other.clientWidth || 640).rows;
+        const row = nearestChartRow(rows, pct);
+        const val = row?.[m] || 0;
+        const tooltipOpacity = chartTooltipOpacity();
+        ol.innerHTML = `
+          <line x1="${ox}" x2="${ox}" y1="${oTop}" y2="${oBottom}" stroke="#edf4ff" stroke-width="1" stroke-dasharray="4 4" opacity=".5"/>
+          <rect x="${Math.min(ox + 10, oRight - 190)}" y="${oTop + 8}" width="180" height="48" rx="6" fill="#0b1018" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
+          <text x="${Math.min(ox + 20, oRight - 180)}" y="${oTop + 28}" fill="#edf4ff" font-size="12">${timeLabel(row?.t || 0, row?.epochMs)}</text>
+          <text x="${Math.min(ox + 20, oRight - 180)}" y="${oTop + 46}" fill="${thresholdColor(m, val)}" font-size="12">${metricLabel(m)}: ${formatMetricValue(m, val)}</text>
+        `;
+      });
+    }
   });
   svg.addEventListener("pointerdown", event => {
     if (event.button !== 0) return;
@@ -5980,7 +6014,16 @@ function attachChartInteractions(svg) {
     }
   });
   svg.addEventListener("pointerleave", () => {
-    if (!dragging && layer()) layer().innerHTML = "";
+    if (!dragging) {
+      if (layer()) layer().innerHTML = "";
+      if (state.prefs.chartLayout.syncCrosshair !== false) {
+        document.querySelectorAll("svg.chart[data-interactive='1']").forEach(other => {
+          if (other === svg) return;
+          const ol = other.querySelector("[data-crosshair-layer]");
+          if (ol) ol.innerHTML = "";
+        });
+      }
+    }
   });
 }
 
@@ -7276,7 +7319,17 @@ function bindEvents() {
     if (action === "details") { state.drawer = "details"; render(); }
     if (action === "columns") { state.modal = "columns"; render(); }
     if (action === "thresholds") { state.drawer = "thresholds"; renderKeepingWorkspacePosition(); }
-    if (action === "layoutPrefs") { state.modal = "layout"; render(); }
+    if (action === "layoutPrefs") {
+      state.modal = "layout";
+      const modalContainer = document.querySelector("#app .app-shell") || document.querySelector("#app");
+      const existing = modalContainer.querySelector(".modal-overlay-fast");
+      if (existing) existing.remove();
+      const div = document.createElement("div");
+      div.className = "modal-overlay-fast";
+      div.innerHTML = renderModal();
+      modalContainer.appendChild(div);
+      bindEvents();
+    }
     if (action === "serviceAliases") { state.modal = "serviceAliases"; render(); }
     if (action === "topology") { state.modal = "topology"; render(); }
     if (action === "toggleDeepAnalysis") {
@@ -7426,6 +7479,7 @@ function bindEvents() {
       l.sharedZoom = Boolean(document.querySelector("#layoutSharedZoom")?.checked);
       l.showLegend = Boolean(document.querySelector("#layoutLegend")?.checked);
       l.showCrosshair = Boolean(document.querySelector("#layoutCrosshair")?.checked);
+      l.syncCrosshair = Boolean(document.querySelector("#layoutSyncCrosshair")?.checked);
       l.tooltipOpacity = clampChartTooltipOpacity(document.querySelector("#layoutTooltipOpacity")?.value ?? l.tooltipOpacity);
       l.showThresholds = Boolean(document.querySelector("#layoutThresholds")?.checked);
       l.stickyToolbar = Boolean(document.querySelector("#layoutStickyToolbar")?.checked);
@@ -7436,6 +7490,8 @@ function bindEvents() {
       savePrefs();
       toast("Layout saved", "Chart layout preferences have been stored in this browser.");
       state.modal = null;
+      const fast = document.querySelector(".modal-overlay-fast");
+      if (fast) fast.remove();
       render();
     }
     if (action === "resetGrid") {
@@ -7600,7 +7656,12 @@ function bindEvents() {
         render();
       }
     }
-    if (action === "closeModal") { state.modal = null; state.helpColumn = null; state.annotationContext = null; render(); }
+    if (action === "closeModal") {
+      state.modal = null; state.helpColumn = null; state.annotationContext = null;
+      const fast = document.querySelector(".modal-overlay-fast");
+      if (fast) { fast.remove(); return; }
+      render();
+    }
     if (action === "savePrefs") {
       state.prefs.severityFloor = document.querySelector("#prefSeverity")?.value || state.prefs.severityFloor;
       state.prefs.autoToast = document.querySelector("#prefToast")?.checked ?? state.prefs.autoToast;
