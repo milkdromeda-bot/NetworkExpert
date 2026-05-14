@@ -58,7 +58,12 @@ const APP_SPLASH_IMAGE = "./images/ultimateNetworkExpert.png";
 const SS_EDITOR_THEMES = [
   { id: "pastel", label: "Pastel", title: "Soft readable colors for long ss captures" },
   { id: "ocean", label: "Ocean", title: "Cool muted blues with amber highlights" },
-  { id: "mono", label: "Mono", title: "Mostly neutral syntax with minimal color" }
+  { id: "mono", label: "Mono", title: "Mostly neutral syntax with minimal color" },
+  { id: "graphite", label: "Graphite", title: "Deep neutral grey with soft steel accents" },
+  { id: "slate", label: "Slate", title: "Balanced slate tones with low saturation" },
+  { id: "sand", label: "Sand", title: "Warm muted amber highlights without glare" },
+  { id: "paper", label: "Paper", title: "Soft light editor for bright rooms" },
+  { id: "contrast", label: "Contrast", title: "Readable contrast without neon colors" }
 ];
 const DEFAULT_SS_EDITOR_THEME = "pastel";
 
@@ -68,6 +73,18 @@ function defaultTableColumns() {
 
 function normalizeSsEditorTheme(value) {
   return SS_EDITOR_THEMES.some(theme => theme.id === value) ? value : DEFAULT_SS_EDITOR_THEME;
+}
+
+function applySsEditorThemePreview(value) {
+  const theme = normalizeSsEditorTheme(value);
+  const panel = document.querySelector(".ingest-source-panel");
+  if (!panel) return;
+  SS_EDITOR_THEMES.forEach(item => panel.classList.remove(`ss-editor-theme-${item.id}`));
+  panel.classList.add(`ss-editor-theme-${theme}`);
+}
+
+function resetSsEditorThemePreview() {
+  applySsEditorThemePreview(state.prefs.ssEditorTheme);
 }
 
 function defaultTableFilters() {
@@ -155,6 +172,7 @@ let state = {
   activeTab: "sockets",
   chartsTab: "charts",
   openStyleMenu: false,
+  openSsEditorThemeMenu: false,
   editorWordWrap: false,
   anomalyFilters: { severity: "all", metric: "all", text: "", sort: "priority" },
   prefsTab: "display",
@@ -2721,9 +2739,16 @@ function renderImportStatus() {
 
 function renderSsEditorThemePicker() {
   const currentTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
-  return `<div class="ss-theme-picker" role="group" aria-label="SS editor color theme">
+  const currentLabel = SS_EDITOR_THEMES.find(theme => theme.id === currentTheme)?.label || "Pastel";
+  return `<div class="ss-theme-picker ${state.openSsEditorThemeMenu ? "open" : ""}" data-ss-theme-picker>
     <span>Theme</span>
-    ${SS_EDITOR_THEMES.map(theme => `<button type="button" data-action="setSsEditorTheme" data-ss-editor-theme="${escapeHtml(theme.id)}" class="${currentTheme === theme.id ? "active" : ""}" aria-pressed="${currentTheme === theme.id ? "true" : "false"}" title="${escapeHtml(theme.title)}">${escapeHtml(theme.label)}</button>`).join("")}
+    <button type="button" class="ss-theme-toggle" data-action="toggleSsEditorThemeMenu" aria-haspopup="listbox" aria-expanded="${state.openSsEditorThemeMenu ? "true" : "false"}" title="Preview ss editor themes">
+      <strong>${escapeHtml(currentLabel)}</strong>
+      <i class="ri-arrow-down-s-line"></i>
+    </button>
+    <div class="ss-theme-menu" role="listbox" aria-label="SS editor color theme">
+      ${SS_EDITOR_THEMES.map(theme => `<button type="button" role="option" data-ss-editor-theme-preview="${escapeHtml(theme.id)}" aria-selected="${currentTheme === theme.id ? "true" : "false"}" class="${currentTheme === theme.id ? "active" : ""}" title="${escapeHtml(theme.title)}">${escapeHtml(theme.label)}</button>`).join("")}
+    </div>
   </div>`;
 }
 
@@ -6524,6 +6549,11 @@ function closeFloatingMenus(options = {}) {
     state.openStyleMenu = false;
     changed = true;
   }
+  if (state.openSsEditorThemeMenu) {
+    state.openSsEditorThemeMenu = false;
+    resetSsEditorThemePreview();
+    changed = true;
+  }
   if (state.openExportMenu || state.openExportMenuPos) {
     state.openExportMenu = null;
     state.openExportMenuPos = null;
@@ -6643,10 +6673,10 @@ function bindEvents() {
       state.editorWordWrap = !state.editorWordWrap;
       if (cmInstance) cmInstance.setOption("lineWrapping", state.editorWordWrap);
     }
-    if (action === "setSsEditorTheme") {
-      syncFromCodeMirror();
-      state.prefs.ssEditorTheme = normalizeSsEditorTheme(event.currentTarget.dataset.ssEditorTheme);
-      savePrefs();
+    if (action === "toggleSsEditorThemeMenu") {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openSsEditorThemeMenu = !state.openSsEditorThemeMenu;
       renderKeepingWorkspacePosition();
     }
     if (action === "showRawInput") {
@@ -7733,6 +7763,34 @@ function bindEvents() {
   for (const [id, key] of [["metricSelect", "graphMetric"], ["styleSelect", "graphStyle"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
   }
+  document.querySelector("[data-ss-theme-picker]")?.addEventListener("pointerleave", () => {
+    if (state.openSsEditorThemeMenu) resetSsEditorThemePreview();
+  });
+  document.querySelectorAll("[data-ss-editor-theme-preview]").forEach(button => {
+    const preview = event => {
+      event.stopPropagation();
+      applySsEditorThemePreview(event.currentTarget.dataset.ssEditorThemePreview);
+    };
+    button.addEventListener("pointerenter", preview);
+    button.addEventListener("focus", preview);
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      syncFromCodeMirror();
+      state.prefs.ssEditorTheme = normalizeSsEditorTheme(event.currentTarget.dataset.ssEditorThemePreview);
+      state.openSsEditorThemeMenu = false;
+      savePrefs();
+      renderKeepingWorkspacePosition();
+    });
+    button.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        state.openSsEditorThemeMenu = false;
+        resetSsEditorThemePreview();
+        renderKeepingWorkspacePosition();
+      }
+    });
+  });
   document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
   for (const [id, key] of [["windowInput", "graphWindow"], ["thresholdInput", "graphThreshold"], ["samplingInput", "sampling"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = Number(e.target.value); savePrefs(); renderKeepingWorkspacePosition(); });
