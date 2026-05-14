@@ -2257,6 +2257,9 @@ function scheduleAnomalyBadgeSettle() {
 }
 
 let cmInstance = null;
+let chartPageDrawFrame = 0;
+let correlationDrawFrame = 0;
+let dashboardPresetRenderFrame = 0;
 function initCodeMirror() {
   const container = document.querySelector("#cmContainer");
   if (!container || !window.CodeMirror) return;
@@ -2350,12 +2353,28 @@ function render() {
   bindEvents();
   initCodeMirror();
   if (state.view === "charts") {
-    drawChart();
-    scheduleMultiChartDraw();
-    drawCorrelation();
+    scheduleChartPageDraw();
   }
   scheduleAnomalyBadgeSettle();
   scheduleIpIntelEnrichment();
+}
+
+function scheduleChartPageDraw() {
+  if (chartPageDrawFrame) cancelAnimationFrame(chartPageDrawFrame);
+  chartPageDrawFrame = requestAnimationFrame(() => {
+    chartPageDrawFrame = 0;
+    drawChart();
+    scheduleMultiChartDraw();
+    scheduleCorrelationDraw();
+  });
+}
+
+function scheduleCorrelationDraw() {
+  if (correlationDrawFrame) cancelAnimationFrame(correlationDrawFrame);
+  correlationDrawFrame = requestAnimationFrame(() => {
+    correlationDrawFrame = 0;
+    drawCorrelation();
+  });
 }
 
 function selectedSocket() {
@@ -2989,7 +3008,7 @@ function renderDashboardPresetPicker(activePresetId, presetEntries) {
       <i class="ri-arrow-down-s-line dashboard-preset-chevron"></i>
     </button>
     <div class="dashboard-preset-menu ${open ? "open" : ""}" role="listbox" aria-label="Expert dashboard presets">
-      ${presetEntries.map(([id, preset]) => `<button class="dashboard-preset-option ${id === activePresetId ? "selected" : ""}" data-dashboard-preset-choice="${escapeHtml(id)}" role="option" aria-selected="${id === activePresetId ? "true" : "false"}" title="${escapeHtml(preset.description)}">
+      ${presetEntries.map(([id, preset]) => `<button class="dashboard-preset-option ${id === activePresetId ? "selected" : ""}" data-dashboard-preset-choice="${escapeHtml(id)}" role="option" aria-selected="${id === activePresetId ? "true" : "false"}" aria-label="${escapeHtml(`${preset.name}: ${preset.description}`)}">
         <span class="dashboard-preset-icon"><i class="${escapeHtml(dashboardPresetIcon(id))}"></i></span>
         <span class="dashboard-preset-option-copy"><strong>${escapeHtml(preset.name)}</strong><small>${escapeHtml(preset.description)}</small></span>
       </button>`).join("")}
@@ -6547,6 +6566,47 @@ function closeDashboardPresetMenu(cancel = false) {
   return true;
 }
 
+function updateDashboardPresetPickerChrome(presetId) {
+  const preset = DASHBOARD_PRESETS[presetId];
+  const picker = document.querySelector("#dashboardPresetPicker");
+  if (!preset || !picker) return;
+  const trigger = picker.querySelector("[data-dashboard-preset-toggle]");
+  const label = picker.querySelector(".dashboard-preset-current");
+  const icon = picker.querySelector(".dashboard-preset-trigger .dashboard-preset-icon i");
+  const menu = picker.querySelector(".dashboard-preset-menu");
+  trigger?.setAttribute("aria-expanded", "false");
+  trigger?.setAttribute("title", preset.description || "Choose an expert dashboard preset.");
+  if (label) label.textContent = preset.name || "Choose preset";
+  if (icon) icon.className = dashboardPresetIcon(presetId);
+  menu?.classList.remove("open");
+  picker.querySelectorAll("[data-dashboard-preset-choice]").forEach(option => {
+    const selected = option.dataset.dashboardPresetChoice === presetId;
+    option.classList.toggle("selected", selected);
+    option.setAttribute("aria-selected", selected ? "true" : "false");
+  });
+}
+
+function scheduleDashboardPresetRender() {
+  if (dashboardPresetRenderFrame) cancelAnimationFrame(dashboardPresetRenderFrame);
+  dashboardPresetRenderFrame = requestAnimationFrame(() => {
+    dashboardPresetRenderFrame = requestAnimationFrame(() => {
+      dashboardPresetRenderFrame = 0;
+      renderKeepingWorkspacePosition();
+    });
+  });
+}
+
+function commitDashboardPresetChoice(presetId) {
+  const preset = DASHBOARD_PRESETS[presetId];
+  if (!preset) return;
+  state.openDashboardPresetMenu = false;
+  state.dashboardPresetBeforeOpen = null;
+  applyDashboardPreset(presetId);
+  updateDashboardPresetPickerChrome(presetId);
+  toast("Dashboard preset applied", preset.name || "Preset applied.");
+  scheduleDashboardPresetRender();
+}
+
 function closeFloatingMenus(options = {}) {
   let changed = closeDashboardPresetMenu(Boolean(options.cancelDashboard));
   if (state.openStyleMenu) {
@@ -7578,20 +7638,11 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-dashboard-preset-choice]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
-    const presetId = event.currentTarget.dataset.dashboardPresetChoice;
-    const preset = DASHBOARD_PRESETS[presetId];
-    if (!preset) return;
-    state.openDashboardPresetMenu = false;
-    state.dashboardPresetBeforeOpen = null;
-    applyDashboardPreset(presetId);
-    toast("Dashboard preset applied", preset.name || "Preset applied.");
-    renderKeepingWorkspacePosition();
+    commitDashboardPresetChoice(event.currentTarget.dataset.dashboardPresetChoice);
   }));
   document.querySelectorAll("[data-dashboard-preset]").forEach(btn => btn.addEventListener("click", event => {
     const presetId = event.currentTarget.dataset.dashboardPreset;
-    applyDashboardPreset(presetId);
-    toast("Dashboard preset applied", DASHBOARD_PRESETS[presetId]?.name || "Preset applied.");
-    render();
+    commitDashboardPresetChoice(presetId);
   }));
   document.querySelectorAll("[data-load-dashboard]").forEach(btn => btn.addEventListener("click", event => {
     applyDashboardProfile(state.dashboardProfiles.find(profile => profile.id === event.currentTarget.dataset.loadDashboard));

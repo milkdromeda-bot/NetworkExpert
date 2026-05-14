@@ -7215,3 +7215,59 @@ progress::-webkit-progress-value {
   backdrop-filter: none;
 }
 /* === SmartTrade modal/overlay low-neon refinement: end === */
+
+/* === Dashboard preset picker performance refinement === */
+.dashboard-preset-menu,
+.dashboard-preset-menu.open {
+  background: #17141d;
+  backdrop-filter: none;
+  contain: paint;
+  overscroll-behavior: contain;
+}
+
+.dashboard-preset-option {
+  position: relative;
+  background: #111017;
+  transition: background-color .08s ease, border-color .08s ease;
+}
+
+.dashboard-preset-option:hover:not(.selected),
+.dashboard-preset-option:focus-visible:not(.selected) {
+  border-color: #4a4551;
+  background: #211f28;
+}
+
+.dashboard-preset-option.selected {
+  border-color: #79b8ff;
+  background: #252231;
+  box-shadow: inset 3px 0 0 #71bcff;
+}
+
+.dashboard-preset-option.selected:hover {
+  border-color: #79b8ff;
+  background: #292638;
+}
+
+.dashboard-preset-option.selected::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 7px;
+  height: 12px;
+  border-right: 2px solid #9ccfff;
+  border-bottom: 2px solid #9ccfff;
+  transform: translateY(-58%) rotate(42deg);
+  pointer-events: none;
+}
+
+.dashboard-preset-option:hover:not(.selected) .dashboard-preset-icon {
+  border-color: #5a5663;
+  color: #d7d3de;
+}
+
+.dashboard-preset-option.selected .dashboard-preset-icon {
+  border-color: #79b8ff;
+  background: #2e3442;
+  color: #9ccfff;
+}

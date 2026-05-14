@@ -119,3 +119,22 @@ test("diagnostic cards expose optional deep explanations", () => {
   assert.match(css, /\.diagnosis-learn-more ul\s*\{[^}]*line-height:\s*1\.5;/s);
   assert.match(css, /\.diagnosis-learn-more li\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
 });
+
+test("dashboard preset selection keeps the picker responsive", () => {
+  assert.match(main, /let chartPageDrawFrame = 0;/);
+  assert.match(main, /let dashboardPresetRenderFrame = 0;/);
+  assert.match(main, /function scheduleChartPageDraw\(\)/);
+  assert.match(main, /if \(state\.view === "charts"\) \{\s*scheduleChartPageDraw\(\);\s*\}/);
+  assert.match(main, /function updateDashboardPresetPickerChrome\(presetId\)/);
+  assert.match(main, /function scheduleDashboardPresetRender\(\)/);
+  assert.match(main, /requestAnimationFrame\(\(\) => \{\s*dashboardPresetRenderFrame = requestAnimationFrame\(\(\) => \{/s);
+  assert.match(main, /function commitDashboardPresetChoice\(presetId\)/);
+  assert.match(main, /updateDashboardPresetPickerChrome\(presetId\);[\s\S]*scheduleDashboardPresetRender\(\);/);
+  assert.match(main, /data-dashboard-preset-choice[\s\S]*commitDashboardPresetChoice\(event\.currentTarget\.dataset\.dashboardPresetChoice\);/);
+  assert.match(main, /data-dashboard-preset-choice="\$\{escapeHtml\(id\)\}"[^>]*aria-label="\$\{escapeHtml\(`\$\{preset\.name\}: \$\{preset\.description\}`\)\}"/);
+  assert.doesNotMatch(main, /data-dashboard-preset-choice="\$\{escapeHtml\(id\)\}"[^>]*title=/);
+  assert.match(css, /Dashboard preset picker performance refinement/);
+  assert.match(css, /\.dashboard-preset-menu,\s*\.dashboard-preset-menu\.open\s*\{[^}]*backdrop-filter:\s*none;[^}]*contain:\s*paint;/s);
+  assert.match(css, /\.dashboard-preset-option:hover:not\(\.selected\),\s*\.dashboard-preset-option:focus-visible:not\(\.selected\)/);
+  assert.match(css, /\.dashboard-preset-option\.selected::after\s*\{/);
+});
