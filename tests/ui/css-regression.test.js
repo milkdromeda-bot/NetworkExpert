@@ -143,6 +143,14 @@ test("analysis conversation stack keeps vertical gaps compact", () => {
   assert.match(css, /\.conversation-workbench,\s*\.expert-workbench,\s*\.timeline-workbench\s*\{[^}]*gap:\s*8px;/s);
 });
 
+test("chart-only toolbar is hidden from the charts advisor tab", () => {
+  assert.match(main, /state\.chartsTab === "charts" \? renderDashboardStudioInline\(\) : ""/);
+  assert.match(main, /state\.chartsTab === "charts" \? renderChartsGlobalToolbar\(\) : ""/);
+  assert.match(main, /function renderChartsGlobalToolbar\(\)[\s\S]*data-action="thresholds"[\s\S]*id="chartTimeZoneSelect"[\s\S]*data-action="layoutPrefs"/);
+  assert.match(main, /state\.chartsTab === "advisor" \? `\$\{renderInvestigationContext\(\)\}\$\{renderTailLatencyLensPanel\(\)\}` : ""/);
+  assert.doesNotMatch(main, /\$\{renderChartsGlobalToolbar\(\)\}\s*\n\s*\$\{renderChartsPage\(\)\}/);
+});
+
 test("BDP window module exposes cautious controls and bounded charts", () => {
   assert.match(main, /import \{ analyzeBdpWindowLimit \} from "\.\/bdp-window-analysis\.js";/);
   assert.match(main, /function renderBdpWindowPanel\(\)/);

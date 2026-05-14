@@ -2355,7 +2355,7 @@ function render() {
           <button class="charts-sub-tab ${state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="advisor" role="tab" aria-selected="${state.chartsTab === "advisor"}">Advisor</button>
           ${state.chartsTab === "charts" ? renderDashboardStudioInline() : ""}
         </nav>
-        ${renderChartsGlobalToolbar()}
+        ${state.chartsTab === "charts" ? renderChartsGlobalToolbar() : ""}
         ${renderChartsPage()}
       </main>` : ""}
       ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
