@@ -55,9 +55,19 @@ const numberSeparatorCache = new Map();
 const BROWSER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 const APP_VERSION = "1.0.0.0";
 const APP_SPLASH_IMAGE = "./images/ultimateNetworkExpert.png";
+const SS_EDITOR_THEMES = [
+  { id: "pastel", label: "Pastel", title: "Soft readable colors for long ss captures" },
+  { id: "ocean", label: "Ocean", title: "Cool muted blues with amber highlights" },
+  { id: "mono", label: "Mono", title: "Mostly neutral syntax with minimal color" }
+];
+const DEFAULT_SS_EDITOR_THEME = "pastel";
 
 function defaultTableColumns() {
   return [...DEFAULT_TABLE_VISIBLE_COLUMNS];
+}
+
+function normalizeSsEditorTheme(value) {
+  return SS_EDITOR_THEMES.some(theme => theme.id === value) ? value : DEFAULT_SS_EDITOR_THEME;
 }
 
 function defaultTableFilters() {
@@ -293,6 +303,7 @@ function loadPrefs() {
     prefs.chartLayout.columns = clampChartColumns(prefs.chartLayout.columns);
     prefs.chartLayout.tooltipOpacity = clampChartTooltipOpacity(prefs.chartLayout.tooltipOpacity);
     prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(prefs.defaultDashboardPreset);
+    prefs.ssEditorTheme = normalizeSsEditorTheme(prefs.ssEditorTheme);
     if (saved.sampling == null || (saved.sampling === 5 && saved.chartResolutionDefault !== "max")) prefs.sampling = 1;
     prefs.chartResolutionDefault = "max";
     return prefs;
@@ -305,6 +316,7 @@ function savePrefs() {
   state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
   state.prefs.chartLayout.tooltipOpacity = chartTooltipOpacity();
   state.prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(state.prefs.defaultDashboardPreset);
+  state.prefs.ssEditorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
   localStorage.setItem("networkExpertPrefs", JSON.stringify(state.prefs));
 }
 
@@ -2707,6 +2719,14 @@ function renderImportStatus() {
   </div>`;
 }
 
+function renderSsEditorThemePicker() {
+  const currentTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
+  return `<div class="ss-theme-picker" role="group" aria-label="SS editor color theme">
+    <span>Theme</span>
+    ${SS_EDITOR_THEMES.map(theme => `<button type="button" data-action="setSsEditorTheme" data-ss-editor-theme="${escapeHtml(theme.id)}" class="${currentTheme === theme.id ? "active" : ""}" aria-pressed="${currentTheme === theme.id ? "true" : "false"}" title="${escapeHtml(theme.title)}">${escapeHtml(theme.label)}</button>`).join("")}
+  </div>`;
+}
+
 function renderIngestPage() {
   const coverage = commandCoverage(state.command, SS_OPTIONS);
   const active = coverage.filter(o => o.active);
@@ -2714,6 +2734,7 @@ function renderIngestPage() {
   const featuredOptions = SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1]));
   const selectedOption = selectedSsOption(featuredOptions, active);
   const activePanel = state.showPreImportFilters ? "filter" : state.showSsOptions ? "capture" : null;
+  const editorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
   return html`
     <section class="ingest-hero">
       <div>
@@ -2721,10 +2742,11 @@ function renderIngestPage() {
         <p>Paste captured output or open a file. Analysis reads the text exactly as captured.</p>
       </div>
     </section>
-    <section class="panel">
-      <div class="panel-head">
+    <section class="panel ingest-source-panel ss-editor-theme-${escapeHtml(editorTheme)}">
+      <div class="panel-head ingest-source-head">
         <div class="panel-title">ss stats to parse</div>
         ${renderImportStatus()}
+        ${renderSsEditorThemePicker()}
         <span class="status-pill">${escapeHtml(state.sourceName)}</span>
       </div>
       <div class="panel-body">
@@ -6620,6 +6642,12 @@ function bindEvents() {
     if (action === "toggleWordWrap") {
       state.editorWordWrap = !state.editorWordWrap;
       if (cmInstance) cmInstance.setOption("lineWrapping", state.editorWordWrap);
+    }
+    if (action === "setSsEditorTheme") {
+      syncFromCodeMirror();
+      state.prefs.ssEditorTheme = normalizeSsEditorTheme(event.currentTarget.dataset.ssEditorTheme);
+      savePrefs();
+      renderKeepingWorkspacePosition();
     }
     if (action === "showRawInput") {
       state.ingestRawExpanded = true;

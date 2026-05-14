@@ -953,6 +953,106 @@ button.mega i {
   min-width: 0;
   overflow: hidden;
 }
+.ingest-source-head {
+  flex-wrap: wrap;
+}
+.ingest-source-head .panel-title {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.ingest-source-head .status-pill {
+  max-width: min(280px, 38vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ingest-source-panel {
+  --ss-editor-bg: #081018;
+  --ss-editor-gutter: #0c151d;
+  --ss-editor-text: #d5dee7;
+  --ss-editor-muted: #748394;
+  --ss-editor-selection: rgba(126, 164, 197, .22);
+  --ss-editor-accent: #8fb3d9;
+  --ss-editor-keyword: #a7c7b5;
+  --ss-editor-atom: #89c1bf;
+  --ss-editor-error: #e89a9a;
+  --ss-editor-number: #ddb989;
+  --ss-editor-string: #c8b28a;
+  --ss-editor-variable: #93b9d6;
+  --ss-editor-variable-strong: #b5c7a3;
+  --ss-editor-search: rgba(221, 185, 137, .28);
+}
+.ingest-source-panel.ss-editor-theme-ocean {
+  --ss-editor-bg: #06101a;
+  --ss-editor-gutter: #081724;
+  --ss-editor-text: #d7e6ef;
+  --ss-editor-muted: #6f8391;
+  --ss-editor-selection: rgba(107, 151, 179, .24);
+  --ss-editor-accent: #8ab9cf;
+  --ss-editor-keyword: #9bc0cf;
+  --ss-editor-atom: #8fbfba;
+  --ss-editor-error: #e49a8d;
+  --ss-editor-number: #dfbd83;
+  --ss-editor-string: #d3c39d;
+  --ss-editor-variable: #9fb9d2;
+  --ss-editor-variable-strong: #a8c4b6;
+  --ss-editor-search: rgba(223, 189, 131, .3);
+}
+.ingest-source-panel.ss-editor-theme-mono {
+  --ss-editor-bg: #0a0e14;
+  --ss-editor-gutter: #0e131b;
+  --ss-editor-text: #d2d8df;
+  --ss-editor-muted: #78828d;
+  --ss-editor-selection: rgba(160, 170, 180, .2);
+  --ss-editor-accent: #b4c0ca;
+  --ss-editor-keyword: #c7d0d8;
+  --ss-editor-atom: #b6c1cb;
+  --ss-editor-error: #dda0a0;
+  --ss-editor-number: #d2c09b;
+  --ss-editor-string: #c8bea6;
+  --ss-editor-variable: #c0cad4;
+  --ss-editor-variable-strong: #cad2da;
+  --ss-editor-search: rgba(210, 192, 155, .26);
+}
+.ss-theme-picker {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  max-width: 100%;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(140, 160, 185, .28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .035);
+  overflow: hidden;
+}
+.ss-theme-picker span {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ss-theme-picker button {
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cfd8e2;
+  font-size: 12px;
+  font-weight: 800;
+}
+.ss-theme-picker button:hover {
+  border-color: rgba(143, 179, 217, .45);
+  background: rgba(143, 179, 217, .11);
+}
+.ss-theme-picker button.active {
+  border-color: rgba(143, 179, 217, .55);
+  background: rgba(143, 179, 217, .18);
+  color: #eef5fb;
+}
 .cm-search-hints {
   display: flex;
   align-items: center;
@@ -969,13 +1069,13 @@ button.mega i {
   font-size: 11px;
   border-radius: 4px;
   border: 1px solid var(--border);
-  background: rgba(57, 214, 214, .08);
+  background: rgba(143, 179, 217, .08);
   color: var(--text);
   cursor: pointer;
 }
 .cm-search-hints button:hover {
-  background: rgba(57, 214, 214, .2);
-  border-color: rgba(57, 214, 214, .4);
+  background: rgba(143, 179, 217, .18);
+  border-color: rgba(143, 179, 217, .4);
 }
 .cm-container {
   border: 1px solid var(--border);
@@ -984,8 +1084,8 @@ button.mega i {
 }
 .cm-container .CodeMirror {
   height: clamp(360px, 58vh, 620px);
-  background: #050910;
-  color: #c4d0de;
+  background: var(--ss-editor-bg);
+  color: var(--ss-editor-text);
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -1005,25 +1105,25 @@ button.mega i {
   background: rgba(180, 210, 240, .7);
 }
 .cm-container .CodeMirror-gutters {
-  background: #0a0f18;
+  background: var(--ss-editor-gutter);
   border-right: 1px solid rgba(38, 50, 65, .6);
 }
-.cm-container .CodeMirror-linenumber { color: #4a5568; }
-.cm-container .CodeMirror-cursor { border-left-color: #39d6d6; }
-.cm-container .CodeMirror-selected { background: rgba(57, 214, 214, .15); }
-.cm-container .cm-header { color: #5db7ff; font-weight: 700; }
-.cm-container .cm-keyword { color: #4cde8a; font-weight: 600; }
-.cm-container .cm-atom { color: #39d6d6; }
-.cm-container .cm-error { color: #ff5c77; font-weight: 600; }
-.cm-container .cm-number { color: #ff9f43; }
-.cm-container .cm-string { color: #e06cff; }
-.cm-container .cm-variable-2 { color: #5db7ff; }
-.cm-container .cm-variable-3 { color: #4cde8a; }
-.cm-container .cm-comment { color: #6b7a8d; font-style: italic; }
-.cm-container .cm-link { color: #c4d0de; text-decoration: none; }
-.cm-container .CodeMirror-dialog { background: #0d141f; border-bottom: 1px solid var(--border); color: #c4d0de; padding: 6px 10px; }
+.cm-container .CodeMirror-linenumber { color: var(--ss-editor-muted); }
+.cm-container .CodeMirror-cursor { border-left-color: var(--ss-editor-accent); }
+.cm-container .CodeMirror-selected { background: var(--ss-editor-selection); }
+.cm-container .cm-header { color: var(--ss-editor-accent); font-weight: 700; }
+.cm-container .cm-keyword { color: var(--ss-editor-keyword); font-weight: 600; }
+.cm-container .cm-atom { color: var(--ss-editor-atom); }
+.cm-container .cm-error { color: var(--ss-editor-error); font-weight: 600; }
+.cm-container .cm-number { color: var(--ss-editor-number); }
+.cm-container .cm-string { color: var(--ss-editor-string); }
+.cm-container .cm-variable-2 { color: var(--ss-editor-variable); }
+.cm-container .cm-variable-3 { color: var(--ss-editor-variable-strong); }
+.cm-container .cm-comment { color: var(--ss-editor-muted); font-style: italic; }
+.cm-container .cm-link { color: var(--ss-editor-text); text-decoration: none; }
+.cm-container .CodeMirror-dialog { background: #0d141f; border-bottom: 1px solid var(--border); color: var(--ss-editor-text); padding: 6px 10px; }
 .cm-container .CodeMirror-dialog input { background: #1a2332; color: #edf4ff; border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; }
-.cm-container .cm-searching { background: rgba(255, 159, 67, .3); }
+.cm-container .cm-searching { background: var(--ss-editor-search); }
 .raw-large {
   height: clamp(360px, 58vh, 620px);
   min-height: 360px;

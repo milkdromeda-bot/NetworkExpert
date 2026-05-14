@@ -269,6 +269,7 @@ export const prefsDefault = {
   numberLocale: "auto",
   numberGrouping: true,
   tableUnits: true,
+  ssEditorTheme: "pastel",
   linuxProfile: "lxc",
   accessRole: "analyst",
   ubuntuVersion: "22.04",

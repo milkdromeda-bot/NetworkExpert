@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
+const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
 
 test("table settings header stays above nearby column hover tooltips", () => {
   assert.match(css, /th:not\(\.table-settings-head\):hover/);
@@ -30,7 +31,7 @@ test("application service chip tooltip stays viewport-safe and truncates labels"
 
 test("import progress is shown in the ss stats header while loading", () => {
   assert.match(main, /function renderImportStatus\(\)/);
-  assert.match(main, /<div class="panel-head">[\s\S]*?<div class="panel-title">ss stats to parse<\/div>[\s\S]*?\$\{renderImportStatus\(\)\}/);
+  assert.match(main, /<div class="panel-head[^"]*">[\s\S]*?<div class="panel-title">ss stats to parse<\/div>[\s\S]*?\$\{renderImportStatus\(\)\}/);
   assert.match(css, /\.import-status\s*\{[^}]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.import-status span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
 });
@@ -64,4 +65,25 @@ test("product splash is opened from the version badge and stays bounded", () => 
   assert.match(css, /\.modal\.splash\s*\{[^}]*width:\s*min\(940px,\s*calc\(100vw - 30px\)\);/s);
   assert.match(css, /\.splash-art img\s*\{[^}]*width:\s*100%;[^}]*max-height:\s*min\(62vh,\s*620px\);[^}]*object-fit:\s*contain;/s);
   assert.match(css, /\.splash-meta p\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+});
+
+test("ss editor offers calm themes and defaults to pastel", () => {
+  assert.match(data, /ssEditorTheme:\s*"pastel"/);
+  assert.match(main, /const SS_EDITOR_THEMES = \[/);
+  assert.match(main, /\{ id: "pastel", label: "Pastel"/);
+  assert.match(main, /\{ id: "ocean", label: "Ocean"/);
+  assert.match(main, /\{ id: "mono", label: "Mono"/);
+  assert.match(main, /function normalizeSsEditorTheme\(value\)/);
+  assert.match(main, /prefs\.ssEditorTheme = normalizeSsEditorTheme\(prefs\.ssEditorTheme\)/);
+  assert.match(main, /data-action="setSsEditorTheme"/);
+  assert.match(main, /action === "setSsEditorTheme"[\s\S]*syncFromCodeMirror\(\);[\s\S]*savePrefs\(\);[\s\S]*renderKeepingWorkspacePosition\(\);/);
+  assert.match(main, /class="panel ingest-source-panel ss-editor-theme-\$\{escapeHtml\(editorTheme\)\}"/);
+  assert.match(css, /\.ingest-source-panel\s*\{[^}]*--ss-editor-keyword:\s*#a7c7b5;[^}]*--ss-editor-string:\s*#c8b28a;/s);
+  assert.match(css, /\.ingest-source-panel\.ss-editor-theme-ocean\s*\{/);
+  assert.match(css, /\.ingest-source-panel\.ss-editor-theme-mono\s*\{/);
+  assert.match(css, /\.ss-theme-picker\s*\{[^}]*max-width:\s*100%;/s);
+  assert.match(css, /\.cm-container \.cm-keyword\s*\{[^}]*color:\s*var\(--ss-editor-keyword\);/s);
+  assert.match(css, /\.cm-container \.cm-string\s*\{[^}]*color:\s*var\(--ss-editor-string\);/s);
+  assert.doesNotMatch(css, /\.cm-container \.cm-keyword\s*\{[^}]*#4cde8a/s);
+  assert.doesNotMatch(css, /\.cm-container \.cm-string\s*\{[^}]*#e06cff/s);
 });
