@@ -226,6 +226,7 @@ const icons = {
   layout: `<i class="ri-dashboard-3-line"></i>`,
   stats: `<i class="ri-bar-chart-box-line"></i>`,
   incidentWarning: `<span class="incident-warning-icon" aria-hidden="true"><i class="ri-error-warning-fill"></i></span>`,
+  resetWorkspace: `<i class="ri-restart-line"></i>`,
   pin: `<i class="ri-pushpin-2-line"></i>`,
   unpin: `<i class="ri-pushpin-2-fill"></i>`,
   hide: `<i class="ri-eye-off-line"></i>`,
@@ -2266,7 +2267,7 @@ function render() {
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
-          <button class="danger" data-action="resetAll">${icons.x} Reset all</button>
+          <button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace">${icons.resetWorkspace}<span>Reset workspace</span></button>
         </div>
       </header>
       ${renderInvestigationContext()}
@@ -2703,7 +2704,7 @@ function renderIngestPage() {
             <button class="primary" data-action="parse">${icons.play} Analyze pasted text</button>
             <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}"><i class="ri-command-line"></i> Capture options</button>
             <button data-action="sample10m">${icons.chart} 10-min sample</button>
-            <button data-action="clear" class="danger">${icons.clear} Clear</button>
+            <button data-action="clear" class="clear-input-button" title="Empty the ss text input only">${icons.clear}<span>Clear input</span></button>
           </div>
           <p class="hint">The file is read locally by the browser. For large logs, use the Analysis page: pagination, filters, sorting, columns, and grouping.</p>
         </div>
@@ -2811,11 +2812,11 @@ function renderChartsPage() {
           <div class="chart-tool-group icon-tool-group">
             <button class="icon-button" data-action="zoomIn" title="Zoom in" aria-label="Zoom in">${icons.zoomIn}</button>
             <button class="icon-button" data-action="zoomOut" title="Zoom out" aria-label="Zoom out">${icons.zoomOut}</button>
+            <button class="icon-button" data-action="resetZoom" title="Reset zoom" aria-label="Reset zoom">${icons.reset}</button>
           </div>
           <div class="chart-tool-group icon-tool-group">
             <button class="icon-button" data-action="panLeft" title="Pan left" aria-label="Pan left">${icons.arrowLeft}</button>
             <button class="icon-button" data-action="panRight" title="Pan right" aria-label="Pan right">${icons.arrowRight}</button>
-            <button class="icon-button" data-action="resetZoom" title="Reset zoom" aria-label="Reset zoom">${icons.reset}</button>
           </div>
           <div class="chart-tool-group">
             <button data-action="thresholds">${icons.threshold} Thresholds</button>
@@ -4888,6 +4889,7 @@ function applyChartZoomAction(action, metric = null) {
   });
   state.chartZoom = result.sharedZoom;
   state.chartZoomByMetric = result.chartZoomByMetric;
+  if (!metric) state.chartZoomByMetric = {};
   state.activeChartMetric = result.activeChartMetric || metric || state.prefs.graphMetric;
   state.activeChartAction = result.activeChartAction;
   clearVisibleHistoryCache();
@@ -6557,7 +6559,14 @@ function bindEvents() {
       toast("Tail latency sample loaded", "The guide sample opened in Charts with the Tail latency preset.");
       render();
     }
-    if (action === "clear") { state.raw = ""; state.ingestRawExpanded = true; markAnalysisDirty({ raw: true }); render(); }
+    if (action === "clear") {
+      state.raw = "";
+      state.importStatus = null;
+      state.ingestRawExpanded = true;
+      markAnalysisDirty({ raw: true });
+      toast("Input cleared", "Only the ss text input was emptied. Current parsed analysis is unchanged until you parse again.");
+      render();
+    }
     if (action === "exportReport") { openIncidentReport(); }
     if (action === "exportEvidencePack") { exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger")); }
     if (action === "saveAnnotation") {
@@ -6603,7 +6612,11 @@ function bindEvents() {
       state.activeTab = "advisor";
       renderKeepingWorkspacePosition();
     }
-    if (action === "resetAll") {
+    if (action === "requestResetWorkspace") {
+      state.modal = "resetWorkspace";
+      render();
+    }
+    if (action === "confirmResetWorkspace") {
       resetAllState();
       toast("Workspace reset", "All loaded data, filters, zoom, and UI selections have been cleared.");
       render();
