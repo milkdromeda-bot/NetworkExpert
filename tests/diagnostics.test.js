@@ -54,6 +54,70 @@ test("diagnostics detects peer slow consumer or egress bottleneck from Send-Q", 
   assert.equal(peer.commands.some(command => command.includes("ip route get")), true);
 });
 
+test("diagnostics parses receiver-window limited ss fields", () => {
+  const [socket] = socketsFrom("ESTAB 0 20 10.0.0.1:9200 10.0.0.2:443 busy:10000ms rwnd_limited:4500ms(45.0%) snd_wnd:0 rcv_space:4096 rcv_wnd:8192");
+
+  assert.equal(socket.details.values.rwnd_limited.ms, 4500);
+  assert.equal(socket.details.values.rwnd_limited.percent, 45);
+  assert.equal(socket.details.values.snd_wnd, 0);
+  assert.equal(socket.details.values.rcv_space, 4096);
+});
+
+test("diagnostics treats rwnd_limited alone as receiver-window limited but ambiguous", () => {
+  const hypotheses = diagnose("ESTAB 0 20 10.0.0.1:9200 10.0.0.2:443 busy:10000ms rwnd_limited:4500ms(45.0%) rto:200 rtt:1/0.1 cwnd:20");
+
+  const window = byId(hypotheses, "zero-window-or-slow-consumer");
+
+  assert.equal(window.confidence, "medium");
+  assert.match(window.counterEvidence.join(" "), /ambiguous/i);
+  assert.equal(byId(hypotheses, "path-congestion-or-loss"), undefined);
+});
+
+test("diagnostics detects Zero Window from persist timer and backoff", () => {
+  const hypotheses = diagnose("ESTAB 0 900000 10.0.0.1:9200 10.0.0.2:443 timer:(persist,3sec,4) busy:20000ms rwnd_limited:18000ms(90.0%) backoff:3 snd_wnd:0 rto:800 rtt:2/0.2 cwnd:20");
+
+  const window = byId(hypotheses, "zero-window-or-slow-consumer");
+
+  assert.equal(window.severity, "critical");
+  assert.equal(window.confidence, "high");
+  assert.match(window.summary, /Zero Window/i);
+  assert.equal(window.evidence.some(item => item.includes("persist")), true);
+});
+
+test("diagnostics separates network congestion from Zero Window when cwnd drops and RTO rises", () => {
+  const hypotheses = diagnose("ESTAB 0 500000 10.0.0.1:9200 10.0.0.2:443 timer:(on,3sec,3) rto:3200 backoff:4 rtt:420/180 cwnd:2");
+
+  const path = byId(hypotheses, "path-congestion-or-loss");
+
+  assert.equal(path.title, "Network congestion is probable");
+  assert.equal(path.severity, "critical");
+  assert.equal(path.confidence, "high");
+  assert.equal(byId(hypotheses, "zero-window-or-slow-consumer"), undefined);
+});
+
+test("diagnostics marks increasing backoff and retrans as serious", () => {
+  const hypotheses = diagnose(
+    "ESTAB 0 500000 10.0.0.1:9200 10.0.0.2:443 timer:(on,3sec,3) rto:3200 backoff:4 rtt:420/180 cwnd:2",
+    { history: [{ epochMs: 1000, backoff: 1, retrans: 1 }, { epochMs: 2000, backoff: 4, retrans: 5 }] }
+  );
+
+  const path = byId(hypotheses, "path-congestion-or-loss");
+
+  assert.equal(path.evidence.some(item => item.includes("backoff increased from 1 to 4")), true);
+  assert.equal(path.evidence.some(item => item.includes("retrans increased by 4")), true);
+});
+
+test("diagnostics detects peer dead or blackhole pattern from huge backoff", () => {
+  const hypotheses = diagnose("ESTAB 0 800000 10.0.0.1:9200 10.0.0.2:443 timer:(on,12sec,8) rto:6000 backoff:7 rtt:100/20 cwnd:10");
+
+  const blackhole = byId(hypotheses, "peer-dead-or-blackhole");
+
+  assert.equal(blackhole.severity, "critical");
+  assert.equal(blackhole.confidence, "high");
+  assert.match(blackhole.summary, /blackhole/i);
+  assert.match(blackhole.counterEvidence.join(" "), /does not by itself/i);
+});
+
 test("diagnostics raises egress confidence when Send-Q is paired with RTO recovery", () => {
   const hypotheses = diagnose("ESTAB 0 400000 10.0.0.1:9200 10.0.0.2:443 timer:(on,1sec,2) rto:1300 backoff:1 rtt:200/50 cwnd:3");
 

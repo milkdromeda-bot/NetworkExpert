@@ -42,6 +42,11 @@ function anomalyMap(anomalies = []) {
 }
 
 function socketMetrics(socket) {
+  const timerName = String(socket?.details?.timer?.name || "").toLowerCase();
+  const values = socket?.details?.values || {};
+  const hasSndWnd = Object.hasOwn(values, "snd_wnd");
+  const hasRcvWnd = Object.hasOwn(values, "rcv_wnd");
+  const hasRcvSpace = Object.hasOwn(values, "rcv_space");
   return {
     sendQ: Number(socket?.sendQ || 0),
     recvQ: Number(socket?.recvQ || 0),
@@ -54,7 +59,17 @@ function socketMetrics(socket) {
     skmemR: metricValue(socket, "skmem.r"),
     skmemT: metricValue(socket, "skmem.t"),
     deliveryRate: metricValue(socket, "delivery_rate"),
-    pacingRate: metricValue(socket, "pacing_rate")
+    pacingRate: metricValue(socket, "pacing_rate"),
+    rwndLimitedMs: metricValue(socket, "rwnd_limited"),
+    rwndLimitedPct: metricValue(socket, "rwnd_limited_pct"),
+    sndWnd: hasSndWnd ? metricValue(socket, "snd_wnd") : null,
+    rcvWnd: hasRcvWnd ? metricValue(socket, "rcv_wnd") : null,
+    rcvSpace: hasRcvSpace ? metricValue(socket, "rcv_space") : null,
+    hasSndWnd,
+    hasRcvWnd,
+    hasRcvSpace,
+    timerName,
+    persist: timerName === "persist"
   };
 }
 
@@ -72,6 +87,26 @@ function historyDropGrowth(history = []) {
     peakRate = Math.max(peakRate, delta / elapsed);
   }
   return { total, peakRate };
+}
+
+function historyMetricGrowth(history = [], metric) {
+  const values = history
+    .filter(row => row?.socketPresent !== false)
+    .map(row => Number(row?.[metric] || 0))
+    .filter(Number.isFinite);
+  if (values.length < 2) return { increased: false, delta: 0, first: values[0] || 0, last: values.at(-1) || 0, max: values[0] || 0 };
+  const first = values[0];
+  const last = values.at(-1);
+  const max = Math.max(...values);
+  return { increased: last > first, delta: last - first, first, last, max };
+}
+
+function isReceiverWindowLimited(metrics) {
+  return metrics.persist || metrics.hasSndWnd && metrics.sndWnd === 0 || metrics.rwndLimitedPct >= 20 || metrics.rwndLimitedMs >= 1000;
+}
+
+function isNetworkCongestionPattern(metrics, rtoWarn, cwndWarn) {
+  return metrics.rto >= rtoWarn && (metrics.backoff > 0 || metrics.retrans > 0) && (metrics.cwnd > 0 && metrics.cwnd <= cwndWarn || metrics.rtt >= 150);
 }
 
 function makeHypothesis({
@@ -150,6 +185,13 @@ export function buildDiagnosticHypotheses({
     metrics.rto >= rtoWarn || metrics.backoff > 0 || metrics.retrans > 0 || hasAnomaly(byAnomaly, socket, ["rto", "backoff", "timer", "mss"])
   );
   const lowCwnd = withMetrics.filter(({ metrics }) => metrics.cwnd > 0 && metrics.cwnd <= cwndWarn);
+  const backoffGrowth = historyMetricGrowth(history, "backoff");
+  const retransGrowth = historyMetricGrowth(history, "retrans");
+  const receiverLimited = withMetrics.filter(({ metrics }) => isReceiverWindowLimited(metrics));
+  const networkCongestion = withMetrics.filter(({ metrics }) => isNetworkCongestionPattern(metrics, rtoWarn, cwndWarn));
+  const blackhole = withMetrics.filter(({ metrics }) =>
+    metrics.backoff >= 6 || metrics.rto >= rtoDanger && metrics.retrans >= 3 && !isReceiverWindowLimited(metrics)
+  );
   const drops = withMetrics.filter(({ socket, metrics }) => metrics.drops > 0 || hasAnomaly(byAnomaly, socket, ["skmem.d", "skmem.d_rate"]));
   const listeners = sockets.filter(socket => socket.state === "LISTEN" && ["0.0.0.0", "::", "*"].includes(socket.localAddress?.host));
   const closeWait = sockets.filter(socket => socket.state === "CLOSE-WAIT");
@@ -170,6 +212,7 @@ export function buildDiagnosticHypotheses({
       evidence: [
         `${affected.length} socket(s) show receive-side queue or memory pressure.`,
         processKnown ? "At least one affected socket has process ownership." : "",
+        highRecv.some(({ metrics }) => metrics.hasRcvSpace && metrics.rcvSpace > 0 && metrics.rcvSpace < 8192) ? "rcv_space is very small on at least one socket, which reinforces a local receive-window drain problem." : "",
         drops.length ? "Socket drops are also present, so receive pressure may already be losing data." : ""
       ],
       counterEvidence: [
@@ -182,6 +225,39 @@ export function buildDiagnosticHypotheses({
         "top -H -p <pid>",
         "strace -tt -p <pid> -e trace=network",
         "sysctl net.ipv4.tcp_rmem net.core.rmem_max"
+      ]
+    }));
+  }
+
+  if (receiverLimited.length) {
+    const affected = receiverLimited.map(item => item.socket);
+    const persist = receiverLimited.some(({ metrics }) => metrics.persist);
+    const zeroWindow = receiverLimited.some(({ metrics }) => metrics.persist || metrics.hasSndWnd && metrics.sndWnd === 0);
+    hypotheses.push(makeHypothesis({
+      id: "zero-window-or-slow-consumer",
+      title: zeroWindow ? "Zero Window / slow consumer is probable" : "Receiver-window limited sender",
+      category: "flow-control",
+      severity: persist && receiverLimited.some(({ metrics }) => metrics.backoff >= 2) ? "critical" : "high",
+      confidence: persist || receiverLimited.some(({ metrics }) => metrics.sndWnd === 0) ? "high" : "medium",
+      summary: "The sender appears limited by the receiver window. This points to a slow consumer or Zero Window condition more than pure network congestion.",
+      sockets: affected,
+      evidence: [
+        `${affected.length} socket(s) show receiver-window limitation.`,
+        persist ? "timer:(persist,...) is present: TCP is probing a closed or too-small receive window." : "",
+        receiverLimited.some(({ metrics }) => metrics.hasSndWnd && metrics.sndWnd === 0) ? "snd_wnd is zero on at least one socket." : "",
+        receiverLimited.some(({ metrics }) => metrics.rwndLimitedPct >= 20) ? "rwnd_limited consumes a large share of busy time." : "",
+        receiverLimited.some(({ metrics }) => metrics.backoff > 0) ? "backoff is present while waiting, so the wait is getting stretched." : ""
+      ],
+      counterEvidence: [
+        networkCongestion.length ? "RTO/RTT/cwnd/retrans also indicate possible network congestion; do not conclude Zero Window from rwnd_limited alone." : "",
+        "rwnd_limited alone is ambiguous: it measures receiver-window-limited time, not the root cause."
+      ],
+      commands: [
+        "ss -tinpm dst <peer-ip>",
+        "tcpdump -i <iface> -nn 'host <peer-ip> and tcp' -w zero-window-check.pcap",
+        "tshark -r zero-window-check.pcap -Y 'tcp.analysis.zero_window or tcp.analysis.window_full or tcp.analysis.zero_window_probe'",
+        "pidstat -druwt -p <peer-or-local-pid> 1",
+        "ss -tinpm state established | egrep 'persist|rwnd_limited|snd_wnd|rcv_space|backoff|retrans'"
       ]
     }));
   }
@@ -199,6 +275,7 @@ export function buildDiagnosticHypotheses({
       evidence: [
         `${affected.length} socket(s) show outbound queue or transmit memory pressure.`,
         loss.length ? "RTO, retransmission, or backoff signals reinforce an egress/path hypothesis." : "",
+        receiverLimited.length ? "Receiver-window limitation is also present; this may be slow consumer / Zero Window rather than network-only congestion." : "",
         lowCwnd.length ? "Low cwnd appears on affected traffic, limiting in-flight data." : ""
       ],
       counterEvidence: [
@@ -215,22 +292,57 @@ export function buildDiagnosticHypotheses({
     }));
   }
 
+  if (blackhole.length) {
+    const affected = blackhole.map(item => item.socket);
+    hypotheses.push(makeHypothesis({
+      id: "peer-dead-or-blackhole",
+      title: "Peer frozen, blackhole, or severe loss is possible",
+      category: "path",
+      severity: "critical",
+      confidence: blackhole.some(({ metrics }) => metrics.backoff >= 6) ? "high" : "medium",
+      summary: "Very high backoff with retransmission/RTO means TCP is waiting much longer than expected. Causes include severe congestion, peer freeze, firewall blackhole, or a broken path.",
+      sockets: affected,
+      evidence: [
+        `${affected.length} socket(s) show very severe backoff/RTO/retransmission behavior.`,
+        backoffGrowth.increased ? `backoff increased from ${backoffGrowth.first} to ${backoffGrowth.last} in the selected history.` : "",
+        retransGrowth.increased ? `retrans increased by ${retransGrowth.delta} in the selected history.` : ""
+      ],
+      counterEvidence: [
+        receiverLimited.length ? "Receiver-window limitation is also visible; a prolonged Zero Window can also drive waiting/probing behavior." : "",
+        "backoff means TCP is waiting longer; it does not by itself name the root cause."
+      ],
+      commands: [
+        "ss -tinpm dst <peer-ip>",
+        "ip route get <peer-ip>",
+        "tracepath <peer-ip>",
+        "tcpdump -i <iface> -nn 'host <peer-ip> and tcp retransmission' -w retrans-check.pcap",
+        "nstat -az | egrep 'Retrans|Timeout|TCPLoss|TCPAbort'"
+      ]
+    }));
+  }
+
   if (loss.length || lowCwnd.length) {
     const affected = unique([...loss, ...lowCwnd].map(item => item.socket), sockets.length);
     hypotheses.push(makeHypothesis({
       id: "path-congestion-or-loss",
-      title: "Path congestion, packet loss, or TCP recovery",
+      title: networkCongestion.length ? "Network congestion is probable" : "Path congestion, packet loss, or TCP recovery",
       category: "path",
-      severity: loss.some(({ metrics }) => metrics.rto >= rtoDanger || metrics.backoff > 1) ? "critical" : "high",
-      confidence: loss.length && lowCwnd.length ? "high" : "medium",
-      summary: "RTO, retransmission, backoff, or low congestion window suggest TCP recovery below the application layer.",
+      severity: loss.some(({ metrics }) => metrics.rto >= rtoDanger || metrics.backoff > 1) || backoffGrowth.last >= 4 ? "critical" : "high",
+      confidence: networkCongestion.length || loss.length && lowCwnd.length ? "high" : "medium",
+      summary: networkCongestion.length
+        ? "The combined pattern backoff + retrans/RTO + rising RTT or low cwnd points to real network congestion/loss more strongly than a slow consumer."
+        : "RTO, retransmission, backoff, or low congestion window suggest TCP recovery below the application layer.",
       sockets: affected,
       evidence: [
         `${loss.length} socket(s) show RTO/retransmission/backoff evidence.`,
-        lowCwnd.length ? `${lowCwnd.length} socket(s) have a constrained congestion window.` : ""
+        lowCwnd.length ? `${lowCwnd.length} socket(s) have a constrained congestion window.` : "",
+        networkCongestion.length ? "The congestion signature matches: retrans/backoff with RTT pressure and reduced cwnd." : "",
+        backoffGrowth.increased ? `backoff increased from ${backoffGrowth.first} to ${backoffGrowth.last}; this makes the condition serious.` : "",
+        retransGrowth.increased ? `retrans increased by ${retransGrowth.delta}; TCP is not just waiting, it is retrying.` : ""
       ],
       counterEvidence: [
         !drops.length ? "No socket drops are visible in this capture." : "",
+        receiverLimited.length ? "Receiver-window limitation is also visible; slow consumer / Zero Window remains a competing explanation." : "",
         !highSend.length ? "Send-Q is not dominant, so the issue may be intermittent or already recovered." : ""
       ],
       commands: [

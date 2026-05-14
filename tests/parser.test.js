@@ -63,6 +63,11 @@ test("parseAddress keeps wildcard listeners parseable", () => {
 });
 
 test("parseDuration normalizes common timer units to milliseconds", () => {
+  assert.equal(parseDuration("250us"), 0.25);
+  assert.equal(parseDuration("250usec"), 0.25);
+  assert.equal(parseDuration("12ms"), 12);
+  assert.equal(parseDuration("12msec"), 12);
+  assert.equal(parseDuration("2s"), 2000);
   assert.equal(parseDuration("2sec"), 2000);
   assert.equal(parseDuration("3min"), 180000);
   assert.equal(parseDuration("1hour"), 3600000);

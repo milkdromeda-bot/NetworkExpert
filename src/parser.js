@@ -12,9 +12,11 @@ export function parseAddress(token = "") {
 export function parseDuration(value = "") {
   const num = Number.parseFloat(value);
   if (Number.isNaN(num)) return null;
-  if (value.includes("sec")) return num * 1000;
-  if (value.includes("min")) return num * 60000;
-  if (value.includes("hour")) return num * 3600000;
+  if (/(usec|us)$/i.test(value)) return num / 1000;
+  if (/(msec|ms)$/i.test(value)) return num;
+  if (/(sec|s)$/i.test(value)) return num * 1000;
+  if (/min$/i.test(value)) return num * 60000;
+  if (/hour$/i.test(value)) return num * 3600000;
   return num;
 }
 
@@ -25,6 +27,8 @@ export function stripAnsi(value = "") {
 export function parseNumber(value) {
   if (value == null) return null;
   const raw = String(value).trim();
+  const duration = raw.match(/^(-?\d+(?:\.\d+)?)(us|usec|ms|msec|sec|s|min|hour)$/i);
+  if (duration) return parseDuration(raw);
   const rate = raw.match(/^(-?\d+(?:\.\d+)?)([kmg])?(?:bits\/sec|bps)$/i);
   if (rate) {
     const multiplier = { k: 1e3, m: 1e6, g: 1e9 }[rate[2]?.toLowerCase()] || 1;
@@ -65,10 +69,14 @@ export function parseDetails(text) {
   if (delivery) details.values.delivery_rate = parseNumber(delivery[1]);
   const send = text.match(/\bsend\s+([^\s]+)/);
   if (send) details.values.send = parseNumber(send[1]);
+  const limited = text.match(/\brwnd_limited:([^\s(]+)(?:\(([\d.]+)%\))?/);
+  if (limited) details.values.rwnd_limited = { ms: parseNumber(limited[1]) || 0, percent: limited[2] == null ? null : Number(limited[2]) };
+  const sndbufLimited = text.match(/\bsndbuf_limited:([^\s(]+)(?:\(([\d.]+)%\))?/);
+  if (sndbufLimited) details.values.sndbuf_limited = { ms: parseNumber(sndbufLimited[1]) || 0, percent: sndbufLimited[2] == null ? null : Number(sndbufLimited[2]) };
 
   for (const match of text.matchAll(/\b([a-z_]+):([^\s,)]+)/g)) {
     const key = match[1];
-    if (["skmem", "timer", "users", "wscale", "rtt"].includes(key)) continue;
+    if (["skmem", "timer", "users", "wscale", "rtt", "rwnd_limited", "sndbuf_limited"].includes(key)) continue;
     details.values[key] = parseNumber(match[2]) ?? match[2];
   }
   for (const flag of ["ts", "sack", "ecn", "ecnseen", "fastopen", "cubic", "bbr", "reno"]) {
@@ -157,6 +165,10 @@ export function metricValue(socket, metric) {
   if (metric === "rttvar") return v.rtt?.var || 0;
   if (metric === "pacing_rate") return v.pacing_rate?.current || v.send || 0;
   if (metric === "delivery_rate") return v.delivery_rate || 0;
+  if (metric === "rwnd_limited") return v.rwnd_limited?.ms || 0;
+  if (metric === "rwnd_limited_pct") return v.rwnd_limited?.percent || 0;
+  if (metric === "sndbuf_limited") return v.sndbuf_limited?.ms || 0;
+  if (metric === "sndbuf_limited_pct") return v.sndbuf_limited?.percent || 0;
   if (metric === "sendQ") return socket.sendQ || 0;
   if (metric === "recvQ") return socket.recvQ || 0;
   if (metric.startsWith("skmem.")) return socket.details.skmem[metric.split(".")[1]] || 0;
