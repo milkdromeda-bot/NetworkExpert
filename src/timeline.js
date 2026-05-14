@@ -86,27 +86,38 @@ export function buildSocketHistoryFromSnapshots(snapshots = [], selectedSocket =
     const exact = block.sockets.find(socket => socketKey(socket) === key)
       || block.sockets.find(socket => socket.local === selectedSocket.local && socket.peer === selectedSocket.peer);
     return {
+      socketId: selectedSocket.id,
       t: Math.max(0, Math.round((block.epochMs - start) / 1000)),
       epochMs: block.epochMs,
       socketPresent: Boolean(exact),
       rtt: metricValue(exact, "rtt"),
       rttvar: metricValue(exact, "rttvar"),
       rto: metricValue(exact, "rto"),
+      minrtt: metricValue(exact, "minrtt"),
+      rcv_rtt: metricValue(exact, "rcv_rtt"),
+      rcv_space: metricValue(exact, "rcv_space"),
+      rcv_ssthresh: metricValue(exact, "rcv_ssthresh"),
+      rcv_wnd: metricValue(exact, "rcv_wnd"),
+      snd_wnd: metricValue(exact, "snd_wnd"),
       sendQ: metricValue(exact, "sendQ"),
       recvQ: metricValue(exact, "recvQ"),
       cwnd: metricValue(exact, "cwnd"),
       ato: metricValue(exact, "ato"),
+      mss: metricValue(exact, "mss"),
       "skmem.r": metricValue(exact, "skmem.r"),
+      "skmem.rb": metricValue(exact, "skmem.rb"),
       "skmem.t": metricValue(exact, "skmem.t"),
       "skmem.d": metricValue(exact, "skmem.d"),
       pacing_rate: metricValue(exact, "pacing_rate"),
       delivery_rate: metricValue(exact, "delivery_rate"),
+      bytes_sent: metricValue(exact, "bytes_sent"),
       bytes_acked: metricValue(exact, "bytes_acked"),
       bytes_received: metricValue(exact, "bytes_received"),
       segs_out: metricValue(exact, "segs_out"),
       segs_in: metricValue(exact, "segs_in"),
       backoff: metricValue(exact, "backoff"),
-      retrans: exact?.details.timer?.retrans || 0
+      retrans: exact?.details.timer?.retrans || 0,
+      timerName: exact?.details.timer?.name || ""
     };
   }).filter(row => {
     if (row.socketPresent) return true;
@@ -118,21 +129,31 @@ export function buildSocketHistoryFromSnapshots(snapshots = [], selectedSocket =
     latestRow.rtt = metricValue(selectedSocket, "rtt");
     latestRow.rttvar = metricValue(selectedSocket, "rttvar");
     latestRow.rto = metricValue(selectedSocket, "rto");
+    latestRow.minrtt = metricValue(selectedSocket, "minrtt");
+    latestRow.rcv_rtt = metricValue(selectedSocket, "rcv_rtt");
+    latestRow.rcv_space = metricValue(selectedSocket, "rcv_space");
+    latestRow.rcv_ssthresh = metricValue(selectedSocket, "rcv_ssthresh");
+    latestRow.rcv_wnd = metricValue(selectedSocket, "rcv_wnd");
+    latestRow.snd_wnd = metricValue(selectedSocket, "snd_wnd");
     latestRow.sendQ = metricValue(selectedSocket, "sendQ");
     latestRow.recvQ = metricValue(selectedSocket, "recvQ");
     latestRow.cwnd = metricValue(selectedSocket, "cwnd");
     latestRow.ato = metricValue(selectedSocket, "ato");
+    latestRow.mss = metricValue(selectedSocket, "mss");
     latestRow["skmem.r"] = metricValue(selectedSocket, "skmem.r");
+    latestRow["skmem.rb"] = metricValue(selectedSocket, "skmem.rb");
     latestRow["skmem.t"] = metricValue(selectedSocket, "skmem.t");
     latestRow["skmem.d"] = metricValue(selectedSocket, "skmem.d");
     latestRow.pacing_rate = metricValue(selectedSocket, "pacing_rate");
     latestRow.delivery_rate = metricValue(selectedSocket, "delivery_rate");
+    latestRow.bytes_sent = metricValue(selectedSocket, "bytes_sent");
     latestRow.bytes_acked = metricValue(selectedSocket, "bytes_acked");
     latestRow.bytes_received = metricValue(selectedSocket, "bytes_received");
     latestRow.segs_out = metricValue(selectedSocket, "segs_out");
     latestRow.segs_in = metricValue(selectedSocket, "segs_in");
     latestRow.backoff = metricValue(selectedSocket, "backoff");
     latestRow.retrans = selectedSocket?.details.timer?.retrans || 0;
+    latestRow.timerName = selectedSocket?.details.timer?.name || "";
   }
 
   return rows;

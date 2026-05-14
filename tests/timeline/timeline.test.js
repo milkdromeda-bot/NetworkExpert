@@ -211,3 +211,29 @@ test("socket history aligns the latest row with the selected socket values", () 
   assert.equal(latest["skmem.d"], 25);
   assert.equal(latest.rtt, 0.8);
 });
+
+test("socket history carries receive autotuning fields for advanced analysis", () => {
+  const raw = [
+    "--- 2026-04-29 08:27:23 ---",
+    "ESTAB 0 0 192.168.145.205:20002 192.168.145.204:57067 timer:(keepalive,20sec,0) rcv_rtt:8.5 rcv_space:79832 rcv_ssthresh:798320 rcv_wnd:1000 snd_wnd:2000 minrtt:0.7 mss:1448 bytes_sent:1000 skmem:(r100000,rb400000,t0,tb100,f0,w0,o0,bl0,d0)",
+    "--- 2026-04-29 08:28:23 ---",
+    "ESTAB 300000 0 192.168.145.205:20002 192.168.145.204:57067 timer:(persist,3sec,2) rcv_rtt:11.5 rcv_space:2048 rcv_ssthresh:375680 rcv_wnd:32 snd_wnd:64 minrtt:0.8 mss:1448 bytes_sent:2000 skmem:(r390000,rb400000,t0,tb100,f0,w0,o0,bl0,d0)"
+  ].join("\n");
+
+  const snapshots = parsedTimestampSnapshots(raw);
+  const [selectedSocket] = aggregateTimestampedSockets(raw);
+  const rows = buildSocketHistoryFromSnapshots(snapshots, selectedSocket);
+  const latest = rows.at(-1);
+
+  assert.equal(rows[0].socketId, selectedSocket.id);
+  assert.equal(rows[0].rcv_ssthresh, 798320);
+  assert.equal(latest.rcv_space, 2048);
+  assert.equal(latest.rcv_rtt, 11.5);
+  assert.equal(latest.rcv_wnd, 32);
+  assert.equal(latest.snd_wnd, 64);
+  assert.equal(latest.minrtt, 0.8);
+  assert.equal(latest.mss, 1448);
+  assert.equal(latest.bytes_sent, 2000);
+  assert.equal(latest["skmem.rb"], 400000);
+  assert.equal(latest.timerName, "persist");
+});

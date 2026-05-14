@@ -32,8 +32,14 @@ export const DASHBOARD_PRESETS = {
   throughput: {
     name: "Throughput path",
     description: "Delivered rate, pacing, TX/RX bandwidth, bytes, and segment progress.",
-    metrics: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in"],
+    metrics: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "bytes_sent", "bytes_acked", "bytes_received", "segs_out", "segs_in"],
     layout: { columns: 3, density: "standard", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: false }
+  },
+  bdp: {
+    name: "BDP / TCP window",
+    description: "Observed BDP, rcv_space, window-limited theoretical throughput, and scaling context.",
+    metrics: ["rx_bps", "bytes_received", "rcv_space", "rcv_ssthresh", "rcv_rtt", "rtt", "delivery_rate", "recvQ", "skmem.r", "skmem.rb"],
+    layout: { columns: 3, density: "standard", mainChart: true, showLegend: true, sharedZoom: true, showCrosshair: true, showThresholds: true }
   },
   warroom: {
     name: "War room",

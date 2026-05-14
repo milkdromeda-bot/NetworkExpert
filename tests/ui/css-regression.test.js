@@ -5,6 +5,7 @@ import { test } from "node:test";
 const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
 const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
+const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
 
 test("table settings header stays above nearby column hover tooltips", () => {
   assert.match(css, /th:not\(\.table-settings-head\):hover/);
@@ -118,6 +119,39 @@ test("diagnostic cards expose optional deep explanations", () => {
   assert.match(css, /\.diagnosis-learn-more\s*\{/);
   assert.match(css, /\.diagnosis-learn-more ul\s*\{[^}]*line-height:\s*1\.5;/s);
   assert.match(css, /\.diagnosis-learn-more li\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+});
+
+test("deep analysis control is rendered as an explicit on off switch", () => {
+  assert.match(main, /const deepAnalysisOn = Boolean\(state\.prefs\.deepAnalysis\);/);
+  assert.match(main, /data-action="toggleDeepAnalysis"[\s\S]*class="deep-analysis-toggle \$\{deepAnalysisOn \? "is-on" : "is-off"\}"/);
+  assert.match(main, /role="switch"/);
+  assert.match(main, /aria-checked="\$\{deepAnalysisOn \? "true" : "false"\}"/);
+  assert.match(main, /<span class="deep-analysis-label"><strong>Deep analysis<\/strong><small>\$\{deepAnalysisOn \? "On" : "Paused"\}<\/small><\/span>/);
+  assert.match(main, /<span class="deep-analysis-switch" aria-hidden="true"><span><\/span><\/span>/);
+  assert.doesNotMatch(main, /data-action="toggleDeepAnalysis" class="\$\{state\.prefs\.deepAnalysis \? "primary" : ""\}"/);
+  assert.match(css, /\.deep-analysis-toggle\s*\{[^}]*max-width:\s*196px;/s);
+  assert.match(css, /\.deep-analysis-label strong,\s*\.deep-analysis-label small\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+  assert.match(css, /\.deep-analysis-toggle\.is-on \.deep-analysis-switch span\s*\{[^}]*transform:\s*translateX\(16px\);/s);
+  assert.match(css, /@media \(max-width:\s*1180px\)[\s\S]*\.analysis-layout \.toolbar\s*\{[^}]*flex-wrap:\s*wrap;/s);
+});
+
+test("BDP window module exposes cautious controls and bounded charts", () => {
+  assert.match(main, /import \{ analyzeBdpWindowLimit \} from "\.\/bdp-window-analysis\.js";/);
+  assert.match(main, /function renderBdpWindowPanel\(\)/);
+  assert.match(main, /BDP & Window-Limited Throughput/);
+  assert.match(main, /id="bdpDirectionSelect"/);
+  assert.match(main, /id="bdpCapacityInput"/);
+  assert.match(main, /data-bdp-chart="throughput"/);
+  assert.match(main, /data-bdp-chart="bdp"/);
+  assert.match(main, /drawBdpWindowCharts\(\);/);
+  assert.match(main, /capacity unknown; analysis based on observed throughput and TCP window/i);
+  assert.match(main, /configuredLinkCapacityMbps/);
+  assert.match(data, /bdpDirection:\s*"inbound"/);
+  assert.match(profiles, /bdp:\s*\{[\s\S]*BDP \/ TCP window/);
+  assert.match(css, /\.bdp-window-panel\s*\{/);
+  assert.match(css, /\.bdp-summary-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6,\s*minmax\(150px,\s*1fr\)\);/s);
+  assert.match(css, /\.bdp-chart-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(300px,\s*1fr\)\);/s);
+  assert.match(css, /@media \(max-width:\s*720px\)[\s\S]*\.bdp-context-line\s*\{[^}]*grid-template-columns:\s*1fr;/s);
 });
 
 test("dashboard preset selection keeps the picker responsive", () => {

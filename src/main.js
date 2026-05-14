@@ -15,6 +15,7 @@ import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
+import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
@@ -73,6 +74,15 @@ function defaultTableColumns() {
 
 function normalizeSsEditorTheme(value) {
   return SS_EDITOR_THEMES.some(theme => theme.id === value) ? value : DEFAULT_SS_EDITOR_THEME;
+}
+
+function normalizeBdpDirection(value) {
+  return value === "outbound" ? "outbound" : "inbound";
+}
+
+function configuredLinkCapacityMbps() {
+  const value = Number(state?.prefs?.configuredLinkCapacityMbps || 0);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function applySsEditorThemePreview(value) {
@@ -322,6 +332,8 @@ function loadPrefs() {
     prefs.chartLayout.tooltipOpacity = clampChartTooltipOpacity(prefs.chartLayout.tooltipOpacity);
     prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(prefs.defaultDashboardPreset);
     prefs.ssEditorTheme = normalizeSsEditorTheme(prefs.ssEditorTheme);
+    prefs.bdpDirection = normalizeBdpDirection(prefs.bdpDirection);
+    prefs.configuredLinkCapacityMbps = Number(prefs.configuredLinkCapacityMbps) > 0 ? Number(prefs.configuredLinkCapacityMbps) : "";
     if (saved.sampling == null || (saved.sampling === 5 && saved.chartResolutionDefault !== "max")) prefs.sampling = 1;
     prefs.chartResolutionDefault = "max";
     return prefs;
@@ -335,6 +347,8 @@ function savePrefs() {
   state.prefs.chartLayout.tooltipOpacity = chartTooltipOpacity();
   state.prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(state.prefs.defaultDashboardPreset);
   state.prefs.ssEditorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
+  state.prefs.bdpDirection = normalizeBdpDirection(state.prefs.bdpDirection);
+  state.prefs.configuredLinkCapacityMbps = configuredLinkCapacityMbps() || "";
   localStorage.setItem("networkExpertPrefs", JSON.stringify(state.prefs));
 }
 
@@ -836,7 +850,7 @@ function buildHistory() {
 }
 
 function chartMetricList() {
-  return ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"];
+  return ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "rcv_rtt", "rcv_space", "rcv_ssthresh", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.rb", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_sent", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"];
 }
 
 const PRE_IMPORT_PRESETS = [
@@ -2364,6 +2378,7 @@ function scheduleChartPageDraw() {
   chartPageDrawFrame = requestAnimationFrame(() => {
     chartPageDrawFrame = 0;
     drawChart();
+    drawBdpWindowCharts();
     scheduleMultiChartDraw();
     scheduleCorrelationDraw();
   });
@@ -2845,6 +2860,10 @@ function renderIngestPage() {
 }
 
 function renderAnalysisPage() {
+  const deepAnalysisOn = Boolean(state.prefs.deepAnalysis);
+  const deepAnalysisTitle = deepAnalysisOn
+    ? "Deep analysis is on. Click to pause the background advisor."
+    : "Deep analysis is paused. Click to enable the background advisor.";
   return html`
     <section class="kpis">
       <div class="kpi"><label>Sockets</label><strong>${formatNumber(state.sockets.length)}</strong></div>
@@ -2857,7 +2876,18 @@ function renderAnalysisPage() {
         <div class="panel-head">
           <div class="panel-title">Detected sockets</div>
           <div class="toolbar">
-            <button data-action="toggleDeepAnalysis" class="${state.prefs.deepAnalysis ? "primary" : ""}" title="Run advanced advisor in the background">${icons.brain} Deep analysis</button>
+            <button
+              type="button"
+              data-action="toggleDeepAnalysis"
+              class="deep-analysis-toggle ${deepAnalysisOn ? "is-on" : "is-off"}"
+              role="switch"
+              aria-checked="${deepAnalysisOn ? "true" : "false"}"
+              title="${deepAnalysisTitle}"
+            >
+              <span class="deep-analysis-icon" aria-hidden="true">${icons.brain}</span>
+              <span class="deep-analysis-label"><strong>Deep analysis</strong><small>${deepAnalysisOn ? "On" : "Paused"}</small></span>
+              <span class="deep-analysis-switch" aria-hidden="true"><span></span></span>
+            </button>
             <button data-action="setBaseline" title="Use current parsed sockets as before baseline"><i class="ri-scales-3-line"></i> Set baseline</button>
             ${renderExportMenu("analysis")}
             <input id="searchInput" placeholder='Filter: state:ESTAB risk>=high port:443 process:nginx rtt>100' value="${escapeHtml(state.table.filters.text)}" />
@@ -2937,6 +2967,7 @@ function renderChartsPage() {
         </div>
       </div>
     </section>
+    ${renderBdpWindowPanel()}
     <section class="chart-grid cols-${columns} density-${layout.density}">
       ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}" data-chart-card="${m}">
         <div class="panel-head">
@@ -2993,6 +3024,7 @@ function dashboardPresetIcon(presetId) {
     drops: "ri-error-warning-line",
     microburst: "ri-flashlight-line",
     throughput: "ri-route-line",
+    bdp: "ri-speed-up-line",
     warroom: "ri-team-line"
   }[presetId] || "ri-dashboard-3-line";
 }
@@ -3107,6 +3139,95 @@ function renderTailLatencyLensPanel() {
   </section>`;
 }
 
+function formatBytesHuman(value) {
+  const bytes = Math.max(0, Number(value || 0));
+  if (bytes >= 1024 * 1024) return `${numberFormatter(bytes >= 10 * 1024 * 1024 ? 0 : 1).format(bytes / (1024 * 1024))} MB`;
+  if (bytes >= 1024) return `${numberFormatter(bytes >= 10 * 1024 ? 0 : 1).format(bytes / 1024)} KB`;
+  return `${formatNumber(Math.round(bytes))} B`;
+}
+
+function bdpWindowAnalysis(rows = visibleHistory()) {
+  const socket = socketsById().get(state.selectedId) || state.sockets[0] || null;
+  return analyzeBdpWindowLimit(socket, {
+    history: rows,
+    direction: normalizeBdpDirection(state.prefs.bdpDirection),
+    configuredLinkCapacityMbps: configuredLinkCapacityMbps(),
+    recvWarn: thresholdFor("recvQ").warn
+  });
+}
+
+function renderBdpSummaryCard(label, value, hint = "") {
+  return `<article class="bdp-summary-card">
+    <span>${escapeHtml(label)}</span>
+    <strong>${escapeHtml(value)}</strong>
+    ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+  </article>`;
+}
+
+function renderBdpWindowPanel() {
+  const socket = socketsById().get(state.selectedId) || state.sockets[0] || null;
+  const hasRealTimeline = hasRealTimestampHistory();
+  const analysis = bdpWindowAnalysis();
+  const stats = analysis.stats || {};
+  const capacityValue = configuredLinkCapacityMbps();
+  const capacityText = capacityValue ? `${capacityValue}` : "";
+  return `<section class="panel bdp-window-panel">
+    <div class="panel-head bdp-window-head">
+      <div class="panel-title chart-title-wrap">
+        <span>BDP & Window-Limited Throughput</span>
+        ${renderChartInfo(
+          "BDP & Window-Limited Throughput",
+          "Compares observed socket throughput with the theoretical throughput allowed by the effective TCP window and RTT.",
+          "Capacity is optional. Without configured capacity, this module does not claim the physical line rate."
+        )}
+      </div>
+      <div class="bdp-controls">
+        <label><span>Direction</span><select id="bdpDirectionSelect">
+          <option value="inbound" ${state.prefs.bdpDirection !== "outbound" ? "selected" : ""}>Inbound - bytes_received</option>
+          <option value="outbound" ${state.prefs.bdpDirection === "outbound" ? "selected" : ""}>Outbound - bytes_sent</option>
+        </select></label>
+        <label><span>Capacity Mbps</span><input id="bdpCapacityInput" type="number" min="0" step="0.1" value="${escapeHtml(capacityText)}" placeholder="optional"/></label>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="bdp-context-line ${analysis.status}">
+        <span class="risk ${escapeHtml(analysis.severity)}">${escapeHtml(analysis.severity)}</span>
+        <strong>${escapeHtml(analysis.hypothesis || "informational")}</strong>
+        <em>${escapeHtml(analysis.evidence?.[0] || "capacity unknown; analysis based on observed throughput and TCP window.")}</em>
+      </div>
+      <div class="bdp-summary-grid">
+        ${renderBdpSummaryCard("Socket", socket ? `${socket.local} -> ${socket.peer}` : "none", socket?.details?.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "")}
+        ${renderBdpSummaryCard("Observed peak", stats.peakObservedThroughputBps ? formatBitsPerSecond(stats.peakObservedThroughputBps) : "n/a", `${formatNumber(stats.computableSamples || 0)} computed samples`)}
+        ${renderBdpSummaryCard("Window max peak", stats.peakWindowThroughputBps ? formatBitsPerSecond(stats.peakWindowThroughputBps) : "n/a", "rcv_space x 8 / RTT")}
+        ${renderBdpSummaryCard("Observed BDP peak", stats.peakObservedBdpBytes ? formatBytesHuman(stats.peakObservedBdpBytes) : "n/a", "throughput x RTT")}
+        ${renderBdpSummaryCard("Smallest window", stats.minEffectiveWindowBytes ? formatBytesHuman(stats.minEffectiveWindowBytes) : "n/a", analysis.series?.wscale?.scale != null ? `wscale ${analysis.series.wscale.scale}` : "no wscale")}
+        ${renderBdpSummaryCard("Capacity", capacityValue ? formatBitsPerSecond(capacityValue * 1e6) : "unknown", capacityValue ? "user configured" : "no physical line-rate claim")}
+      </div>
+      ${hasRealTimeline ? `<div class="bdp-chart-grid">
+        <article>
+          <div class="bdp-chart-title"><strong>Window-limited theoretical throughput</strong><span>Mbps over time</span></div>
+          <svg class="chart bdp-chart" data-bdp-chart="throughput" role="img" aria-label="BDP throughput chart"></svg>
+        </article>
+        <article>
+          <div class="bdp-chart-title"><strong>Observed BDP vs effective window</strong><span>bytes over time</span></div>
+          <svg class="chart bdp-chart" data-bdp-chart="bdp" role="img" aria-label="BDP and window chart"></svg>
+        </article>
+      </div>
+      <div class="bdp-legend">
+        <span><i style="--legend-color:#7dd3fc"></i>Observed throughput</span>
+        <span><i style="--legend-color:#fbbf24"></i>Max by rcv_space</span>
+        <span><i style="--legend-color:#a78bfa"></i>delivery_rate</span>
+        <span><i style="--legend-color:#64748b"></i>64 KB / scaling capability</span>
+        <span><i style="--legend-color:#fb7185"></i>retrans / RTT / persist marker</span>
+      </div>` : `<div class="bdp-empty"><strong>Timestamped snapshots required</strong><span>Add timestamp markers before each ss snapshot to compute byte deltas, BDP, and window-limited throughput over time.</span></div>`}
+      <details class="diagnosis-learn-more bdp-learn-more">
+        <summary><i class="ri-book-open-line"></i> What this module can and cannot conclude</summary>
+        <ul>${analysis.learnMore.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>
+      </details>
+    </div>
+  </section>`;
+}
+
 function renderChartInfo(title, summary, detail) {
   return `<span class="field-info" tabindex="0" aria-label="${escapeHtml(title)} help"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip"><span class="tooltip-kicker">Chart intelligence</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(summary)}</p><p>${escapeHtml(detail)}</p></span></span>`;
 }
@@ -3116,11 +3237,15 @@ function metricSource(metric) {
     rtt: "ss -i field rtt:<avg>/<var>",
     rttvar: "ss -i field rtt:<avg>/<var>, second value",
     rto: "ss -i field rto",
+    rcv_rtt: "ss -i field rcv_rtt",
+    rcv_space: "ss -i field rcv_space",
+    rcv_ssthresh: "ss -i field rcv_ssthresh",
     sendQ: "ss table column Send-Q",
     recvQ: "ss table column Recv-Q",
     cwnd: "ss -i field cwnd",
     ato: "ss -i field ato",
     "skmem.r": "ss -m skmem r",
+    "skmem.rb": "ss -m skmem rb",
     "skmem.t": "ss -m skmem t",
     "skmem.d": "ss -m skmem d",
     "skmem.d_rate": "derived from skmem d deltas / elapsed time",
@@ -3128,6 +3253,7 @@ function metricSource(metric) {
     delivery_rate: "ss -i field delivery_rate",
     tx_bps: "derived from bytes_acked deltas, fallback delivery/pacing rate",
     rx_bps: "derived from bytes_received deltas",
+    bytes_sent: "ss -i field bytes_sent",
     bytes_acked: "ss -i field bytes_acked",
     bytes_received: "ss -i field bytes_received",
     segs_out: "ss -i field segs_out",
@@ -3142,11 +3268,15 @@ function metricInterpretation(metric) {
     rtt: "Latency baseline for this TCP flow. Rising RTT shows path queueing, distance, congestion, overloaded peers, or virtualization jitter.",
     rttvar: "Jitter around RTT. High variance makes RTO and tail latency unstable even when average RTT looks acceptable.",
     rto: "TCP retransmission timeout. Elevated RTO is a stronger recovery/loss signal than RTT alone.",
+    rcv_rtt: "Receive-side RTT estimator used by Linux receive-window autotuning. Useful context for window sizing.",
+    rcv_space: "Current receive space Linux can advertise. Low values matter when Recv-Q and receive memory are also under pressure.",
+    rcv_ssthresh: "Receive-side autotuning threshold/current window clamp. Use trends, not a single value, and do not confuse it with sender ssthresh.",
     sendQ: "Bytes waiting locally to be sent or acknowledged. Growth often points to slow peer consumption, congestion, or TCP backoff.",
     recvQ: "Bytes waiting locally for the application to read. Growth points to local process or scheduler read latency.",
     cwnd: "Congestion window in segments. Low cwnd limits throughput even when the app wants to send.",
     ato: "Delayed ACK timeout. High values can add latency to small or request/response workloads.",
     "skmem.r": "Kernel receive memory currently allocated to this socket. High values show receive-side pressure or burst absorption.",
+    "skmem.rb": "Receive buffer limit. Compare skmem.r against this value to see whether receive memory is near its budget.",
     "skmem.t": "Kernel transmit memory currently allocated to this socket. High values show outbound buffering or drain pressure.",
     "skmem.d": "Socket memory drops. Any increase is loss/pressure evidence, especially if it grows over time.",
     "skmem.d_rate": "Rate at which socket memory drops are increasing. This separates old static counters from current loss/pressure.",
@@ -3154,6 +3284,7 @@ function metricInterpretation(metric) {
     delivery_rate: "Kernel estimate of delivered bandwidth. Compare with pacing and queues to separate path limit from application limit.",
     tx_bps: "Estimated transmit throughput from acknowledged bytes between snapshots. Best for seeing forward progress.",
     rx_bps: "Estimated receive throughput from received bytes between snapshots. Best for spotting receive-side stalls.",
+    bytes_sent: "Cumulative bytes sent locally. The BDP module uses its delta for outbound observed throughput when available.",
     bytes_acked: "Cumulative acknowledged outbound bytes. Use slope/delta over time rather than the absolute value.",
     bytes_received: "Cumulative inbound bytes. Use slope/delta over time rather than the absolute value.",
     segs_out: "Cumulative outbound TCP segments. Useful for tiny-write or packet-efficiency patterns.",
@@ -3168,11 +3299,15 @@ function metricCorrelations(metric) {
     rtt: ["RTO", "RTT variance", "Send-Q", "delivery_rate"],
     rttvar: ["RTO", "RTT", "backoff", "retrans"],
     rto: ["RTT variance", "backoff", "retrans", "Send-Q"],
+    rcv_rtt: ["rcv_ssthresh", "rcv_space", "RTT", "retrans"],
+    rcv_space: ["Observed BDP", "Recv-Q", "skmem.r", "persist"],
+    rcv_ssthresh: ["rcv_space", "Recv-Q", "skmem.rb", "rcv_rtt"],
     sendQ: ["TX bandwidth", "RTO", "cwnd", "skmem.t"],
     recvQ: ["RX bandwidth", "skmem.r", "process owner", "socket drops"],
     cwnd: ["pacing_rate", "Send-Q", "RTO", "delivery_rate"],
     ato: ["RTT", "RX/TX bandwidth", "request latency"],
     "skmem.r": ["Recv-Q", "socket drops", "RX bandwidth", "process owner"],
+    "skmem.rb": ["skmem.r", "Recv-Q", "rcv_space", "socket drops"],
     "skmem.t": ["Send-Q", "pacing_rate", "delivery_rate", "RTO"],
     "skmem.d": ["Recv-Q", "skmem.r", "RX bandwidth", "burst timing"],
     "skmem.d_rate": ["Socket drops", "Recv-Q", "skmem.r", "RX bandwidth bursts"],
@@ -3180,6 +3315,7 @@ function metricCorrelations(metric) {
     delivery_rate: ["pacing_rate", "TX bandwidth", "Send-Q", "cwnd"],
     tx_bps: ["Send-Q", "delivery_rate", "pacing_rate", "bytes_acked"],
     rx_bps: ["Recv-Q", "bytes_received", "skmem.r", "drops"],
+    bytes_sent: ["Outbound BDP", "delivery_rate", "segs_out", "Send-Q"],
     bytes_acked: ["TX bandwidth", "segs_out", "delivery_rate"],
     bytes_received: ["RX bandwidth", "segs_in", "Recv-Q"],
     segs_out: ["bytes_acked", "MSS", "retrans"],
@@ -3319,7 +3455,11 @@ function diagnosticHypotheses() {
     sockets: rows.length ? rows : state.sockets,
     anomalies: state.anomalies,
     history: state.history,
-    thresholds: thresholdFor
+    thresholds: thresholdFor,
+    bdpWindow: {
+      direction: normalizeBdpDirection(state.prefs.bdpDirection),
+      configuredLinkCapacityMbps: configuredLinkCapacityMbps()
+    }
   }).slice(0, 8);
 }
 
@@ -4635,15 +4775,15 @@ function metricUnit(metric) {
 
 function metricFractionDigits(metric, value) {
   const numeric = Math.abs(Number(value || 0));
-  if (["pacing_rate", "delivery_rate", "tx_bps", "rx_bps", "sendQ", "recvQ", "skmem.r", "skmem.t", "skmem.d", "bytes_acked", "bytes_received", "segs_out", "segs_in", "cwnd", "backoff", "retrans"].includes(metric)) return 0;
+  if (["pacing_rate", "delivery_rate", "tx_bps", "rx_bps", "sendQ", "recvQ", "rcv_space", "rcv_ssthresh", "skmem.r", "skmem.rb", "skmem.t", "skmem.d", "bytes_sent", "bytes_acked", "bytes_received", "segs_out", "segs_in", "cwnd", "backoff", "retrans"].includes(metric)) return 0;
   if (metric === "skmem.d_rate") return numeric > 0 && numeric < 1 ? 3 : 2;
-  if (["rtt", "rto", "ato", "rttvar"].includes(metric)) return numeric > 0 && numeric < 10 ? 3 : Number.isInteger(Number(value)) ? 0 : 3;
+  if (["rtt", "rto", "ato", "rttvar", "rcv_rtt"].includes(metric)) return numeric > 0 && numeric < 10 ? 3 : Number.isInteger(Number(value)) ? 0 : 3;
   return Number.isInteger(Number(value)) ? 0 : 2;
 }
 
 function formatMetricNumber(metric, value) {
   const digits = metricFractionDigits(metric, value);
-  const minimumDigits = ["rtt", "rto", "ato"].includes(metric) && Math.abs(Number(value || 0)) > 0 && Math.abs(Number(value || 0)) < 10 ? digits : 0;
+  const minimumDigits = ["rtt", "rto", "ato", "rcv_rtt"].includes(metric) && Math.abs(Number(value || 0)) > 0 && Math.abs(Number(value || 0)) < 10 ? digits : 0;
   return numberFormatterWith(minimumDigits, digits).format(Number(value || 0));
 }
 
@@ -4692,11 +4832,15 @@ function metricLabel(metric) {
   return {
     rtt: "RTT",
     rto: "RTO",
+    rcv_rtt: "Receive RTT",
+    rcv_space: "Receive space",
+    rcv_ssthresh: "Receive ssthresh",
     sendQ: "Send-Q",
     recvQ: "Recv-Q",
     cwnd: "Congestion window",
     ato: "ACK timeout",
     "skmem.r": "Socket memory receive",
+    "skmem.rb": "Receive buffer limit",
     "skmem.t": "Socket memory transmit",
     "skmem.d": "Socket drops",
     "skmem.d_rate": "Socket drop rate",
@@ -4704,6 +4848,7 @@ function metricLabel(metric) {
     delivery_rate: "Delivery rate",
     tx_bps: "TX bandwidth",
     rx_bps: "RX bandwidth",
+    bytes_sent: "Bytes sent",
     bytes_acked: "Bytes acked",
     bytes_received: "Bytes received",
     rttvar: "RTT variance",
@@ -4718,11 +4863,15 @@ function metricColor(metric) {
   return {
     rtt: "#5db7ff",
     rto: "#ff9f43",
+    rcv_rtt: "#93c5fd",
+    rcv_space: "#34d399",
+    rcv_ssthresh: "#fbbf24",
     sendQ: "#39d6d6",
     recvQ: "#d38cff",
     cwnd: "#4cde8a",
     ato: "#ffd166",
     "skmem.r": "#7dd3fc",
+    "skmem.rb": "#60a5fa",
     "skmem.t": "#f472b6",
     "skmem.d": "#ff5c77",
     "skmem.d_rate": "#ff2e63",
@@ -4730,6 +4879,7 @@ function metricColor(metric) {
     delivery_rate: "#67e8f9",
     tx_bps: "#22d3ee",
     rx_bps: "#818cf8",
+    bytes_sent: "#2dd4bf",
     bytes_acked: "#38bdf8",
     bytes_received: "#a78bfa",
     rttvar: "#fb7185",
@@ -5439,6 +5589,127 @@ function drawCorrelation() {
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(state.correlation.x)} vs ${metricLabel(state.correlation.y)}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(state.correlation.x)} (${metricUnit(state.correlation.x)})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(state.correlation.y)} (${metricUnit(state.correlation.y)})</text>
+    <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
+    <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
+  `;
+}
+
+function drawBdpWindowCharts() {
+  const charts = [...document.querySelectorAll("[data-bdp-chart]")];
+  if (!charts.length) return;
+  const analysis = bdpWindowAnalysis(visibleHistory());
+  charts.forEach(svg => drawBdpWindowChart(svg, analysis, svg.dataset.bdpChart));
+}
+
+function bdpChartSeries(analysis, kind) {
+  const capacity = analysis.series?.capacityBps || null;
+  if (kind === "bdp") {
+    return [
+      { key: "observedBdpBytes", label: "Observed BDP", color: "#7dd3fc", dash: "", value: sample => sample.observedBdpBytes },
+      { key: "effectiveWindowBytes", label: "rcv_space/window", color: "#fbbf24", dash: "", value: sample => sample.effectiveWindowBytes },
+      { key: "skmemRb", label: "skmem.rb", color: "#a78bfa", dash: "6 5", value: sample => sample.skmemRb },
+      { key: "targetBdpBytes", label: "Target BDP", color: "#22c55e", dash: "7 5", value: sample => sample.targetBdpBytes }
+    ];
+  }
+  return [
+    { key: "observedThroughputBps", label: "Observed", color: "#7dd3fc", dash: "", value: sample => sample.observedThroughputBps == null ? null : sample.observedThroughputBps / 1e6 },
+    { key: "throughputMaxByRcvSpaceBps", label: "Max by window", color: "#fbbf24", dash: "", value: sample => sample.throughputMaxByRcvSpaceBps == null ? null : sample.throughputMaxByRcvSpaceBps / 1e6 },
+    { key: "deliveryRateBps", label: "delivery_rate", color: "#a78bfa", dash: "6 5", value: sample => sample.deliveryRateBps == null ? null : sample.deliveryRateBps / 1e6 },
+    { key: "scaleCapabilityThroughputBps", label: "Scaling capacity", color: "#64748b", dash: "4 6", value: sample => sample.scaleCapabilityThroughputBps == null ? null : sample.scaleCapabilityThroughputBps / 1e6 },
+    { key: "noScaleThroughputBps", label: "64 KB no scaling", color: "#94a3b8", dash: "2 6", value: sample => sample.noScaleThroughputBps == null ? null : sample.noScaleThroughputBps / 1e6 },
+    { key: "capacityBps", label: "Configured capacity", color: "#22c55e", dash: "8 5", value: () => capacity ? capacity / 1e6 : null }
+  ];
+}
+
+function bdpSeriesValues(data, series) {
+  return data
+    .map(series.value)
+    .filter(value => Number.isFinite(value) && value >= 0);
+}
+
+function bdpPath(data, series, x, y) {
+  const segments = [];
+  let current = [];
+  data.forEach((sample, index) => {
+    const value = series.value(sample);
+    if (!Number.isFinite(value) || value < 0) {
+      if (current.length) segments.push(current);
+      current = [];
+      return;
+    }
+    current.push(`${current.length ? "L" : "M"}${x(sample, index).toFixed(1)},${y(value).toFixed(1)}`);
+  });
+  if (current.length) segments.push(current);
+  return segments.map(segment => `<path d="${segment.join(" ")}" fill="none" stroke="${series.color}" stroke-width="2.4" stroke-dasharray="${series.dash}" opacity=".95"/>`).join("");
+}
+
+function bdpMarkerOverlay(data, kind, x, pad, h) {
+  const labels = [];
+  data.forEach((sample, index) => {
+    const marker = sample.markers || {};
+    const entries = kind === "bdp"
+      ? [
+          marker.bdpNearWindow ? { color: "#fbbf24", label: "BDP near/exceeds window" } : null,
+          marker.counterReset ? { color: "#fb7185", label: "counter reset / reconnect" } : null
+        ]
+      : [
+          marker.retrans ? { color: "#fb7185", label: "retrans" } : null,
+          marker.rttSpike ? { color: "#f97316", label: "RTT spike" } : null,
+          marker.rcvSpaceCollapse ? { color: "#fbbf24", label: "rcv_space collapse" } : null,
+          marker.persist ? { color: "#ef4444", label: "persist" } : null,
+          marker.counterReset ? { color: "#94a3b8", label: "counter reset / reconnect" } : null
+        ];
+    entries.filter(Boolean).slice(0, 2).forEach((entry, offset) => {
+      labels.push(`<circle cx="${x(sample, index).toFixed(1)}" cy="${pad.t + 10 + offset * 12}" r="4" fill="${entry.color}" opacity=".92"><title>${escapeHtml(entry.label)} at ${escapeHtml(timeLabel(sample.t || 0, sample.epochMs))}</title></circle>`);
+    });
+  });
+  return labels.join("");
+}
+
+function drawBdpWindowChart(svg, analysis, kind) {
+  const w = svg.clientWidth || 820;
+  const h = svg.clientHeight || 300;
+  const downsampleMetric = kind === "bdp" ? "observedBdpBytes" : "observedThroughputBps";
+  const data = renderableHistory(analysis.series.samples.filter(sample => sample.epochMs || sample.t != null), downsampleMetric, "line", w).rows;
+  const series = bdpChartSeries(analysis, kind).filter(item => bdpSeriesValues(data, item).length);
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  if (!data.length || !series.length) {
+    svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" fill="#050910"/><text x="24" y="40" fill="#c4d0de" font-size="13">Not enough timestamped samples for this BDP chart.</text>`;
+    return;
+  }
+  const values = series.flatMap(item => bdpSeriesValues(data, item));
+  const max = Math.max(...values, kind === "bdp" ? 1024 : 1);
+  const yTicks = [0, .25, .5, .75, 1].map(f => f * max);
+  const formatY = kind === "bdp" ? formatBytesHuman : value => `${numberFormatter(value >= 100 ? 0 : value >= 10 ? 1 : 2).format(value)} Mbps`;
+  const longestTick = yTicks.map(formatY).reduce((longest, value) => value.length > longest.length ? value : longest, "");
+  const tickWidth = Math.min(150, Math.max(58, longestTick.length * 6.5));
+  const pad = { l: Math.min(Math.max(82, tickWidth + 50), Math.max(118, w * 0.28)), r: 28, t: 36, b: 56 };
+  const firstTime = chartRowTime(data[0]);
+  const lastTime = chartRowTime(data[data.length - 1]);
+  const timeSpan = Math.max(1, lastTime - firstTime);
+  const x = (sample, index) => data.length > 1 && timeSpan > 1
+    ? pad.l + ((chartRowTime(sample) - firstTime) / timeSpan) * (w - pad.l - pad.r)
+    : pad.l + (index / Math.max(1, data.length - 1)) * (w - pad.l - pad.r);
+  const y = value => h - pad.b - (value / max) * (h - pad.t - pad.b);
+  const xTicks = (w < 560 ? [0, .5, 1] : [0, .25, .5, .75, 1]).map(f => {
+    const targetTime = firstTime + f * timeSpan;
+    const row = data.reduce((best, item) => Math.abs(chartRowTime(item) - targetTime) < Math.abs(chartRowTime(best) - targetTime) ? item : best, data[0]);
+    return { x: pad.l + f * (w - pad.l - pad.r), label: timeLabel(row?.t || 0, row?.epochMs) };
+  });
+  const title = kind === "bdp" ? "Observed BDP vs effective window" : "Window-limited theoretical throughput";
+  const yLabel = kind === "bdp" ? "Bytes / window" : "Throughput (Mbps)";
+  svg.innerHTML = `
+    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
+    ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${escapeHtml(formatY(value))}</text>`).join("")}
+    ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${escapeHtml(tick.label)}</text>`).join("")}
+    ${series.map(item => bdpPath(data, item, x, y)).join("")}
+    ${bdpMarkerOverlay(data, kind, x, pad, h)}
+    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="800">${escapeHtml(title)}</text>
+    <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time (${escapeHtml(resolvedTimeZone())})</text>
+    <text x="${Math.max(14, pad.l - tickWidth - 34)}" y="${h / 2}" transform="rotate(-90 ${Math.max(14, pad.l - tickWidth - 34)} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${escapeHtml(yLabel)}</text>
+    <g class="bdp-svg-legend">
+      ${series.slice(0, 5).map((item, index) => `<g transform="translate(${pad.l + index * 138},${pad.t + 12})"><line x1="0" x2="20" y1="0" y2="0" stroke="${item.color}" stroke-width="3" stroke-dasharray="${item.dash}"/><text x="25" y="4" fill="#c4d0de" font-size="10">${escapeHtml(item.label)}</text></g>`).join("")}
+    </g>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
   `;
@@ -7847,6 +8118,17 @@ function bindEvents() {
     });
   });
   document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
+  document.querySelector("#bdpDirectionSelect")?.addEventListener("change", e => {
+    state.prefs.bdpDirection = normalizeBdpDirection(e.target.value);
+    savePrefs();
+    renderKeepingWorkspacePosition();
+  });
+  document.querySelector("#bdpCapacityInput")?.addEventListener("change", e => {
+    const value = Number(e.target.value || 0);
+    state.prefs.configuredLinkCapacityMbps = Number.isFinite(value) && value > 0 ? value : "";
+    savePrefs();
+    renderKeepingWorkspacePosition();
+  });
   for (const [id, key] of [["windowInput", "graphWindow"], ["thresholdInput", "graphThreshold"], ["samplingInput", "sampling"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.prefs[key] = Number(e.target.value); savePrefs(); renderKeepingWorkspacePosition(); });
   }

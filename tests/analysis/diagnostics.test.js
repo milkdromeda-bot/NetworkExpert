@@ -126,6 +126,42 @@ test("diagnostics does not alert on a single rcv_ssthresh sample", () => {
   assert.equal(byId(hypotheses, "tcp-receive-ssthresh-trend"), undefined);
 });
 
+test("diagnostics adds BDP window-limited warning without critical severity", () => {
+  const sockets = socketsFrom("ESTAB 0 0 10.0.0.1:20002 10.0.0.2:53000 cubic wscale:7:7");
+  const [socket] = sockets;
+  const history = [
+    { socketId: socket.id, epochMs: 0, bytes_received: 0, rtt: 100, rcv_space: 100000 },
+    { socketId: socket.id, epochMs: 1000, bytes_received: 950000, rtt: 100, rcv_space: 100000 },
+    { socketId: socket.id, epochMs: 2000, bytes_received: 1900000, rtt: 100, rcv_space: 100000 },
+    { socketId: socket.id, epochMs: 3000, bytes_received: 2850000, rtt: 100, rcv_space: 100000 }
+  ];
+
+  const hypotheses = buildDiagnosticHypotheses({ sockets, anomalies: analyzeAll(sockets), history, thresholds });
+  const bdp = byId(hypotheses, "bdp-window-limited-throughput");
+
+  assert.equal(bdp.severity, "high");
+  assert.notEqual(bdp.severity, "critical");
+  assert.match(bdp.summary, /possible receive-window bottleneck/i);
+  assert.equal(bdp.counterEvidence.some(item => item.includes("physical link capacity")), true);
+});
+
+test("diagnostics keeps BDP path recovery wording cautious", () => {
+  const sockets = socketsFrom("ESTAB 0 0 10.0.0.1:20002 10.0.0.2:53000 cubic wscale:7:7");
+  const [socket] = sockets;
+  const history = [
+    { socketId: socket.id, epochMs: 0, bytes_received: 0, rtt: 180, rcv_space: 1000000, retrans: 3, cwnd: 2 },
+    { socketId: socket.id, epochMs: 1000, bytes_received: 1000, rtt: 180, rcv_space: 1000000, retrans: 3, cwnd: 2 },
+    { socketId: socket.id, epochMs: 2000, bytes_received: 2000, rtt: 180, rcv_space: 1000000, retrans: 3, cwnd: 2 },
+    { socketId: socket.id, epochMs: 3000, bytes_received: 3000, rtt: 180, rcv_space: 1000000, retrans: 3, cwnd: 2 }
+  ];
+
+  const hypotheses = buildDiagnosticHypotheses({ sockets, anomalies: analyzeAll(sockets), history, thresholds });
+  const bdp = byId(hypotheses, "bdp-window-limited-throughput");
+
+  assert.match(bdp.summary, /congestion\/loss as a competing explanation/i);
+  assert.equal(bdp.counterEvidence.some(item => item.includes("do not blame the receive window first")), true);
+});
+
 test("diagnostics marks receiver-side zero window as critical when rcv_wnd is zero", () => {
   const hypotheses = diagnose("ESTAB 700000 0 10.0.0.1:9200 10.0.0.2:443 users:((\"java\",pid=42,fd=9)) skmem:(r690000,rb700000,t0,tb100,w0,d0) rcv_space:0 rcv_wnd:0 rto:200 rtt:1/0.1 cwnd:20");
 

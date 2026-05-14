@@ -63,6 +63,7 @@ export const FIELD_DOCS = {
   mss: "Maximum segment size.",
   pmtu: "Path MTU, useful for detecting fragmentation or a low path MTU.",
   bytes_acked: "Bytes acknowledged by ACKs.",
+  bytes_sent: "Bytes sent locally. Use deltas over timestamped snapshots for outbound observed throughput.",
   bytes_received: "Bytes received.",
   segs_out: "Segments sent.",
   segs_in: "Segments received.",
@@ -116,6 +117,9 @@ export const FIELD_GUIDANCE = {
   },
   rcv_ssthresh: {
     typical: "Trend metric. Stable/high is usually informational; a >30%, >50%, or >70% drop deserves correlation with rcv_space, Recv-Q, skmem:r/rb, rcv_rtt, RTT, retrans, bytes_received, segs_in, drops, and persist."
+  },
+  bytes_sent: {
+    typical: "Cumulative counter. Use deltas over time; outbound BDP analysis uses delta bytes_sent / elapsed seconds."
   },
   mss: {
     typical: "Common Ethernet values are about 1460 bytes for IPv4 and 1440-1448 bytes with extra encapsulation."
@@ -283,6 +287,8 @@ export const prefsDefault = {
   ubuntuVersion: "22.04",
   chartTimeZone: "auto",
   chartPointSize: "S",
+  bdpDirection: "inbound",
+  configuredLinkCapacityMbps: "",
   paginationPosition: "top",
   defaultPageSize: 20,
   chartLayout: {
@@ -295,7 +301,7 @@ export const prefsDefault = {
     showThresholds: true,
     stickyToolbar: true,
     tooltipOpacity: 0.8,
-    panelOrder: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"]
+    panelOrder: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "rcv_rtt", "rcv_space", "rcv_ssthresh", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.rb", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_sent", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"]
   }
 };
 

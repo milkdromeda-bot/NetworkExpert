@@ -1,4 +1,5 @@
 import { metricValue } from "./parser.js";
+import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeRcvSsthreshTrend } from "./rcv-ssthresh-analysis.js";
 import { analyzeWscaleContext } from "./wscale-analysis.js";
 
@@ -173,7 +174,8 @@ export function buildDiagnosticHypotheses({
   sockets = [],
   anomalies = [],
   history = [],
-  thresholds = {}
+  thresholds = {},
+  bdpWindow = {}
 } = {}) {
   if (!sockets.length) {
     return [makeHypothesis({
@@ -227,6 +229,13 @@ export function buildDiagnosticHypotheses({
   const wscaleWarnings = wscaleAnalyses.filter(item => item.status === "warning");
   const rcvSsthreshAnalyses = withMetrics.map(({ socket }) => analyzeRcvSsthreshTrend(socket, { history, recvWarn }));
   const rcvSsthreshWarnings = rcvSsthreshAnalyses.filter(item => item.status === "warning");
+  const bdpWindowAnalyses = withMetrics.map(({ socket }) => analyzeBdpWindowLimit(socket, {
+    history,
+    recvWarn,
+    direction: bdpWindow.direction || "inbound",
+    configuredLinkCapacityMbps: bdpWindow.configuredLinkCapacityMbps
+  }));
+  const bdpWindowWarnings = bdpWindowAnalyses.filter(item => item.status === "warning");
   const blackhole = withMetrics.filter(({ metrics }) =>
     metrics.backoff >= 6 || metrics.rto >= rtoDanger && metrics.retrans >= 3 && !isReceiverWindowLimited(metrics)
   );
@@ -279,6 +288,31 @@ export function buildDiagnosticHypotheses({
       ],
       learnMore: rcvSsthreshWarnings.flatMap(item => item.learnMore),
       commands: rcvSsthreshWarnings.flatMap(item => item.commands)
+    }));
+  }
+
+  if (bdpWindowWarnings.length) {
+    const top = bdpWindowWarnings.reduce((best, item) => item.score > (best?.score || 0) ? item : best, null);
+    const slowConsumer = bdpWindowWarnings.some(item => item.hypothesis === "slow-consumer-window-pressure");
+    const pathRecovery = bdpWindowWarnings.some(item => item.hypothesis === "path-recovery-more-likely");
+    hypotheses.push(makeHypothesis({
+      id: "bdp-window-limited-throughput",
+      title: slowConsumer ? "Window-limited throughput with receiver pressure" : "Possible TCP receive-window throughput limit",
+      category: "tcp-flow-control",
+      severity: bdpWindowWarnings.reduce((level, item) => severityScore(item.severity) > severityScore(level) ? item.severity : level, "low"),
+      confidence: bdpWindowWarnings.reduce((level, item) => confidenceScore(item.confidence) > confidenceScore(level) ? item.confidence : level, "low"),
+      summary: pathRecovery
+        ? "BDP/window math shows a possible window limit, but retransmission, high RTT, and low cwnd keep congestion/loss as a competing explanation. Do not call the physical link saturated without configured capacity."
+        : "Observed throughput is close to the theoretical throughput allowed by the effective TCP window for several snapshots. This suggests a possible receive-window bottleneck, not a measured physical link capacity.",
+      sockets: bdpWindowWarnings.map(item => item.socket),
+      evidence: bdpWindowWarnings.flatMap(item => item.evidence),
+      counterEvidence: [
+        ...bdpWindowWarnings.flatMap(item => item.counterEvidence),
+        top?.stats?.strongWindowRun ? `Strongest window-pressure run lasts ${top.stats.strongWindowRun} consecutive snapshot(s).` : "",
+        top?.stats?.nearWindowRun ? `Near-window run lasts ${top.stats.nearWindowRun} consecutive snapshot(s).` : ""
+      ],
+      learnMore: bdpWindowWarnings.flatMap(item => item.learnMore),
+      commands: bdpWindowWarnings.flatMap(item => item.commands)
     }));
   }
 

@@ -11,9 +11,14 @@ export const EXPERT_DEFAULT_THRESHOLDS = {
   "skmem.d_rate": { comfort: 0, warn: 0.1, danger: 1, unit: "drops/s", rationale: "Drop cadence is stronger than a static counter: one drop every 10 seconds is worth watching; one drop per second is usually an active pressure symptom." },
   pacing_rate: { comfort: 1000000, warn: 250000, danger: 64000, unit: "bps", inverse: true, rationale: "Very low pacing rate after a previously healthy flow can reveal congestion-control backoff or app-limited stalls." },
   delivery_rate: { comfort: 1000000, warn: 250000, danger: 64000, unit: "bps", inverse: true, rationale: "Low delivery rate with queued data can reveal throughput collapse after loss, pacing, or peer-side slowness." },
+  rcv_space: { comfort: 65536, warn: 8192, danger: 1024, unit: "bytes", inverse: true, rationale: "Low receive space means Linux has little room left to advertise; correlate with Recv-Q, skmem.r/rb, and persist before calling slow consumer." },
+  rcv_ssthresh: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bytes", rationale: "Receive-side autotuning threshold. Absolute values are workload-specific; use multi-snapshot percentage drops instead of static thresholds." },
+  rcv_rtt: { comfort: 50, warn: 150, danger: 300, unit: "ms", rationale: "Receive-side RTT estimator used by Linux receive-window autotuning; correlate with rcv_ssthresh, rcv_space, RTT, and retransmission." },
+  "skmem.rb": { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bytes", rationale: "Receive buffer limit from skmem. Compare skmem.r / skmem.rb to estimate receive memory pressure." },
   tx_bps: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bps", rationale: "Estimated transmit bandwidth from bytes_acked deltas between timestamped snapshots." },
   rx_bps: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bps", rationale: "Estimated receive bandwidth from bytes_received deltas between timestamped snapshots." },
   bytes_acked: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bytes", rationale: "Cumulative bytes acknowledged by the peer. Use deltas over time for transmit bandwidth." },
+  bytes_sent: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bytes", rationale: "Cumulative bytes sent locally. Use deltas over time for outbound BDP and observed throughput." },
   bytes_received: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "bytes", rationale: "Cumulative bytes received locally. Use deltas over time for receive bandwidth." },
   rttvar: { comfort: 20, warn: 80, danger: 200, unit: "ms", rationale: "RTT variance indicates jitter. High variance often matters as much as high average RTT." },
   segs_out: { comfort: 0, warn: Number.POSITIVE_INFINITY, danger: Number.POSITIVE_INFINITY, unit: "segments", rationale: "Cumulative outbound TCP segments." },
@@ -98,10 +103,30 @@ export const COLUMN_HELP = {
     detail: "High ato can add latency to request/response or small-message workloads. It is not always bad by itself, but it matters when paired with elevated RTT, slow application reads, or bursty bidirectional traffic.",
     use: "Use ato as a supporting signal for latency-sensitive flows, not as a standalone incident trigger."
   },
+  rcv_space: {
+    summary: "Receive space Linux is currently willing to advertise.",
+    detail: "Low rcv_space means the receive window has little room left. It becomes strong Zero Window / receiver backpressure evidence when Recv-Q is high and skmem.r is close to skmem.rb.",
+    use: "Chart with Recv-Q, skmem.r, skmem.rb, persist, and rcv_ssthresh before blaming the network."
+  },
+  rcv_rtt: {
+    summary: "Receive-side RTT estimator used by Linux receive-window autotuning.",
+    detail: "rcv_rtt is part of the receiver autotuning context. High values are not a slow-consumer proof, but they help explain receive-window sizing decisions and can keep path congestion in the hypothesis set.",
+    use: "Correlate with rcv_ssthresh, rcv_space, RTT, retransmission, and bytes_received/segs_in progress."
+  },
+  rcv_ssthresh: {
+    summary: "Linux receive-side autotuning threshold / current window clamp.",
+    detail: "This is not sender congestion ssthresh. A stable value is informational; a multi-snapshot drop above 30%, 50%, or 70% deserves correlation with receive pressure and path recovery signals.",
+    use: "Use only as a trend signal. Confirm slow consumer with Recv-Q, skmem.r close to skmem.rb, low rcv_space, persist/Zero Window, and process read latency."
+  },
   "skmem.r": {
     summary: "Socket receive memory currently allocated by the kernel for inbound data and receive-side bookkeeping.",
     detail: "In ss skmem, r is the receive memory in use. High skmem.r means the kernel is holding more receive-side socket memory. Common causes include a local application that reads too slowly, bursty inbound traffic, receive buffer growth, scheduler stalls, or memory pressure around many active sockets.",
     use: "Correlate skmem.r with Recv-Q, process identity, socket drops, CPU saturation, and whether only one service or many sockets are affected."
+  },
+  "skmem.rb": {
+    summary: "Receive socket memory limit exposed by skmem.",
+    detail: "skmem.rb is the receive buffer budget/limit to compare against skmem.r. The ratio skmem.r / skmem.rb is more useful than either number alone.",
+    use: "A high ratio with low rcv_space and high Recv-Q supports receiver backpressure or a slow local consumer."
   },
   "skmem.t": {
     summary: "Socket transmit memory currently allocated by the kernel for outbound data and transmit-side bookkeeping.",
@@ -127,6 +152,11 @@ export const COLUMN_HELP = {
     summary: "Cumulative bytes acknowledged by the peer.",
     detail: "This counter is best used over time. Ultimate Network Expert derives TX bandwidth from the delta of bytes_acked between timestamped snapshots.",
     use: "Enable this column when validating computed TX bps or checking whether a connection is still making forward progress."
+  },
+  bytes_sent: {
+    summary: "Cumulative bytes sent locally.",
+    detail: "This counter is best used over time. The BDP & Window-Limited module uses delta bytes_sent for outbound observed throughput when ss exposes it.",
+    use: "Use with outbound analysis, Send-Q, delivery_rate, pacing_rate, cwnd, and retransmission context."
   },
   bytes_received: {
     summary: "Cumulative bytes received locally.",
