@@ -3205,7 +3205,7 @@ function renderBdpWindowPanel() {
           <option value="inbound" ${state.prefs.bdpDirection !== "outbound" ? "selected" : ""}>Inbound - bytes_received</option>
           <option value="outbound" ${state.prefs.bdpDirection === "outbound" ? "selected" : ""}>Outbound - bytes_sent</option>
         </select></label>
-        <label><span>Capacity Mbps</span><input id="bdpCapacityInput" type="number" min="0" step="0.1" value="${escapeHtml(capacityText)}" placeholder="optional"/></label>
+        <label><span>Capacity</span><select id="bdpCapacityInput"><option value="" ${!capacityValue ? "selected" : ""}>unknown</option><option value="100" ${capacityValue === 100 ? "selected" : ""}>100 Mbps</option><option value="200" ${capacityValue === 200 ? "selected" : ""}>200 Mbps</option><option value="1000" ${capacityValue === 1000 ? "selected" : ""}>1 Gbps</option><option value="10000" ${capacityValue === 10000 ? "selected" : ""}>10 Gbps</option><option value="25000" ${capacityValue === 25000 ? "selected" : ""}>25 Gbps</option><option value="50000" ${capacityValue === 50000 ? "selected" : ""}>50 Gbps</option>${capacityValue && ![100,200,1000,10000,25000,50000].includes(capacityValue) ? `<option value="${capacityValue}" selected>${capacityValue} Mbps</option>` : ""}</select></label>
       </div>
     </div>
     <div class="panel-body">
@@ -3222,7 +3222,14 @@ function renderBdpWindowPanel() {
         ${renderBdpSummaryCard("Smallest window", stats.minEffectiveWindowBytes ? formatBytesHuman(stats.minEffectiveWindowBytes) : "n/a", analysis.series?.wscale?.scale != null ? `wscale ${analysis.series.wscale.scale}` : "no wscale")}
         ${renderBdpSummaryCard("Capacity", capacityValue ? formatBitsPerSecond(capacityValue * 1e6) : "unknown", capacityValue ? "user configured" : "no physical line-rate claim")}
       </div>
-      ${hasRealTimeline ? `<div class="bdp-chart-grid">
+      ${hasRealTimeline ? `<div class="bdp-chart-toolbar">
+          <button class="mini" data-chart-zoom="zoomIn" data-bdp-zoom title="Zoom in">${icons.zoomIn}</button>
+          <button class="mini" data-chart-zoom="zoomOut" data-bdp-zoom title="Zoom out">${icons.zoomOut}</button>
+          <button class="mini" data-chart-zoom="resetZoom" data-bdp-zoom title="Reset zoom">${icons.reset}</button>
+          <button class="mini" data-chart-zoom="panLeft" data-bdp-zoom title="Pan left">${icons.arrowLeft}</button>
+          <button class="mini" data-chart-zoom="panRight" data-bdp-zoom title="Pan right">${icons.arrowRight}</button>
+        </div>
+        <div class="bdp-chart-grid">
         <article>
           <div class="bdp-chart-title"><strong>Window-limited theoretical throughput</strong><span>Mbps over time</span></div>
           <svg class="chart bdp-chart" data-bdp-chart="throughput" role="img" aria-label="BDP throughput chart"></svg>
@@ -5287,6 +5294,7 @@ function resetAllState() {
   state.anomalies = [];
   state.alertEvents = [];
   state.baseline = null;
+  state.view = "ingest";
   state.activeTab = "sockets";
   state.drawer = null;
   state.modal = null;
@@ -5728,7 +5736,6 @@ function drawBdpWindowChart(svg, analysis, kind) {
     const row = data.reduce((best, item) => Math.abs(chartRowTime(item) - targetTime) < Math.abs(chartRowTime(best) - targetTime) ? item : best, data[0]);
     return { x: pad.l + f * (w - pad.l - pad.r), label: timeLabel(row?.t || 0, row?.epochMs) };
   });
-  const title = kind === "bdp" ? "Observed BDP vs effective window" : "Window-limited theoretical throughput";
   const yLabel = kind === "bdp" ? "Bytes / window" : "Throughput (Mbps)";
   svg.innerHTML = `
     <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
@@ -5736,13 +5743,12 @@ function drawBdpWindowChart(svg, analysis, kind) {
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${escapeHtml(tick.label)}</text>`).join("")}
     ${series.filter(item => !state.hiddenBdpSeries.has(item.key)).map(item => bdpPath(data, item, x, y)).join("")}
     ${bdpMarkerOverlay(data, kind, x, pad, h)}
-    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="800">${escapeHtml(title)}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${Math.max(14, pad.l - tickWidth - 34)}" y="${h / 2}" transform="rotate(-90 ${Math.max(14, pad.l - tickWidth - 34)} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${escapeHtml(yLabel)}</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
-    <g class="bdp-crosshair" visibility="hidden"></g>
     <rect class="bdp-hover-zone" x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="transparent" pointer-events="all"/>
+    <g class="bdp-crosshair" visibility="hidden" pointer-events="none"></g>
   `;
   attachBdpCrosshair(svg, data, series, x, y, pad, w, h, kind, formatY, max);
 }
@@ -5752,35 +5758,77 @@ function attachBdpCrosshair(svg, data, series, xFn, yFn, pad, w, h, kind, format
   const crosshairG = svg.querySelector(".bdp-crosshair");
   if (!zone || !crosshairG) return;
   const formatVal = kind === "bdp" ? formatBytesHuman : v => `${numberFormatter(v >= 100 ? 0 : v >= 10 ? 1 : 2).format(v)} Mbps`;
-  zone.addEventListener("mousemove", event => {
-    const pt = svg.createSVGPoint();
-    pt.x = event.clientX; pt.y = event.clientY;
-    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-    const plotW = w - pad.l - pad.r;
-    const pct = Math.max(0, Math.min(1, (loc.x - pad.l) / plotW));
-    const idx = Math.round(pct * (data.length - 1));
+  const plotW = w - pad.l - pad.r;
+
+  function showCrosshairAtIndex(idx) {
     const sample = data[idx];
     if (!sample) return;
     const cx = xFn(sample, idx);
     const visible = series.filter(item => !state.hiddenBdpSeries.has(item.key));
-    const rows = visible.map(item => {
-      const v = item.value(sample);
-      return { label: item.label, color: item.color, value: v };
-    });
+    const rows = visible.map(item => ({ label: item.label, color: item.color, value: item.value(sample) }));
     const time = timeLabel(sample.t || 0, sample.epochMs);
-    const tooltipX = cx + 12 > w - pad.r - 140 ? cx - 152 : cx + 12;
+    const tooltipW = 150;
+    const tooltipX = cx + 14 + tooltipW > w - pad.r ? cx - tooltipW - 14 : cx + 14;
     const lineH = 14;
     const tooltipH = (rows.length + 1) * lineH + 10;
-    const tooltipY = Math.max(pad.t, Math.min(h - pad.b - tooltipH, loc.y - tooltipH / 2));
+    const tooltipY = pad.t + 10;
     crosshairG.setAttribute("visibility", "visible");
     crosshairG.innerHTML = `
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
-      <rect x="${tooltipX}" y="${tooltipY}" width="140" height="${tooltipH}" rx="4" fill="rgba(10,16,24,.8)" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="${tooltipH}" rx="4" fill="rgba(10,16,24,.8)" stroke="#52657a"/>
       <text x="${tooltipX + 8}" y="${tooltipY + 14}" fill="#8cc8e8" font-size="10" font-weight="700">${escapeHtml(time)}</text>
       ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "—"}</text>`).join("")}
     `;
+  }
+  svg._bdpShowCrosshair = showCrosshairAtIndex;
+  svg._bdpHideCrosshair = () => crosshairG.setAttribute("visibility", "hidden");
+  svg._bdpData = data;
+  svg._bdpPad = pad;
+  svg._bdpW = w;
+
+  let dragStart = null;
+  zone.addEventListener("mousedown", event => {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = w / rect.width;
+    const locX = (event.clientX - rect.left) * scaleX;
+    dragStart = Math.max(0, Math.min(1, (locX - pad.l) / plotW));
   });
-  zone.addEventListener("mouseleave", () => { crosshairG.setAttribute("visibility", "hidden"); });
+  zone.addEventListener("mousemove", event => {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = w / rect.width;
+    const locX = (event.clientX - rect.left) * scaleX;
+    const pct = Math.max(0, Math.min(1, (locX - pad.l) / plotW));
+    const idx = Math.round(pct * (data.length - 1));
+    // Sync crosshairs on both BDP charts
+    document.querySelectorAll("[data-bdp-chart]").forEach(other => {
+      if (other._bdpShowCrosshair) other._bdpShowCrosshair(idx);
+    });
+  });
+  zone.addEventListener("mouseup", event => {
+    if (dragStart == null) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = w / rect.width;
+    const locX = (event.clientX - rect.left) * scaleX;
+    const dragEnd = Math.max(0, Math.min(1, (locX - pad.l) / plotW));
+    const minPct = Math.min(dragStart, dragEnd);
+    const maxPct = Math.max(dragStart, dragEnd);
+    dragStart = null;
+    if (maxPct - minPct < 0.02) return; // too small, ignore
+    // Apply zoom based on percentage of current visible range
+    const currentStart = state.chartZoom.start;
+    const currentEnd = state.chartZoom.end;
+    const range = currentEnd - currentStart;
+    state.chartZoom = clampZoomRange({ start: currentStart + minPct * range, end: currentStart + maxPct * range });
+    clearVisibleHistoryCache();
+    state._bdpCache = null;
+    drawBdpWindowCharts();
+  });
+  zone.addEventListener("mouseleave", () => {
+    dragStart = null;
+    document.querySelectorAll("[data-bdp-chart]").forEach(other => {
+      if (other._bdpHideCrosshair) other._bdpHideCrosshair();
+    });
+  });
 }
 
 function svgPoint(svg, event) {
@@ -7055,7 +7103,10 @@ function bindEvents() {
       const action = event.currentTarget.dataset.chartZoom;
       const metric = event.currentTarget.dataset.chartZoomMetric;
       applyChartZoomAction(action, metric);
-      if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
+      if (event.currentTarget.hasAttribute("data-bdp-zoom")) {
+        state._bdpCache = null;
+        drawBdpWindowCharts();
+      } else if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
     });
   });
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
@@ -8205,12 +8256,14 @@ function bindEvents() {
   document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
   document.querySelector("#bdpDirectionSelect")?.addEventListener("change", e => {
     state.prefs.bdpDirection = normalizeBdpDirection(e.target.value);
+    state._bdpCache = null;
     savePrefs();
     renderKeepingWorkspacePosition();
   });
   document.querySelector("#bdpCapacityInput")?.addEventListener("change", e => {
     const value = Number(e.target.value || 0);
     state.prefs.configuredLinkCapacityMbps = Number.isFinite(value) && value > 0 ? value : "";
+    state._bdpCache = null;
     savePrefs();
     renderKeepingWorkspacePosition();
   });

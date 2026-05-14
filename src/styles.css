@@ -5626,9 +5626,12 @@ th:focus-within .column-tooltip,
   min-width: 0;
   color: var(--text);
   font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-all;
+}
+.bdp-chart-toolbar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 .bdp-chart-grid {
   display: grid;
@@ -5663,6 +5666,7 @@ th:focus-within .column-tooltip,
   flex-wrap: wrap;
   gap: 8px 14px;
   margin-top: 10px;
+  padding-bottom: 2px;
   color: var(--soft);
   font-size: 12px;
 }
