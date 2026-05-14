@@ -139,8 +139,21 @@ test("analysis conversation stack keeps vertical gaps compact", () => {
   assert.match(css, /\.analysis-layout \.panel-body\s*\{[^}]*padding-block:\s*10px;/s);
   assert.match(css, /\.analysis-layout \.grid-controls-shell\s*\{[^}]*padding-bottom:\s*8px;/s);
   assert.match(css, /\.analysis-layout \.grid-controls\s*\{[^}]*row-gap:\s*8px;/s);
+  assert.match(css, /\.grid-controls input,\s*\.grid-controls select\s*\{[^}]*min-height:\s*34px;[^}]*padding:\s*7px 9px;/s);
+  assert.match(css, /\.filter-cluster\s*\{[^}]*gap:\s*8px;[^}]*padding:\s*6px 8px;/s);
+  assert.match(css, /\.filter-side-actions\s*\{[^}]*align-items:\s*center;[^}]*padding:\s*6px 0;/s);
+  assert.match(css, /\.filter-cluster-grid\s*\{[^}]*gap:\s*6px;/s);
   assert.match(css, /\.expert-strip\s*\{[^}]*column-gap:\s*8px;[^}]*row-gap:\s*6px;[^}]*margin-bottom:\s*8px;/s);
   assert.match(css, /\.conversation-workbench,\s*\.expert-workbench,\s*\.timeline-workbench\s*\{[^}]*gap:\s*8px;/s);
+});
+
+test("filtered row count is pagination context only", () => {
+  assert.match(main, /function hasActiveTableFilters\(filters = state\?\.table\?\.filters\)/);
+  assert.match(main, /const filteredCount = hasActiveTableFilters\(\) \? `<span class="pager-filter-count">\$\{formatNumber\(total\)\} filtered row\(s\)<\/span>` : "";/);
+  assert.match(main, /<div class="pager">\s*\$\{filteredCount\}/);
+  assert.doesNotMatch(main, /class="grid-controls-count"/);
+  assert.doesNotMatch(css, /\.grid-controls-count/);
+  assert.match(css, /\.pager-filter-count\s*\{[^}]*margin-right:\s*auto;/s);
 });
 
 test("chart-only toolbar is hidden from the charts advisor tab", () => {

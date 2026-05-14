@@ -1805,17 +1805,17 @@ tr:hover, tr.selected { background: #101a27; }
 }
 .grid-controls input,
 .grid-controls select {
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 34px;
+  padding: 7px 9px;
   font-size: 12px;
 }
 .filter-cluster {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid rgba(113, 143, 173, .24);
   border-radius: 10px;
   background:
@@ -1832,10 +1832,11 @@ tr:hover, tr.selected { background: #101a27; }
   display: grid;
   grid-template-columns: auto auto;
   justify-content: end;
-  align-content: center;
-  gap: 8px 10px;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  padding: 8px 2px 8px 0;
+  padding: 6px 0;
 }
 .filter-cluster-title {
   display: inline-flex;
@@ -1855,7 +1856,7 @@ tr:hover, tr.selected { background: #101a27; }
 }
 .filter-cluster-grid {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 .filter-cluster-grid--scope {
@@ -1955,15 +1956,6 @@ tr:hover, tr.selected { background: #101a27; }
   font-size: 15px;
   color: #bdd6eb;
   filter: none;
-}
-.grid-controls-count {
-  grid-column: 1 / -1;
-  justify-self: end;
-  color: #b8c8d8;
-  font-size: 11px;
-  line-height: 1.2;
-  text-align: right;
-  white-space: nowrap;
 }
 #processFilter {
   max-width: 132px;
@@ -2604,6 +2596,13 @@ th:focus-within .column-tooltip,
   padding: 10px 0 0;
   color: var(--muted);
   font-size: 12px;
+}
+.pager-filter-count {
+  margin-right: auto;
+  color: #b8c8d8;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 .pager button { min-height: 30px; min-width: 34px; padding: 0 8px; }
 .pager-size {
@@ -5966,7 +5965,6 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
     justify-content: flex-start;
     padding-right: 0;
   }
-  .grid-controls-count { justify-self: start; text-align: left; }
 }
 @media (max-width: 760px) {
   body { overflow: auto; }
@@ -6003,7 +6001,10 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
     justify-content: flex-start;
     padding-right: 0;
   }
-  .grid-controls-count { justify-self: start; text-align: left; }
+  .pager-filter-count {
+    width: 100%;
+    margin-right: 0;
+  }
   .dashboard-hero,
   .dashboard-save,
   .dashboard-presets,

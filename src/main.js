@@ -115,6 +115,14 @@ function defaultTableFilters() {
   };
 }
 
+function hasActiveTableFilters(filters = state?.table?.filters) {
+  const defaults = defaultTableFilters();
+  return Object.keys(defaults).some(key => {
+    if (key === "onlyAnomalies") return Boolean(filters?.onlyAnomalies);
+    return String(filters?.[key] ?? defaults[key] ?? "").trim() !== String(defaults[key] ?? "").trim();
+  });
+}
+
 function defaultTableState(pageSize = prefsDefault.defaultPageSize) {
   return {
     page: 1,
@@ -3752,7 +3760,6 @@ function renderGridControls(total) {
           <span>anomalies only</span>
         </label>
         <button class="filter-history-button" data-action="clearFilterHistory">${icons.clear}<span>Clear history</span></button>
-        <span class="grid-controls-count">${formatNumber(total)} filtered row(s)</span>
       </aside>
 
       <section class="filter-cluster filter-cluster--endpoint">
@@ -3782,7 +3789,9 @@ function renderGridControls(total) {
 function renderPagination(total, totalPages, start) {
   if (!total) return `<div class="empty">No socket matches the filters.</div>`;
   const end = Math.min(total, start + state.table.pageSize);
+  const filteredCount = hasActiveTableFilters() ? `<span class="pager-filter-count">${formatNumber(total)} filtered row(s)</span>` : "";
   return `<div class="pager">
+    ${filteredCount}
     <select class="pager-size" data-page-size title="Rows per page" aria-label="Rows per page">${[10, 20, 50, 100].map(v => `<option value="${v}" ${state.table.pageSize === v ? "selected" : ""}>${v}/p</option>`).join("")}</select>
     <button class="icon" data-page="first" title="First page" aria-label="First page">${icons.first}</button>
     <button class="icon" data-page="prev" title="Previous page" aria-label="Previous page">${icons.previous}</button>
