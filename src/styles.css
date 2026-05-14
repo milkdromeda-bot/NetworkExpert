@@ -1764,6 +1764,13 @@ button.mega i {
   background: #8ed7f2;
   transform: translateX(16px);
 }
+@keyframes deep-analysis-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+.deep-analysis-toggle.is-on .deep-analysis-icon {
+  animation: deep-analysis-pulse 1.8s ease-in-out infinite;
+}
 .panel-body { min-width: 0; padding: 12px; }
 .analysis-layout .panel-body {
   padding-block: 10px;

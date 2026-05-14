@@ -161,6 +161,7 @@ let state = {
   dataVersion: 0,
   rawVersion: 0,
   chartRenderToken: 0,
+  hiddenBdpSeries: new Set(),
   advisorFindings: [],
   bandwidthIndex: {},
   anomalyAlertSince: null,
@@ -748,8 +749,15 @@ function renderSsOptionControl(option, coverage, selectedKey) {
   `;
 }
 
+let _bdpPrecomputeTimer = 0;
+function scheduleBdpPrecompute() {
+  clearTimeout(_bdpPrecomputeTimer);
+  _bdpPrecomputeTimer = setTimeout(() => { try { renderBdpWindowPanel(); } catch {} }, 100);
+}
+
 function resetDerivedCaches({ raw = false } = {}) {
   state.dataVersion += 1;
+  state._bdpCache = null;
   state.cache.filteredKey = "";
   state.cache.filteredRows = null;
   state.cache.optionKey = "";
@@ -774,6 +782,7 @@ function resetDerivedCaches({ raw = false } = {}) {
 
 function markAnalysisDirty({ raw = false } = {}) {
   state.analysisDirty = true;
+  scheduleBdpPrecompute();
   resetDerivedCaches({ raw });
 }
 
@@ -2344,7 +2353,7 @@ function render() {
             ${[
               ["ingest", "Import"],
               ["analysis", "Analysis"],
-              ["charts", "Charts"],
+              ["charts", "Monitoring"],
               ["guide", "Guide"]
             ].map(([key, label]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}">${label}</button>`).join("")}
           </div>
@@ -2359,12 +2368,14 @@ function render() {
       ${state.view === "analysis" ? `<main class="workspace wide">${renderAnalysisPage()}</main>` : ""}
       ${state.view === "charts" ? `<main class="workspace wide">
         <nav class="charts-sub-tabs" role="tablist">
-          <button class="charts-sub-tab ${state.chartsTab === "charts" ? "active" : ""}" data-charts-tab="charts" role="tab" aria-selected="${state.chartsTab === "charts"}">Charts</button>
+          <button class="charts-sub-tab ${state.chartsTab === "charts" || state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="charts" role="tab" aria-selected="${state.chartsTab === "charts"}">Metrics</button>
+          <button class="charts-sub-tab ${state.chartsTab === "bdp" ? "active" : ""}" data-charts-tab="bdp" role="tab" aria-selected="${state.chartsTab === "bdp"}">BDP & Throughput</button>
           <button class="charts-sub-tab ${state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="advisor" role="tab" aria-selected="${state.chartsTab === "advisor"}">Advisor</button>
           ${state.chartsTab === "charts" ? renderDashboardStudioInline() : ""}
         </nav>
         ${state.chartsTab === "charts" ? renderChartsGlobalToolbar() : ""}
-        ${renderChartsPage()}
+        <div data-charts-panel="main" style="${state.chartsTab === "bdp" ? "display:none" : ""}">${renderChartsPage()}</div>
+        <div data-charts-panel="bdp" style="${state.chartsTab !== "bdp" ? "display:none" : ""}">${renderBdpWindowPanel()}</div>
       </main>` : ""}
       ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
     </div>
@@ -2975,7 +2986,6 @@ function renderChartsPage() {
         </div>
       </div>
     </section>
-    ${renderBdpWindowPanel()}
     <section class="chart-grid cols-${columns} density-${layout.density}">
       ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}" data-chart-card="${m}">
         <div class="panel-head">
@@ -3173,13 +3183,14 @@ function renderBdpSummaryCard(label, value, hint = "") {
 }
 
 function renderBdpWindowPanel() {
+  if (state._bdpCache && state._bdpCache.version === state.dataVersion && state._bdpCache.direction === state.prefs.bdpDirection && state._bdpCache.selectedId === state.selectedId) return state._bdpCache.html;
   const socket = socketsById().get(state.selectedId) || state.sockets[0] || null;
   const hasRealTimeline = hasRealTimestampHistory();
   const analysis = bdpWindowAnalysis();
   const stats = analysis.stats || {};
   const capacityValue = configuredLinkCapacityMbps();
   const capacityText = capacityValue ? `${capacityValue}` : "";
-  return `<section class="panel bdp-window-panel">
+  const result = `<section class="panel bdp-window-panel">
     <div class="panel-head bdp-window-head">
       <div class="panel-title chart-title-wrap">
         <span>BDP & Window-Limited Throughput</span>
@@ -3215,18 +3226,17 @@ function renderBdpWindowPanel() {
         <article>
           <div class="bdp-chart-title"><strong>Window-limited theoretical throughput</strong><span>Mbps over time</span></div>
           <svg class="chart bdp-chart" data-bdp-chart="throughput" role="img" aria-label="BDP throughput chart"></svg>
+          <div class="bdp-legend" data-bdp-legend="1">
+            ${bdpChartSeries({series: {capacityBps: null}}, "throughput").map(item => `<span data-series-key="${item.key}" style="cursor:pointer;${state.hiddenBdpSeries.has(item.key) ? "opacity:.4;text-decoration:line-through" : ""}"><i style="--legend-color:${item.color}"></i>${escapeHtml(item.label)}</span>`).join("")}
+          </div>
         </article>
         <article>
           <div class="bdp-chart-title"><strong>Observed BDP vs effective window</strong><span>bytes over time</span></div>
           <svg class="chart bdp-chart" data-bdp-chart="bdp" role="img" aria-label="BDP and window chart"></svg>
+          <div class="bdp-legend" data-bdp-legend="1">
+            ${bdpChartSeries({series: {capacityBps: null}}, "bdp").map(item => `<span data-series-key="${item.key}" style="cursor:pointer;${state.hiddenBdpSeries.has(item.key) ? "opacity:.4;text-decoration:line-through" : ""}"><i style="--legend-color:${item.color}"></i>${escapeHtml(item.label)}</span>`).join("")}
+          </div>
         </article>
-      </div>
-      <div class="bdp-legend">
-        <span><i style="--legend-color:#7dd3fc"></i>Observed throughput</span>
-        <span><i style="--legend-color:#fbbf24"></i>Max by rcv_space</span>
-        <span><i style="--legend-color:#a78bfa"></i>delivery_rate</span>
-        <span><i style="--legend-color:#64748b"></i>64 KB / scaling capability</span>
-        <span><i style="--legend-color:#fb7185"></i>retrans / RTT / persist marker</span>
       </div>` : `<div class="bdp-empty"><strong>Timestamped snapshots required</strong><span>Add timestamp markers before each ss snapshot to compute byte deltas, BDP, and window-limited throughput over time.</span></div>`}
       <details class="diagnosis-learn-more bdp-learn-more">
         <summary><i class="ri-book-open-line"></i> What this module can and cannot conclude</summary>
@@ -3234,6 +3244,8 @@ function renderBdpWindowPanel() {
       </details>
     </div>
   </section>`;
+  state._bdpCache = { version: state.dataVersion, direction: state.prefs.bdpDirection, selectedId: state.selectedId, html: result };
+  return result;
 }
 
 function renderChartInfo(title, summary, detail) {
@@ -5608,6 +5620,17 @@ function drawBdpWindowCharts() {
   if (!charts.length) return;
   const analysis = bdpWindowAnalysis(visibleHistory());
   charts.forEach(svg => drawBdpWindowChart(svg, analysis, svg.dataset.bdpChart));
+  document.querySelectorAll("[data-bdp-legend] [data-series-key]").forEach(el => {
+    el.onclick = () => {
+      const key = el.dataset.seriesKey;
+      state.hiddenBdpSeries.has(key) ? state.hiddenBdpSeries.delete(key) : state.hiddenBdpSeries.add(key);
+      document.querySelectorAll(`[data-series-key="${key}"]`).forEach(span => {
+        span.style.opacity = state.hiddenBdpSeries.has(key) ? ".4" : "";
+        span.style.textDecoration = state.hiddenBdpSeries.has(key) ? "line-through" : "";
+      });
+      drawBdpWindowCharts();
+    };
+  });
 }
 
 function bdpChartSeries(analysis, kind) {
@@ -5686,7 +5709,7 @@ function drawBdpWindowChart(svg, analysis, kind) {
     svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" fill="#050910"/><text x="24" y="40" fill="#c4d0de" font-size="13">Not enough timestamped samples for this BDP chart.</text>`;
     return;
   }
-  const values = series.flatMap(item => bdpSeriesValues(data, item));
+  const values = series.filter(item => !state.hiddenBdpSeries.has(item.key)).flatMap(item => bdpSeriesValues(data, item));
   const max = Math.max(...values, kind === "bdp" ? 1024 : 1);
   const yTicks = [0, .25, .5, .75, 1].map(f => f * max);
   const formatY = kind === "bdp" ? formatBytesHuman : value => `${numberFormatter(value >= 100 ? 0 : value >= 10 ? 1 : 2).format(value)} Mbps`;
@@ -5711,17 +5734,53 @@ function drawBdpWindowChart(svg, analysis, kind) {
     <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
     ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${escapeHtml(formatY(value))}</text>`).join("")}
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${escapeHtml(tick.label)}</text>`).join("")}
-    ${series.map(item => bdpPath(data, item, x, y)).join("")}
+    ${series.filter(item => !state.hiddenBdpSeries.has(item.key)).map(item => bdpPath(data, item, x, y)).join("")}
     ${bdpMarkerOverlay(data, kind, x, pad, h)}
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="800">${escapeHtml(title)}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${Math.max(14, pad.l - tickWidth - 34)}" y="${h / 2}" transform="rotate(-90 ${Math.max(14, pad.l - tickWidth - 34)} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${escapeHtml(yLabel)}</text>
-    <g class="bdp-svg-legend">
-      ${series.slice(0, 5).map((item, index) => `<g transform="translate(${pad.l + index * 138},${pad.t + 12})"><line x1="0" x2="20" y1="0" y2="0" stroke="${item.color}" stroke-width="3" stroke-dasharray="${item.dash}"/><text x="25" y="4" fill="#c4d0de" font-size="10">${escapeHtml(item.label)}</text></g>`).join("")}
-    </g>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
+    <g class="bdp-crosshair" visibility="hidden"></g>
+    <rect class="bdp-hover-zone" x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="transparent" pointer-events="all"/>
   `;
+  attachBdpCrosshair(svg, data, series, x, y, pad, w, h, kind, formatY, max);
+}
+
+function attachBdpCrosshair(svg, data, series, xFn, yFn, pad, w, h, kind, formatY, max) {
+  const zone = svg.querySelector(".bdp-hover-zone");
+  const crosshairG = svg.querySelector(".bdp-crosshair");
+  if (!zone || !crosshairG) return;
+  const formatVal = kind === "bdp" ? formatBytesHuman : v => `${numberFormatter(v >= 100 ? 0 : v >= 10 ? 1 : 2).format(v)} Mbps`;
+  zone.addEventListener("mousemove", event => {
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX; pt.y = event.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const plotW = w - pad.l - pad.r;
+    const pct = Math.max(0, Math.min(1, (loc.x - pad.l) / plotW));
+    const idx = Math.round(pct * (data.length - 1));
+    const sample = data[idx];
+    if (!sample) return;
+    const cx = xFn(sample, idx);
+    const visible = series.filter(item => !state.hiddenBdpSeries.has(item.key));
+    const rows = visible.map(item => {
+      const v = item.value(sample);
+      return { label: item.label, color: item.color, value: v };
+    });
+    const time = timeLabel(sample.t || 0, sample.epochMs);
+    const tooltipX = cx + 12 > w - pad.r - 140 ? cx - 152 : cx + 12;
+    const lineH = 14;
+    const tooltipH = (rows.length + 1) * lineH + 10;
+    const tooltipY = Math.max(pad.t, Math.min(h - pad.b - tooltipH, loc.y - tooltipH / 2));
+    crosshairG.setAttribute("visibility", "visible");
+    crosshairG.innerHTML = `
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="140" height="${tooltipH}" rx="4" fill="rgba(10,16,24,.8)" stroke="#52657a"/>
+      <text x="${tooltipX + 8}" y="${tooltipY + 14}" fill="#8cc8e8" font-size="10" font-weight="700">${escapeHtml(time)}</text>
+      ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "—"}</text>`).join("")}
+    `;
+  });
+  zone.addEventListener("mouseleave", () => { crosshairG.setAttribute("visibility", "hidden"); });
 }
 
 function svgPoint(svg, event) {
@@ -6941,8 +7000,25 @@ function bindEvents() {
   bindSmartChartTooltips();
   document.querySelectorAll("[data-charts-tab]").forEach(btn => {
     btn.addEventListener("click", event => {
-      state.chartsTab = event.currentTarget.dataset.chartsTab;
-      render();
+      const tab = event.currentTarget.dataset.chartsTab;
+      if (state.chartsTab === tab) return;
+      const prev = state.chartsTab;
+      state.chartsTab = tab;
+      // If switching between charts and advisor, the main panel content changes → need render
+      if ((prev === "advisor" || tab === "advisor") && tab !== "bdp" && prev !== "bdp") {
+        render();
+        return;
+      }
+      // Switch between metrics/advisor and bdp: just toggle display
+      document.querySelectorAll("[data-charts-tab]").forEach(b => {
+        b.classList.toggle("active", b.dataset.chartsTab === tab);
+        b.setAttribute("aria-selected", b.dataset.chartsTab === tab ? "true" : "false");
+      });
+      const mainPanel = document.querySelector("[data-charts-panel='main']");
+      const bdpPanel = document.querySelector("[data-charts-panel='bdp']");
+      if (mainPanel) mainPanel.style.display = tab === "bdp" ? "none" : "";
+      if (bdpPanel) bdpPanel.style.display = tab === "bdp" ? "" : "none";
+      if (tab === "bdp") drawBdpWindowCharts();
     });
   });
   document.querySelectorAll("[data-cm-search]").forEach(btn => {
