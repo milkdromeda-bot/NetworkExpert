@@ -289,3 +289,50 @@ export const prefsDefault = {
     panelOrder: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"]
   }
 };
+
+
+export function generateSlowConsumerSample() {
+  const start = Date.parse("2026-05-12T14:00:00.000Z");
+  const lines = ["State Recv-Q Send-Q Local Address:Port Peer Address:Port Process"];
+  let drops = 0;
+  for (let i = 0; i < 1200; i += 1) {
+    const ts = new Date(start + i * 1000).toISOString();
+    // Phases: normal(0-300), degradation(300-600), critical(600-900), partial recovery(900-1200)
+    const phase = i < 300 ? 0 : i < 600 ? 1 : i < 900 ? 2 : 3;
+    const t = phase === 0 ? (i - 0) / 300 : phase === 1 ? (i - 300) / 300 : phase === 2 ? (i - 600) / 300 : (i - 900) / 300;
+
+    // Slow consumer: Send-Q grows because peer cannot drain fast enough
+    const sendQ = phase === 0 ? Math.round(8000 + Math.sin(i / 20) * 4000)
+      : phase === 1 ? Math.round(8000 + t * 450000 + Math.sin(i / 15) * 20000)
+      : phase === 2 ? Math.round(460000 + t * 600000 + Math.sin(i / 10) * 40000)
+      : Math.round(1060000 * (1 - t * 0.7) + Math.sin(i / 18) * 30000);
+    const recvQ = Math.round(3000 + Math.sin(i / 25) * 2000 + (phase === 2 ? t * 80000 : 0));
+
+    // RTT degrades as queues fill
+    const rtt = phase === 0 ? Math.round(12 + Math.sin(i / 30) * 3)
+      : phase === 1 ? Math.round(12 + t * 80 + Math.sin(i / 12) * 10)
+      : phase === 2 ? Math.round(92 + t * 250 + Math.sin(i / 8) * 30)
+      : Math.round(340 * (1 - t * 0.6) + Math.sin(i / 14) * 20);
+    const rto = Math.round(200 + rtt * 4);
+
+    // cwnd collapses under congestion
+    const cwnd = phase === 0 ? Math.round(42 + Math.sin(i / 22) * 5)
+      : phase === 1 ? Math.max(4, Math.round(42 - t * 30))
+      : phase === 2 ? Math.max(2, Math.round(12 - t * 8))
+      : Math.round(4 + t * 20);
+    const backoff = phase === 2 && i % 7 < 3 ? Math.min(5, Math.round(1 + t * 4)) : 0;
+
+    // Drops accumulate during critical phase
+    if (phase === 2 && i % 11 === 0) drops += 1 + Math.round(t * 3);
+    const pacing = Math.max(50000, Math.round(2400000 - sendQ * 1.8 + Math.cos(i / 19) * 100000));
+    const tx = Math.max(40000, Math.round(pacing * 0.7));
+    const rx = Math.round(800000 + Math.sin(i / 35) * 200000 - (phase >= 2 ? t * 400000 : 0));
+
+    lines.push(ts);
+    lines.push(`ESTAB ${recvQ} ${sendQ} 10.0.0.5:443 198.51.100.44:52100 users:(("app-server",pid=4821,fd=47)) timer:(on,${Math.max(1, Math.round(rto / 1000))}sec,${backoff ? backoff : 0}) cubic wscale:7:7 rto:${rto} ${backoff ? `backoff:${backoff}` : ""} rtt:${rtt}/${Math.max(1, Math.round(rtt / 5))} ato:40 mss:1448 cwnd:${cwnd} pmtu:1500 ssthresh:${Math.max(4, cwnd + 2)} bytes_acked:${52428800 + i * tx} bytes_received:${8388608 + i * rx} segs_out:${20000 + i * 12} segs_in:${15000 + i * 9} send ${tx}bps pacing_rate ${pacing}bps/${Math.round(pacing * 2.5)}bps delivery_rate ${Math.round(tx * 0.9)}bps skmem:(r${recvQ},rb262144,t${sendQ},tb1048576,f4096,w${Math.round(sendQ / 2)},o0,bl${backoff ? 4096 : 0},d${drops})`);
+    // Background healthy connection for contrast
+    lines.push(`ESTAB 0 ${Math.round(2000 + Math.sin(i / 40) * 1000)} 10.0.0.5:443 203.0.113.10:48200 users:(("app-server",pid=4821,fd=51)) cubic wscale:7:7 rto:220 rtt:8/2 ato:40 mss:1448 cwnd:46 pmtu:1500 bytes_acked:${104857600 + i * 44000} bytes_received:${20971520 + i * 22000} segs_out:${40000 + i * 14} segs_in:${38000 + i * 13} send 2400000bps pacing_rate 2400000bps/6000000bps skmem:(r0,rb262144,t${Math.round(2000 + Math.sin(i / 40) * 1000)},tb425984,f4096,w1024,o0,bl0,d0)`);
+    lines.push(`LISTEN 0 4096 0.0.0.0:443 0.0.0.0:* users:(("app-server",pid=4821,fd=6)) skmem:(r0,rb212992,t0,tb212992,f0,w0,o0,bl0,d0)`);
+  }
+  return lines.join("\n");
+}

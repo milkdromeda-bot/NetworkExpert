@@ -957,6 +957,20 @@ button.mega i {
 .ingest-source-head {
   align-items: center;
 }
+.ingest-quick-filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ingest-quick-filters button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
 .ingest-head-main {
   display: flex;
   align-items: center;

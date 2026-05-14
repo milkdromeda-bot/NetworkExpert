@@ -1,4 +1,4 @@
-import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateMicroburstSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
+import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateMicroburstSample, generateSlowConsumerSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
 import { metricValue, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { importSocketFile } from "./importer.js?v=20260425-2";
@@ -151,6 +151,7 @@ let state = {
   helpColumn: null,
   ssOptionHelpKey: "-i",
   showSsOptions: false,
+  showPreImportFilters: false,
   annotationDraft: buildAnnotationDraft({ sourceName: "built-in sample" }),
   annotationContext: null,
   ingestRawExpanded: SAMPLE.length <= INGEST_RAW_EAGER_LIMIT,
@@ -2705,6 +2706,13 @@ function renderIngestPage() {
             <div class="panel-title">ss stats to parse</div>
             ${renderImportStatus()}
           </div>
+          <div class="ingest-quick-filters">
+            <button data-action="togglePreImportFilters" class="${state.showPreImportFilters ? "primary" : ""}" title="Filter by protocol, state, IP, port"><i class="ri-filter-3-line"></i> Filter</button>
+            <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}" title="Build ss capture command"><i class="ri-command-line"></i> Capture</button>
+            <button data-action="pickFile" title="Open ss file from disk"><i class="ri-folder-open-line"></i> Open file</button>
+            <button data-action="sample10m" title="Load a 10-minute sample"><i class="ri-flask-line"></i> Sample</button>
+            <button data-action="parse" class="primary" title="Analyze pasted text"><i class="ri-play-line"></i> Analyze</button>
+          </div>
           <span class="status-pill">${escapeHtml(state.sourceName)}</span>
         </div>
         <div class="panel-body">
@@ -2712,12 +2720,10 @@ function renderIngestPage() {
             ? `<textarea id="rawInput" class="raw-large" spellcheck="false" placeholder="Paste ss output or a timestamped collection here...">${escapeHtml(state.raw)}</textarea>`
             : renderIngestRawPreview()}
           <div class="toolbar import-actions" style="margin-top:10px">
-            <button class="primary" data-action="parse">${icons.play} Analyze pasted text</button>
-            <button data-action="toggleSsOptions" class="${state.showSsOptions ? "primary" : ""}"><i class="ri-command-line"></i> Capture options</button>
-            <button data-action="sample10m">${icons.chart} 10-min sample</button>
             <button data-action="clear" class="clear-input-button" title="Empty the ss text input only">${icons.clear}<span>Clear input</span></button>
           </div>
           <p class="hint">The file is read locally by the browser. For large logs, use the Analysis page: pagination, filters, sorting, columns, and grouping.</p>
+          ${state.showPreImportFilters ? renderPreImportFilters() : ""}
         </div>
       </div>
       ${state.showSsOptions ? `<div class="panel ss-options-panel">
@@ -6578,6 +6584,10 @@ function bindEvents() {
       state.showSsOptions = !state.showSsOptions;
       renderKeepingWorkspacePosition();
     }
+    if (action === "togglePreImportFilters") {
+      state.showPreImportFilters = !state.showPreImportFilters;
+      renderKeepingWorkspacePosition();
+    }
     if (action === "showRawInput") {
       state.ingestRawExpanded = true;
       renderKeepingWorkspacePosition();
@@ -6588,16 +6598,16 @@ function bindEvents() {
       renderKeepingWorkspacePosition();
     }
     if (action === "sample10m") {
-      state.raw = generateTenMinuteSample();
+      state.raw = generateSlowConsumerSample();
       state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
-      setSourceName("10-minute synthetic sample");
+      setSourceName("20-min slow consumer scenario");
       state.selectedId = null;
       setActiveInvestigation(state, null);
       state.view = "analysis";
       state.activeTab = "advisor";
       setZoom(0, 1);
       markAnalysisDirty({ raw: true });
-      toast("10-minute sample loaded", "600 timestamped snapshots, one per second, are ready for analysis.");
+      toast("Slow consumer sample loaded", "1200 snapshots over 20 minutes: normal → degradation → critical congestion → partial recovery.");
       render();
     }
     if (action === "sampleMicroburst") {
