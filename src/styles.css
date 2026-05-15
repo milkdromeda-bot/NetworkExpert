@@ -1402,10 +1402,9 @@ button.mega i {
 .command-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
 .command-row input { min-width: 0; }
 .capture-flow-card {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  display: flex;
+  align-items: center;
   gap: 10px;
-  align-items: start;
   margin-bottom: 12px;
   padding: 10px 12px;
   border: 1px solid rgba(57, 214, 214, .42);

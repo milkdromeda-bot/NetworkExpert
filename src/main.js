@@ -795,7 +795,6 @@ function renderSsCommandBuilder() {
       <label class="${fieldClass("srcPort")} ss-field--port"><span>Source port</span><input id="ssCmdSrcPort" inputmode="numeric" placeholder="port" value="${escapeHtml(c.srcPort || "")}"${fieldInvalid("srcPort")} /><small data-ss-field-msg="srcPort">${fieldMessage("srcPort")}</small></label>
       <label class="${fieldClass("dstIp")} ss-field--ip"><span>Destination IP</span><input id="ssCmdDstIp" spellcheck="false" placeholder="destination address" value="${escapeHtml(c.dstIp || "")}"${fieldInvalid("dstIp")} /><small data-ss-field-msg="dstIp">${fieldMessage("dstIp")}</small></label>
       <label class="${fieldClass("dstPort")} ss-field--port"><span>Destination port</span><input id="ssCmdDstPort" inputmode="numeric" placeholder="port" value="${escapeHtml(c.dstPort || "")}"${fieldInvalid("dstPort")} /><small data-ss-field-msg="dstPort">${fieldMessage("dstPort")}</small></label>
-      <button type="button" class="ss-command-example" data-action="loadSsCommandEndpointExample"><i class="ri-magic-line"></i> Fill endpoint example</button>
     </section>
     <section class="ss-command-group ss-command-group--output">
       <strong>Output</strong>
@@ -2892,15 +2891,15 @@ function renderIngestRawPreview() {
     <p class="hint">This is the main freeze source when switching from Analysis to Import: rebuilding a huge textarea with the full raw capture blocks the browser thread. Use the lightweight preview below, or explicitly open the full editor only when you really need it.</p>
     <div class="toolbar import-actions">
       <button data-action="showRawInput">${icons.upload} Open full raw editor</button>
-      <button class="primary" data-action="parse">${icons.play} Re-analyze current raw text</button>
+      <button class="primary" data-action="parse">${icons.play} Analyze</button>
     </div>
     <pre class="code raw-preview">${escapeHtml(previewHead)}${previewTail ? `\n\n... truncated ...\n\n${escapeHtml(previewTail)}` : ""}</pre>
   </div>`;
 }
 
 function renderIngestEditor() {
-  return shouldEagerRenderIngestRaw()
-    ? `<div class="cm-search-hints">
+  const editorThemePicker = renderSsEditorThemePicker();
+  return `<div class="cm-search-hints">
         <span>Quick find:</span>
         <button data-cm-search="ESTAB">ESTAB</button>
         <button data-cm-search="CLOSE-WAIT">CLOSE-WAIT</button>
@@ -2912,9 +2911,9 @@ function renderIngestEditor() {
         <button data-cm-search="rto:">rto:</button>
         <button data-cm-search="cwnd:">cwnd:</button>
         <button data-cm-search="drops">d[1-9]</button>
+        <span style="margin-left:auto">${editorThemePicker}</span>
       </div>
-      <div id="cmContainer" class="cm-container"></div>`
-    : renderIngestRawPreview();
+      <div id="cmContainer" class="cm-container"></div>`;
 }
 
 function renderImportStatus() {
@@ -2960,13 +2959,13 @@ function renderIngestPage() {
       <div class="panel-head ingest-source-head">
         <div class="panel-title">ss stats to parse</div>
         ${renderImportStatus()}
-        ${renderSsEditorThemePicker()}
         <span class="status-pill">${escapeHtml(state.sourceName)}</span>
       </div>
       <div class="panel-body">
         <div class="ingest-toolbar">
           <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
           <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open file</button>
+          <button data-action="showEditor" class="${activePanel !== "capture" ? "primary" : ""}"><i class="ri-edit-line"></i> Editor</button>
           <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> ss command</button>
           <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
           <span class="ingest-toolbar-spacer"></span>
@@ -2974,14 +2973,14 @@ function renderIngestPage() {
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
           <button class="primary" data-action="parse"><i class="ri-play-line"></i> Analyze</button>
         </div>
-        ${activePanel === "capture" ? `<div class="ingest-card-layout">
-          <aside class="ingest-command-card">
+        ${activePanel === "capture" ? `<div class="ingest-ss-command-panel">
             <div class="capture-flow-card">
               <i class="ri-route-line" aria-hidden="true"></i>
               <div class="capture-flow-copy">
                 <strong>Collection first, parsing second</strong>
                 <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
               </div>
+              <button type="button" class="ss-command-example" data-action="loadSsCommandEndpointExample" style="margin-left:auto;white-space:nowrap"><i class="ri-magic-line"></i> Fill endpoint example</button>
             </div>
             ${renderSsCommandBuilder()}
             <div class="command-row">
@@ -2995,9 +2994,8 @@ function renderIngestPage() {
               </div>
               ${selectedOption ? renderSsOptionDetail(selectedOption) : ""}
             </div>
-          </aside>
-          <section class="ingest-editor-card">${renderIngestEditor()}</section>
-        </div>` : renderIngestEditor()}
+            </div>
+          </div>` : renderIngestEditor()}
       </div>
     </section>
   `;
@@ -8042,7 +8040,8 @@ function bindEvents() {
     const action = event.currentTarget.dataset.action;
     if (action === "parse") {
       const rawInput = document.querySelector("#rawInput");
-      state.raw = rawInput ? rawInput.value : (cmInstance ? cmInstance.getValue() : state.raw);
+      const cmValue = cmInstance ? cmInstance.getValue() : "";
+      state.raw = rawInput ? rawInput.value : (cmValue || state.raw);
       setActiveInvestigation(state, null);
       resetDerivedCaches({ raw: true });
       recompute();
@@ -8073,7 +8072,7 @@ function bindEvents() {
       state.ssCommandConfig = {
         timestamp: true,
         loop: true,
-        intervalSeconds: "0.01",
+        intervalSeconds: "1",
         srcIp: "10.0.0.10",
         srcPort: "50000",
         dstIp: "10.0.0.20",
@@ -8087,7 +8086,11 @@ function bindEvents() {
     }
     if (action === "sample") { state.raw = SAMPLE; state.ingestRawExpanded = true; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
     if (action === "toggleSsOptions") {
-      state.showSsOptions = !state.showSsOptions;
+      state.showSsOptions = true;
+      renderKeepingWorkspacePosition();
+    }
+    if (action === "showEditor") {
+      state.showSsOptions = false;
       renderKeepingWorkspacePosition();
     }
     if (action === "toggleWordWrap") {
@@ -8115,11 +8118,10 @@ function bindEvents() {
       setSourceName("20-min slow consumer scenario");
       state.selectedId = null;
       setActiveInvestigation(state, null);
-      state.view = "analysis";
-      state.activeTab = "advisor";
+      state.showSsOptions = false;
       setZoom(0, 1);
       markAnalysisDirty({ raw: true });
-      toast("Slow consumer sample loaded", "1200 snapshots over 20 minutes: normal → degradation → critical congestion → partial recovery.");
+      toast("Sample loaded", "Press Analyze to parse the 20-min slow consumer scenario.");
       render();
     }
     if (action === "sampleMicroburst") {
