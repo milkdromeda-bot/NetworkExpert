@@ -3057,8 +3057,11 @@ tr:hover, tr.selected { background: #101a27; }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  box-sizing: border-box;
+  min-height: 46px;
+  max-height: 46px;
   margin: 0 -10px 2px;
-  padding: 11px 12px 10px;
+  padding: 0 12px;
   border-bottom: 1px solid rgba(67, 78, 96, .72);
   background:
     linear-gradient(90deg, rgba(93, 183, 255, .16), rgba(93, 183, 255, .035) 46%, rgba(255, 255, 255, .025)),
@@ -8615,4 +8618,36 @@ mark.guide-hl {
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
+}
+
+/* Confidence score bar */
+.confidence {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.05);
+  font-size: 11px;
+  overflow: hidden;
+  z-index: 0;
+}
+.confidence-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: rgba(74,222,128,.15);
+  border-radius: 4px;
+  transition: width .3s;
+  z-index: -1;
+}
+
+
+.diagnosis-actionable summary {
+  color: #4ade80;
+  font-weight: 600;
+}
+.diagnosis-actionable pre {
+  border-left: 3px solid #4ade80;
+  padding-left: 12px;
 }

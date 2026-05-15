@@ -4828,7 +4828,7 @@ function renderDiagnosticHypothesis(item) {
         <span class="risk ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
         <strong>${escapeHtml(item.title)}</strong>
       </div>
-      <span class="confidence">${escapeHtml(item.confidence)} confidence</span>
+      <span class="confidence" title="${item.confidenceSignals} converging signal(s), ${item.confidenceCounters} counter-evidence(s)"><span class="confidence-bar" style="width:${Math.round((item.confidenceScore || 0) * 100)}%"></span>${Math.round((item.confidenceScore || 0) * 100)}% confidence</span>
     </header>
     <p>${escapeHtml(item.summary)}</p>
     <div class="evidence-row">
@@ -4851,6 +4851,10 @@ function renderDiagnosticHypothesis(item) {
       <summary><i class="ri-terminal-box-line"></i> Validation commands</summary>
       <pre class="code">${escapeHtml(item.commands.join("\n"))}</pre>
     </details>
+    ${item.actionableCommands?.length ? `<details class="diagnosis-actionable">
+      <summary><i class="ri-tools-line"></i> Actionable tuning (computed from observed values)</summary>
+      <pre class="code">${escapeHtml(item.actionableCommands.join("\n"))}</pre>
+    </details>` : ""}
     ${item.learnMore?.length ? `<details class="diagnosis-learn-more">
       <summary><i class="ri-book-open-line"></i> Learn more</summary>
       <ul>${item.learnMore.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>

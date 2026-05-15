@@ -132,6 +132,71 @@ function backoffWaitSummary(metrics) {
   return `backoff:${metrics.backoff} with rto:${metrics.rto}ms implies an approximate wait near ${waitLabel} before the next retry/probe.`;
 }
 
+function computeActionableCommands(id, sockets, evidence) {
+  const top = sockets[0];
+  if (!top) return [];
+  const pid = top.details?.process?.pid;
+  const peer = top.peerAddress?.host || top.peer;
+  const local = top.localAddress?.host || top.local;
+  const iface = "eth0";
+  const rb = top.details?.skmem?.rb || 0;
+  const recvQ = top.recvQ || 0;
+  const sendQ = top.sendQ || 0;
+  const rtt = top.details?.rtt || 0;
+  const cwnd = top.details?.cwnd || 0;
+  const cmds = [];
+
+  if (id === "local-receive-window-collapse" || id === "local-app-not-reading" || id === "zero-window-or-slow-consumer") {
+    if (pid) cmds.push(`# Inspect receiver process\npidstat -druwt -p ${pid} 1 5`);
+    if (pid) cmds.push(`strace -tt -T -p ${pid} -e trace=read,recvfrom,recvmsg,epoll_wait -c`);
+    if (rb && recvQ > rb * 0.7) {
+      const newRb = Math.min(rb * 4, 16777216);
+      cmds.push(`# Receive buffer is ${Math.round(rb / 1024)}KB, ${Math.round(recvQ * 100 / rb)}% used — consider increasing\nsudo sysctl -w net.ipv4.tcp_rmem='4096 ${Math.round(newRb / 2)} ${newRb}'`);
+      cmds.push(`sudo sysctl -w net.core.rmem_max=${newRb}`);
+    }
+    if (peer) cmds.push(`tcpdump -i ${iface} -nn 'host ${peer} and tcp[tcpflags] & (tcp-rst|tcp-fin) != 0' -c 50`);
+  }
+
+  if (id === "peer-slow-consumer-or-egress") {
+    if (sendQ > 0) {
+      const tb = top.details?.skmem?.tb || 0;
+      if (tb && sendQ > tb * 0.7) {
+        const newTb = Math.min(tb * 4, 16777216);
+        cmds.push(`# Send buffer is ${Math.round(tb / 1024)}KB, ${Math.round(sendQ * 100 / tb)}% used\nsudo sysctl -w net.ipv4.tcp_wmem='4096 ${Math.round(newTb / 2)} ${newTb}'`);
+        cmds.push(`sudo sysctl -w net.core.wmem_max=${newTb}`);
+      }
+    }
+    if (peer) cmds.push(`ss -tinpm dst ${peer}`);
+    if (peer) cmds.push(`ip route get ${peer}`);
+    cmds.push(`tc -s qdisc show dev ${iface}`);
+  }
+
+  if (id === "path-congestion-or-loss" || id === "peer-dead-or-blackhole") {
+    if (peer) cmds.push(`mtr -n -c 20 ${peer}`);
+    if (peer) cmds.push(`ip route get ${peer}`);
+    cmds.push(`ethtool -S ${iface} | egrep -i 'drop|err|crc|miss'`);
+    cmds.push(`nstat -az | egrep 'Retrans|Timeout|TCPLoss|TCPAbort'`);
+    if (cwnd > 0 && cwnd <= 4 && rtt > 0) {
+      const idealCwnd = Math.ceil((rtt / 1000) * 1000000 / 1448);
+      cmds.push(`# cwnd=${cwnd} is very low. BDP suggests ~${idealCwnd} segments for ${rtt}ms RTT at 1Gbps`);
+    }
+  }
+
+  if (id === "socket-memory-pressure") {
+    cmds.push(`sysctl net.ipv4.tcp_mem net.ipv4.tcp_rmem net.ipv4.tcp_wmem net.core.rmem_max net.core.wmem_max`);
+    cmds.push(`cat /proc/net/sockstat`);
+    const drops = top.details?.skmem?.d || 0;
+    if (drops > 0) cmds.push(`# ${drops} drops detected — check backlog\nsudo sysctl -w net.core.netdev_max_backlog=10000`);
+  }
+
+  if (id === "tcp-backoff-watch") {
+    if (peer) cmds.push(`ss -tinpm dst ${peer} | egrep 'rto|backoff|retrans|cwnd'`);
+    cmds.push(`nstat -az TcpRetransSegs TcpTimeouts`);
+  }
+
+  return cmds;
+}
+
 function makeHypothesis({
   id,
   title,
@@ -149,17 +214,25 @@ function makeHypothesis({
   const peers = unique(sockets.map(socket => socket.peer), 5);
   const locals = unique(sockets.map(socket => socket.local), 5);
   const processes = unique(sockets.map(processName), 5);
+  const signalCount = evidence.filter(Boolean).length;
+  const counterCount = counterEvidence.filter(Boolean).length;
+  const baseConf = CONFIDENCE_SCORE[confidence] || 1;
+  const numericConfidence = Math.max(0, Math.min(1, (baseConf / 3) * 0.5 + Math.min(1, signalCount / 5) * 0.35 + (sockets.length > 0 ? 0.15 : 0) - counterCount * 0.12));
   return {
     id,
     title,
     category,
     severity,
     confidence,
+    confidenceScore: Math.round(numericConfidence * 100) / 100,
+    confidenceSignals: signalCount,
+    confidenceCounters: counterCount,
     summary,
     evidence: unique(evidence, 8),
     counterEvidence: unique(counterEvidence, 8),
     learnMore: unique(learnMore, 10),
     commands: unique(commands, 8),
+    actionableCommands: computeActionableCommands(id, sockets, evidence),
     affectedSocketIds,
     count: affectedSocketIds.length,
     topSocketId: affectedSocketIds[0] || null,
