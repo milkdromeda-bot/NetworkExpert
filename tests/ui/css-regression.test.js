@@ -279,6 +279,14 @@ test("timeline shows millisecond precision when timestamp data contains it", () 
   assert.match(main, /t\+\$\{formatTimelineOffset\(event\.t \|\| 0\)\}s/);
 });
 
+test("timeline raises explicit events when the TCP persist timer appears", () => {
+  assert.match(main, /let previousTimerName = "";/);
+  assert.match(main, /timerName === "persist" && previousTimerName !== "persist"/);
+  assert.match(main, /title:\s*"TCP persist timer active"/);
+  assert.match(main, /TCP is probing a constrained or closed receive window/);
+  assert.match(main, /metric:\s*"timer"/);
+});
+
 test("filtered row count is pagination context only", () => {
   assert.match(main, /function hasActiveTableFilters\(filters = state\?\.table\?\.filters\)/);
   assert.match(main, /const filteredCount = hasActiveTableFilters\(\) \? `<span class="pager-filter-count">\$\{formatNumber\(total\)\} filtered row\(s\)<\/span>` : "";/);
@@ -314,6 +322,9 @@ test("analysis tabs expose short guidance and a single detailed view guide", () 
   assert.doesNotMatch(css, /\.analysis-tab-tooltip/);
   assert.match(css, /\.analysis-view-guide-button\s*\{[^}]*white-space:\s*nowrap;/s);
   assert.match(css, /\.analysis-view-guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(230px,\s*1fr\)\);/s);
+  assert.match(css, /\.analysis-view-guide-card\s*\{[^}]*padding:\s*0 10px 10px;[^}]*overflow:\s*hidden;/s);
+  assert.match(css, /\.analysis-view-guide-card header\s*\{[^}]*margin:\s*0 -10px 2px;[^}]*border-bottom:\s*1px solid rgba\(67,\s*78,\s*96,\s*\.72\);/s);
+  assert.match(css, /\.analysis-view-guide-card header\s*\{[^}]*background:[^}]*linear-gradient\(90deg,\s*rgba\(93,\s*183,\s*255,\s*\.16\)/s);
   assert.match(css, /\.modal\.analysisViewGuide\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 30px\)\);/s);
 });
 

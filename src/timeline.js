@@ -142,7 +142,8 @@ export function buildSocketHistoryFromSnapshots(snapshots = [], selectedSocket =
       segs_in: metricValue(exact, "segs_in"),
       backoff: metricValue(exact, "backoff"),
       retrans: exact?.details.timer?.retrans || 0,
-      timerName: exact?.details.timer?.name || ""
+      timerName: exact?.details.timer?.name || "",
+      timerExpireMs: exact?.details.timer?.expireMs || 0
     };
   }).filter(row => {
     if (row.socketPresent) return true;
@@ -179,6 +180,7 @@ export function buildSocketHistoryFromSnapshots(snapshots = [], selectedSocket =
     latestRow.backoff = metricValue(selectedSocket, "backoff");
     latestRow.retrans = selectedSocket?.details.timer?.retrans || 0;
     latestRow.timerName = selectedSocket?.details.timer?.name || "";
+    latestRow.timerExpireMs = selectedSocket?.details.timer?.expireMs || 0;
   }
 
   return rows;

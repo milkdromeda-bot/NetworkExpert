@@ -262,4 +262,5 @@ test("socket history carries receive autotuning fields for advanced analysis", (
   assert.equal(latest.bytes_sent, 2000);
   assert.equal(latest["skmem.rb"], 400000);
   assert.equal(latest.timerName, "persist");
+  assert.equal(latest.timerExpireMs, 3000);
 });

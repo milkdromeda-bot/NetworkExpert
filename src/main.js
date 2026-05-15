@@ -2103,7 +2103,24 @@ function buildTimelineEvents() {
   const rows = state.history || [];
   const selected = socketsById().get(state.selectedId) || state.sockets[0];
   const metrics = ["rto", "rtt", "sendQ", "recvQ", "skmem.d", "skmem.d_rate", "cwnd", "tx_bps", "rx_bps"];
+  let previousTimerName = "";
   for (const row of rows) {
+    const timerName = String(row.timerName || "").toLowerCase();
+    if (timerName === "persist" && previousTimerName !== "persist") {
+      const sendQ = Number(row.sendQ || 0);
+      const backoff = Number(row.backoff || 0);
+      const expire = Number(row.timerExpireMs || 0);
+      events.push({
+        epochMs: row.epochMs,
+        t: row.t,
+        severity: backoff >= 2 || sendQ >= thresholdFor("sendQ").danger ? "critical" : "high",
+        metric: "timer",
+        title: "TCP persist timer active",
+        detail: `timer:(persist${Number.isFinite(expire) && expire > 0 ? `, ${formatMetricValue("rto", expire)}` : ""}) is active: TCP is probing a constrained or closed receive window${sendQ > 0 ? ` while Send-Q is ${formatMetricValue("sendQ", sendQ)}` : ""}.`,
+        socketId: selected?.id
+      });
+    }
+    previousTimerName = timerName;
     for (const metric of metrics) {
       const value = Number(row[metric] || 0);
       const severity = thresholdSeverity(metric, value);
