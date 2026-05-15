@@ -8651,3 +8651,45 @@ mark.guide-hl {
   border-left: 3px solid #4ade80;
   padding-left: 12px;
 }
+
+
+/* Guide - Monitoring section */
+.guide-monitoring-shell { display: grid; gap: 20px; }
+.guide-monitoring-hero {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid rgba(93,183,255,.2);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(13,24,38,.8), rgba(7,11,18,.9));
+}
+.guide-monitoring-hero strong { color: var(--text); font-size: 18px; }
+.guide-monitoring-hero p { color: var(--soft); line-height: 1.5; }
+.guide-monitoring-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.guide-monitoring-card {
+  display: grid;
+  gap: 12px;
+}
+.guide-monitoring-card header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.guide-monitoring-card header i { font-size: 18px; color: #7dd3fc; }
+.guide-monitoring-card header strong { font-size: 15px; }
+.guide-monitoring-purpose { color: var(--soft); font-size: 13px; line-height: 1.5; }
+.guide-monitoring-card h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #7dd3fc;
+}
+.guide-monitoring-card ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.6; color: var(--soft); }
+.guide-monitoring-card section p { font-size: 12px; line-height: 1.5; color: var(--soft); }
+.guide-tips li { color: #4ade80; }
+@media (max-width: 1100px) { .guide-monitoring-grid { grid-template-columns: 1fr; } }
