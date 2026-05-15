@@ -270,6 +270,15 @@ test("analysis conversation stack keeps vertical gaps compact", () => {
   assert.match(css, /\.conversation-workbench,\s*\.expert-workbench,\s*\.timeline-workbench\s*\{[^}]*gap:\s*8px;/s);
 });
 
+test("timeline shows millisecond precision when timestamp data contains it", () => {
+  assert.match(main, /function formatTimelineTime\(event\)/);
+  assert.match(main, /const hasMilliseconds = Number\.isFinite\(epochMs\) && Math\.abs\(Math\.round\(epochMs\)\) % 1000 !== 0;/);
+  assert.match(main, /fractionalSecondDigits:\s*3/);
+  assert.match(main, /hasMilliseconds \? "timeline-ms" : "timeline"/);
+  assert.match(main, /function formatTimelineOffset\(seconds\)/);
+  assert.match(main, /t\+\$\{formatTimelineOffset\(event\.t \|\| 0\)\}s/);
+});
+
 test("filtered row count is pagination context only", () => {
   assert.match(main, /function hasActiveTableFilters\(filters = state\?\.table\?\.filters\)/);
   assert.match(main, /const filteredCount = hasActiveTableFilters\(\) \? `<span class="pager-filter-count">\$\{formatNumber\(total\)\} filtered row\(s\)<\/span>` : "";/);

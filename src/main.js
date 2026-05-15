@@ -5401,7 +5401,7 @@ function renderTimeline() {
     <div class="timeline-list">
       ${events.map(event => `<article class="timeline-event ${event.severity}">
         <div class="timeline-pin"></div>
-        <div class="timeline-time"><strong>${escapeHtml(formatTimelineTime(event))}</strong><span>t+${formatNumber(event.t || 0)}s</span></div>
+        <div class="timeline-time"><strong>${escapeHtml(formatTimelineTime(event))}</strong><span>t+${formatTimelineOffset(event.t || 0)}s</span></div>
         <div class="timeline-body">
           <header><span class="risk ${event.severity}">${escapeHtml(event.severity)}</span><strong>${escapeHtml(event.title)}</strong><span class="metric-chip">${escapeHtml(event.metric)}</span></header>
           <p>${escapeHtml(event.detail)}</p>
@@ -6078,7 +6078,7 @@ function numberSeparators() {
 }
 
 function dateTimeFormatter(locale, options, cacheId = "") {
-  const key = `${cacheId}|${locale}|${options.timeZone || ""}|${options.year || ""}|${options.month || ""}|${options.day || ""}|${options.hour || ""}|${options.minute || ""}|${options.second || ""}|${options.hour12 ?? ""}`;
+  const key = `${cacheId}|${locale}|${options.timeZone || ""}|${options.year || ""}|${options.month || ""}|${options.day || ""}|${options.hour || ""}|${options.minute || ""}|${options.second || ""}|${options.fractionalSecondDigits || ""}|${options.hour12 ?? ""}`;
   return rememberBounded(dateTimeFormatterCache, key, () => new Intl.DateTimeFormat(locale, options));
 }
 
@@ -6090,16 +6090,26 @@ function formatNumber(value) {
 
 function formatTimelineTime(event) {
   if (!event?.epochMs) return "snapshot";
+  const epochMs = Number(event.epochMs);
+  const hasMilliseconds = Number.isFinite(epochMs) && Math.abs(Math.round(epochMs)) % 1000 !== 0;
   try {
     return dateTimeFormatter(resolvedNumberLocale(), {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
+      ...(hasMilliseconds ? { fractionalSecondDigits: 3 } : {}),
       timeZone: resolvedTimeZone()
-    }, "timeline").format(new Date(event.epochMs));
+    }, hasMilliseconds ? "timeline-ms" : "timeline").format(new Date(epochMs));
   } catch {
     return "snapshot";
   }
+}
+
+function formatTimelineOffset(seconds) {
+  const numeric = Number(seconds || 0);
+  if (!Number.isFinite(numeric)) return "0";
+  if (Math.abs(numeric % 1) > 0.0005) return numberFormatterWith(3, 3).format(numeric);
+  return formatNumber(numeric);
 }
 
 function metricUnit(metric) {
