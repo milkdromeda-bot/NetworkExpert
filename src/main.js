@@ -3281,9 +3281,17 @@ function renderJvmGcPanel() {
   const summary = corr?.summary;
   const jvmRows = jvmPagedRows(corr?.results || [], gc.safepoints || []);
   return `<section class="panel jvm-gc-panel">
-    <div class="panel-head">
-      <div class="panel-title"><span>JVM Stall / GC Correlation</span>${hasPauses ? `<button class="jvm-clear-btn" data-action="clearJvmGcLog" title="Clear GC data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}</div>
-      <div class="bdp-controls">
+    <div class="panel-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px">
+      <span style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap">JVM Stall / GC Correlation</span>
+      ${hasPauses ? `<button class="jvm-clear-btn" data-action="clearJvmGcLog" title="Clear GC data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}
+      ${hasPauses ? `<div style="display:flex;gap:4px;margin:0 auto">
+        <button class="mini" data-chart-zoom="zoomIn" data-jvm-zoom title="Zoom in">${icons.zoomIn}</button>
+        <button class="mini" data-chart-zoom="zoomOut" data-jvm-zoom title="Zoom out">${icons.zoomOut}</button>
+        <button class="mini" data-chart-zoom="resetZoom" data-jvm-zoom title="Reset zoom">${icons.reset}</button>
+        <button class="mini" data-chart-zoom="panLeft" data-jvm-zoom title="Pan left">${icons.arrowLeft}</button>
+        <button class="mini" data-chart-zoom="panRight" data-jvm-zoom title="Pan right">${icons.arrowRight}</button>
+      </div>` : ""}
+      <div class="bdp-controls" style="margin-left:auto">
         <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
         <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
         <label style="margin-left:10px"><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
@@ -3291,31 +3299,26 @@ function renderJvmGcPanel() {
     </div>
     <div class="panel-body">
       ${!hasPauses ? `<div class="jvm-gc-import">
-        <p><strong>Import GC / safepoint log</strong> — Java 17+ Unified Logging format.</p>
-        <textarea id="jvmGcLogInput" rows="6" placeholder="Paste GC log here or drag-drop a file..."></textarea>
+        <p><strong>Import GC / safepoint log</strong> — Java 17+ Unified Logging format. Large files (50 MB+) are streamed and parsed without freezing.</p>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <button class="primary" data-action="pickJvmGcFile">Load file</button>
-          <button data-action="parseJvmGcLog">Parse GC log</button>
+          <button class="primary" data-action="pickJvmGcFile">Load & parse file</button>
           <input type="file" id="jvmGcFileInput" accept=".log,.txt" style="display:none"/>
         </div>
-        <details style="margin-top:12px"><summary>Recommended JVM logging flags</summary><pre style="font-size:11px;margin-top:4px">${escapeHtml(RECOMMENDED_JVM_LOGGING)}</pre></details>
+        <details style="margin-top:12px"><summary>Paste GC log manually</summary>
+          <textarea id="jvmGcLogInput" rows="4" placeholder="Paste GC log excerpt here..." style="margin-top:6px"></textarea>
+          <button data-action="parseJvmGcLog" style="margin-top:6px">Parse pasted text</button>
+        </details>
+        <details style="margin-top:8px"><summary>Recommended JVM logging flags</summary><pre style="font-size:11px;margin-top:4px">${escapeHtml(RECOMMENDED_JVM_LOGGING)}</pre></details>
       </div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
           <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} total</strong>
-          <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}
-            <span class="field-info" tabindex="0" aria-label="Score interpretation"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
+          <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}</em>
+          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:auto;right:0"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
           </em>
         </div>
         ${summary?.recommendations?.length ? `<div class="jvm-recs">${summary.recommendations.map(r => `<div class="investigation-note ${r.severity}"><b>${escapeHtml(r.severity)}</b> <span>${escapeHtml(r.text)}</span></div>`).join("")}</div>` : ""}
         <div class="jvm-chart-section">
-          <div class="jvm-chart-toolbar">
-            <button class="mini" data-chart-zoom="zoomIn" data-jvm-zoom title="Zoom in">${icons.zoomIn}</button>
-            <button class="mini" data-chart-zoom="zoomOut" data-jvm-zoom title="Zoom out">${icons.zoomOut}</button>
-            <button class="mini" data-chart-zoom="resetZoom" data-jvm-zoom title="Reset zoom">${icons.reset}</button>
-            <button class="mini" data-chart-zoom="panLeft" data-jvm-zoom title="Pan left">${icons.arrowLeft}</button>
-            <button class="mini" data-chart-zoom="panRight" data-jvm-zoom title="Pan right">${icons.arrowRight}</button>
-          </div>
           <div class="bdp-chart-grid jvm-chart-grid">
             <article>
               <div class="bdp-chart-title"><strong>GC pauses vs Recv-Q / skmem:r</strong><span>zoom + crosshair</span></div>
@@ -3380,15 +3383,17 @@ function renderJvmGcPanel() {
 function jvmLegendSeries(kind) {
   if (kind === "scatter") {
     return [
-      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24" },
-      { key: "scatter_high", label: "High score pauses", color: "#ef4444" },
-      { key: "scatter_low", label: "Low score pauses", color: "#7dd3fc" }
+      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24", tip: "GC pauses with correlation score 0.20–0.50. Temporal overlap with TCP symptoms but moderate confidence." },
+      { key: "scatter_high", label: "High score pauses", color: "#ef4444", tip: "GC pauses with correlation score > 0.50. Strong evidence of JVM-induced slow consumer behavior." },
+      { key: "scatter_low", label: "Low score pauses", color: "#7dd3fc", tip: "GC pauses with correlation score < 0.20. Pause detected but no significant TCP impact observed." }
     ];
   }
   return [
-    { key: "recvq", label: "Recv-Q", color: "#7dd3fc" },
-    { key: "gc_pause", label: "GC pause window", color: "#fbbf24" },
-    { key: "gc_high", label: "High score GC", color: "#ef4444" }
+    { key: "recvq", label: "Recv-Q", color: "#7dd3fc", tip: "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough — a key slow consumer signal." },
+    { key: "gc_young", label: "Young GC", color: "#22d3ee", tip: "Minor/young generation collections. Usually short (1–20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
+    { key: "gc_mixed", label: "Mixed GC", color: "#fbbf24", tip: "G1 mixed collections evacuating both young and old regions. Typically longer than young GC and may indicate heap pressure building up." },
+    { key: "gc_full", label: "Full / Remark", color: "#ef4444", tip: "Full GC, Remark, or Cleanup pauses. These are the longest and most disruptive. Full GC indicates heap exhaustion or fragmentation." },
+    { key: "gc_safepoint", label: "Safepoint", color: "#a78bfa", tip: "JVM safepoint pauses not related to GC (e.g. deoptimization, biased locking revocation). Can still block application threads." }
   ];
 }
 
@@ -3398,7 +3403,7 @@ function jvmSeriesHidden(key) {
 
 function renderJvmLegend(kind) {
   return `<div class="bdp-legend jvm-legend" data-jvm-legend="${escapeHtml(kind)}">
-    ${jvmLegendSeries(kind).map(item => `<span data-jvm-series-key="${escapeHtml(item.key)}" style="cursor:pointer;${jvmSeriesHidden(item.key) ? "opacity:.4;text-decoration:line-through" : ""}"><i style="--legend-color:${item.color}"></i>${escapeHtml(item.label)}</span>`).join("")}
+    ${jvmLegendSeries(kind).map(item => `<span data-jvm-series-key="${escapeHtml(item.key)}" style="cursor:pointer;${jvmSeriesHidden(item.key) ? "opacity:.4;text-decoration:line-through" : ""}" title="${escapeHtml(item.tip)}"><i style="--legend-color:${item.color}"></i>${escapeHtml(item.label)}</span>`).join("")}
   </div>`;
 }
 
@@ -3569,21 +3574,36 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   const maxRecvQ = Math.max(1, ...history.map(s => s.recvQ || 0));
   const y = value => pad.t + plotH - (value / maxRecvQ) * plotH;
   const line = history.map((sample, index) => `${index ? "L" : "M"}${x(sample.epochMs).toFixed(1)},${y(sample.recvQ || 0).toFixed(1)}`).join(" ");
+  const pauseTypeColor = type => {
+    if (type === "Young") return "#22d3ee";
+    if (type === "Mixed") return "#fbbf24";
+    if (type === "Full" || type === "Remark" || type === "Cleanup") return "#ef4444";
+    return "#a78bfa"; // safepoint or other
+  };
   const bars = results.filter(result => {
-    if (result.score > 0.5 && jvmSeriesHidden("gc_high")) return false;
-    return !jvmSeriesHidden("gc_pause");
+    const t = result.pause?.type || "";
+    if (t === "Young" && jvmSeriesHidden("gc_young")) return false;
+    if (t === "Mixed" && jvmSeriesHidden("gc_mixed")) return false;
+    if ((t === "Full" || t === "Remark" || t === "Cleanup") && jvmSeriesHidden("gc_full")) return false;
+    if (t === "Safepoint" && jvmSeriesHidden("gc_safepoint")) return false;
+    return true;
   }).map(result => {
     const bx = x(result.epochMs);
     const bw = Math.max(1, (result.pause.durationMs / span) * plotW);
-    return `<rect x="${bx.toFixed(1)}" y="${pad.t}" width="${bw.toFixed(1)}" height="${plotH}" fill="${jvmPauseColor(result.score)}" opacity=".30"><title>GC(${result.pause.id}) ${escapeHtml(result.pause.type)} ${result.pause.durationMs.toFixed(1)}ms score=${result.score.toFixed(2)}</title></rect>`;
+    const color = pauseTypeColor(result.pause.type);
+    return `<rect x="${bx.toFixed(1)}" y="${pad.t}" width="${bw.toFixed(1)}" height="${plotH}" fill="${color}" opacity=".35"><title>GC(${result.pause.id}) ${escapeHtml(result.pause.type)} ${result.pause.durationMs.toFixed(1)}ms score=${result.score.toFixed(2)}</title></rect>`;
   }).join("");
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * maxRecvQ);
+  const yTicksSvg = yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#1a2636"/><text x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="10">${formatMetricValue("recvQ", v)}</text>`).join("");
   svg.innerHTML = `
     <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
+    ${yTicksSvg}
     ${bars}
     ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="#7dd3fc" stroke-width="2.4"/>`}
     <text x="${pad.l}" y="17" fill="#edf4ff" font-size="12" font-weight="700">Recv-Q + GC pauses</text>
     <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Time (${escapeHtml(resolvedTimeZone())})</text>
+    <text x="14" y="${h / 2}" transform="rotate(-90 14 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Recv-Q (bytes)</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
@@ -3676,10 +3696,15 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
     const sample = history.reduce((best, item) => Math.abs(item.epochMs - targetEpoch) < Math.abs(best.epochMs - targetEpoch) ? item : best, history[0]);
     const pause = results.reduce((best, item) => !best || Math.abs(item.epochMs - targetEpoch) < Math.abs(best.epochMs - targetEpoch) ? item : best, null);
     const cx = xFn(sample.epochMs);
+    // Drag selection overlay
+    const dragSel = svg._jvmDragStart != null
+      ? `<rect x="${Math.min(pad.l + svg._jvmDragStart * plotW, locX)}" y="${pad.t}" width="${Math.abs(locX - (pad.l + svg._jvmDragStart * plotW))}" height="${h - pad.t - pad.b}" fill="#5db7ff" opacity=".18" stroke="#5db7ff" stroke-width="1" stroke-dasharray="5 4"/>`
+      : "";
     const tooltipW = 230;
     const tooltipX = cx + tooltipW + 14 > w - pad.r ? cx - tooltipW - 14 : cx + 14;
     layer.setAttribute("visibility", "visible");
     layer.innerHTML = `
+      ${dragSel}
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(timeLabel(sample.t || 0, sample.epochMs))}</text>
@@ -8978,10 +9003,40 @@ function bindEvents() {
   document.querySelector("#jvmGcFileInput")?.addEventListener("change", e => {
     const file = e.target.files?.[0];
     if (!file) return;
-    file.text().then(text => {
-      const input = document.querySelector("#jvmGcLogInput");
-      if (input) input.value = text;
-    });
+    _showBusy();
+    const reader = file.stream().getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lines = "";
+    const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i;
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) {
+          if (buffer) { if (gcPattern.test(buffer)) lines += buffer + "\n"; }
+          finishParse();
+          return;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n");
+        buffer = parts.pop();
+        for (const line of parts) {
+          if (gcPattern.test(line)) lines += line + "\n";
+        }
+        setTimeout(pump, 0);
+      });
+    }
+    function finishParse() {
+      const { pauses, safepoints } = parseGcLog(lines);
+      state.jvmGc.rawLog = `[${file.name}: ${pauses.length} pauses extracted from ${(file.size / 1e6).toFixed(1)} MB]`;
+      state.jvmGc.pauses = pauses;
+      state.jvmGc.safepoints = safepoints;
+      runJvmCorrelation();
+      _hideBusy();
+      toast("GC log loaded & parsed", `${pauses.length} pauses, ${safepoints.length} safepoints from ${file.name} (${(file.size / 1e6).toFixed(1)} MB).`);
+      render();
+      requestAnimationFrame(drawJvmCharts);
+    }
+    pump();
   });
   document.querySelector("#bdpDirectionSelect")?.addEventListener("change", e => {
     state.prefs.bdpDirection = normalizeBdpDirection(e.target.value);
