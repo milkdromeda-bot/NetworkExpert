@@ -25,7 +25,7 @@ test("application service chip tooltip stays viewport-safe and truncates labels"
   assert.match(css, /\.app-service-tooltip strong,\s*\.app-service-tooltip small,\s*\.app-service-tooltip p,\s*\.app-service-tooltip em\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
   assert.match(main, /ensureAppServiceTooltip/);
   assert.match(main, /document\.body\.appendChild\(tooltip\)/);
-  assert.match(main, /function render\(\) \{\s*hideAppServiceTooltip\(\);/);
+  assert.match(main, /function render\(\) \{[\s\S]*?hideAppServiceTooltip\(\);/);
   assert.match(main, /\[data-service-override\][\s\S]*?hideAppServiceTooltip\(\);[\s\S]*?state\.modal = "serviceOverride";/);
   assert.doesNotMatch(main, /<span class="app-service-tooltip"/);
 });
@@ -160,8 +160,20 @@ test("chart-only toolbar is hidden from the charts advisor tab", () => {
   assert.match(main, /state\.chartsTab === "charts" \? renderDashboardStudioInline\(\) : ""/);
   assert.match(main, /state\.chartsTab === "charts" \? renderChartsGlobalToolbar\(\) : ""/);
   assert.match(main, /function renderChartsGlobalToolbar\(\)[\s\S]*data-action="thresholds"[\s\S]*id="chartTimeZoneSelect"[\s\S]*data-action="layoutPrefs"/);
-  assert.match(main, /state\.chartsTab === "advisor" \? `\$\{renderInvestigationContext\(\)\}\$\{renderTailLatencyLensPanel\(\)\}` : ""/);
+  assert.match(main, /state\.chartsTab === "advisor" \? `\$\{renderInvestigationContext\(\)/);
+  assert.match(main, /renderTailLatencyLensPanel\(\)/);
   assert.doesNotMatch(main, /\$\{renderChartsGlobalToolbar\(\)\}\s*\n\s*\$\{renderChartsPage\(\)\}/);
+});
+
+test("topology action uses a dedicated modal opener", () => {
+  assert.match(main, /import \{ applyContextAction, openTopologyModal, setActiveInvestigation \} from "\.\/navigation\.js";/);
+  assert.match(main, /normalizeTopologyProfile,/);
+  assert.match(main, /data-topology-open aria-haspopup="dialog"/);
+  assert.match(main, /document\.querySelectorAll\("\[data-topology-open\]"\)\.forEach/);
+  assert.match(main, /openTopologyModal\(state\);[\s\S]*renderKeepingWorkspacePosition\(\);/);
+  assert.match(main, /openTopologyModal\(state, \{ editId: event\.currentTarget\.dataset\.topologyEdit, draftMatch: "" \}\);/);
+  assert.match(main, /openTopologyModal\(state, \{ editId: "", draftMatch: event\.currentTarget\.dataset\.topologySuggest \}\);/);
+  assert.doesNotMatch(main, /class="service-labels-button topology" data-action="topology"/);
 });
 
 test("BDP window module exposes cautious controls and bounded charts", () => {

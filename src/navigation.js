@@ -13,6 +13,12 @@ export function setActiveInvestigation(state, socketId, reason = "Selected by us
   state.activeContextReason = socketId ? reason : "";
 }
 
+export function openTopologyModal(state, { editId = "", draftMatch = "" } = {}) {
+  state.topologyEditId = editId;
+  state.topologyDraftMatch = draftMatch;
+  state.modal = "topology";
+}
+
 export function applyContextAction(state, action, socket, { chartMetrics = [], suggestedMetric = null } = {}) {
   if (action === "clear") {
     setActiveInvestigation(state, null);

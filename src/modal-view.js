@@ -11,6 +11,8 @@ export function createModalView(context) {
     currentApplicationService,
     inferredApplicationService,
     serviceOverrideForSocket,
+    normalizeTopologyProfile = profile => ({ groups: Array.isArray(profile?.groups) ? profile.groups : [] }),
+    endpointHost = endpoint => String(endpoint || "").replace(/^\[|\]$/g, "").split(":")[0],
     topologyScopeKey,
     topologyGroupForEndpoint,
     selectedSocket,

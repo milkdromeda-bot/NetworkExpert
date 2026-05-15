@@ -161,6 +161,7 @@ test("modal view renders service aliases and delegates modal body", () => {
     aliasForEndpoint: () => null,
     aliasListForSource: () => [],
     normalizeAliasStore: store => store,
+    normalizeTopologyProfile: profile => ({ groups: profile?.groups || [] }),
     topologyScopeKey: sourceName => sourceName,
     topologyGroupForEndpoint: () => null,
     selectedSocket: () => null,
@@ -196,6 +197,70 @@ test("modal view renders service aliases and delegates modal body", () => {
   });
   assert.deepEqual(view.serviceAliasEndpointOptions(), ["10.0.0.1:443", "127.0.0.1:22"]);
   assert.match(view.renderModal(), /Service labels/);
+});
+
+test("modal view renders topology modal with host suggestions", () => {
+  const state = {
+    modal: "topology",
+    serviceAliases: {},
+    aliasEditKey: "",
+    aliasEditScope: "source",
+    sourceName: "market-data.log",
+    topology: { groups: [] },
+    topologyDraftMatch: "",
+    topologyEditId: ""
+  };
+  const view = createModalView({
+    state,
+    html,
+    icons,
+    escapeHtml,
+    sortedFilteredSockets: () => [
+      { local: "172.16.0.10:50000", peer: "10.0.0.20:9200" },
+      { local: "172.16.0.10:50001", peer: "10.0.0.21:9200" }
+    ],
+    aliasForEndpoint: () => null,
+    aliasListForSource: () => [],
+    normalizeAliasStore: store => store,
+    topologyScopeKey: sourceName => sourceName,
+    topologyGroupForEndpoint: () => null,
+    selectedSocket: () => null,
+    renderSocketDetail: () => "",
+    renderPrefs: () => "",
+    renderGuide: () => "",
+    renderThresholdConfig: () => "",
+    renderTableSettingsDrawer: () => "",
+    metricLabel: metric => metric,
+    renderColumnChooser: () => "",
+    renderLayoutPrefs: () => "",
+    renderPreImportFilters: () => "",
+    renderFields: () => "",
+    getColumn: key => ({ key, label: key }),
+    columnHelp: () => ({ summary: "", detail: "", use: "", metric: null, threshold: null }),
+    renderThresholdSummary: () => "",
+    expertDefaultThresholds: EXPERT_DEFAULT_THRESHOLDS,
+    annotationSocketId: () => "",
+    currentSourceAnnotations: () => [],
+    visibleHistory: () => [],
+    annotationTypeList: () => [],
+    buildAnnotationDraft: () => ({}),
+    timeLabel: () => "now",
+    annotationAnchorOptions: () => [],
+    annotationMetricChoices: () => [],
+    formatMetricValue: (metric, value) => `${metric}:${value}`,
+    annotationDefaultLabel: () => "",
+    annotationTypeLabel: value => value,
+    chartStats: () => ({ count: 0 }),
+    formatNumber: String,
+    renderPercentileDistribution: () => "",
+    renderDatalist: (id, values) => `<datalist id="${id}">${values.map(value => `<option value="${value}"></option>`).join("")}</datalist>`
+  });
+
+  const modal = view.renderModal();
+  assert.match(modal, /Recording topology/);
+  assert.match(modal, /Scope: market-data\.log/);
+  assert.match(modal, /data-topology-suggest="10\.0\.0\.20"/);
+  assert.match(modal, /data-action="saveTopologyGroup"/);
 });
 
 test("modal view renders service override as recording scoped classification", () => {

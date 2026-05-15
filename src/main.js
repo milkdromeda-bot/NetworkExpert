@@ -10,7 +10,7 @@ import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 import { detectMicroburstWindow } from "./microburst.js";
 import { detectTailLatencyLens } from "./tail-latency.js";
-import { applyContextAction, setActiveInvestigation } from "./navigation.js";
+import { applyContextAction, openTopologyModal, setActiveInvestigation } from "./navigation.js";
 import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource, deleteEndpointAlias, normalizeAliasStore, upsertEndpointAlias } from "./aliases.js";
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
@@ -4164,7 +4164,7 @@ function renderServiceMap() {
         <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
       </div>
       <div class="service-map-actions">
-        <button class="service-labels-button topology" data-action="topology"><i class="ri-node-tree"></i> Topology</button>
+        <button class="service-labels-button topology" type="button" data-topology-open aria-haspopup="dialog"><i class="ri-node-tree"></i> Topology</button>
         <button class="service-labels-button" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Labels</button>
       </div>
     </div>
@@ -4701,6 +4701,8 @@ function modalView() {
     currentApplicationService,
     inferredApplicationService,
     serviceOverrideForSocket,
+    normalizeTopologyProfile,
+    endpointHost,
     topologyScopeKey,
     topologyGroupForEndpoint,
     selectedSocket,
@@ -7471,7 +7473,10 @@ function bindEvents() {
       bindEvents();
     }
     if (action === "serviceAliases") { state.modal = "serviceAliases"; render(); }
-    if (action === "topology") { state.modal = "topology"; render(); }
+    if (action === "topology") {
+      openTopologyModal(state);
+      renderKeepingWorkspacePosition();
+    }
     if (action === "pickJvmGcFile") { document.querySelector("#jvmGcFileInput")?.click(); }
     if (action === "parseJvmGcLog") {
       const text = document.querySelector("#jvmGcLogInput")?.value || "";
@@ -7858,6 +7863,12 @@ function bindEvents() {
     state.prefsTab = event.currentTarget.dataset.prefTab;
     render();
   }));
+  document.querySelectorAll("[data-topology-open]").forEach(btn => btn.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    openTopologyModal(state);
+    renderKeepingWorkspacePosition();
+  }));
 
   document.querySelector("#fileInput")?.addEventListener("change", event => {
     const file = event.target.files?.[0];
@@ -7963,16 +7974,12 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-topology-edit]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
-    state.topologyEditId = event.currentTarget.dataset.topologyEdit;
-    state.topologyDraftMatch = "";
-    state.modal = "topology";
+    openTopologyModal(state, { editId: event.currentTarget.dataset.topologyEdit, draftMatch: "" });
     renderKeepingModalPosition();
   }));
   document.querySelectorAll("[data-topology-suggest]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
-    state.topologyEditId = "";
-    state.topologyDraftMatch = event.currentTarget.dataset.topologySuggest;
-    state.modal = "topology";
+    openTopologyModal(state, { editId: "", draftMatch: event.currentTarget.dataset.topologySuggest });
     renderKeepingModalPosition();
   }));
   document.querySelectorAll("[data-guide-tab]").forEach(tab => tab.addEventListener("click", event => {

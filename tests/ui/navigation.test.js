@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyContextAction, setActiveInvestigation } from "../../src/navigation.js";
+import { applyContextAction, openTopologyModal, setActiveInvestigation } from "../../src/navigation.js";
 
 function baseState() {
   return {
@@ -159,4 +159,27 @@ test("active investigation reason is explicit when user chooses a socket", () =>
 
   assert.equal(state.activeContextId, "socket-b");
   assert.equal(state.activeContextReason, "Chosen by clicking a row");
+});
+
+test("openTopologyModal opens a clean topology dialog", () => {
+  const state = { modal: null, topologyEditId: "old", topologyDraftMatch: "10.0.0.1" };
+
+  openTopologyModal(state);
+
+  assert.equal(state.modal, "topology");
+  assert.equal(state.topologyEditId, "");
+  assert.equal(state.topologyDraftMatch, "");
+});
+
+test("openTopologyModal can reopen the dialog for edit or suggestion context", () => {
+  const state = { modal: null, topologyEditId: "", topologyDraftMatch: "" };
+
+  openTopologyModal(state, { editId: "group-a", draftMatch: "ignored" });
+  assert.equal(state.modal, "topology");
+  assert.equal(state.topologyEditId, "group-a");
+  assert.equal(state.topologyDraftMatch, "ignored");
+
+  openTopologyModal(state, { draftMatch: "192.168.1.10" });
+  assert.equal(state.topologyEditId, "");
+  assert.equal(state.topologyDraftMatch, "192.168.1.10");
 });
