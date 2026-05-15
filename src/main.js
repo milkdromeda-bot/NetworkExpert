@@ -17,7 +17,7 @@ import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-sum
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
-import { correlateJvmStalls, DEFAULT_WINDOWS as JVM_DEFAULT_WINDOWS } from "./jvm-correlation.js";
+import { alignTimestamps, correlateJvmStalls, DEFAULT_WINDOWS as JVM_DEFAULT_WINDOWS } from "./jvm-correlation.js";
 import { commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
@@ -165,7 +165,9 @@ let state = {
   chartRenderToken: 0,
   hiddenBdpSeries: new Set(),
   hiddenChartSeries: new Set(),
+  hiddenJvmSeries: new Set(),
   jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0 },
+  jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
   advisorFindings: [],
   bandwidthIndex: {},
   anomalyAlertSince: null,
@@ -3277,6 +3279,7 @@ function renderJvmGcPanel() {
   const hasPauses = gc.pauses.length > 0;
   const corr = gc.correlation;
   const summary = corr?.summary;
+  const jvmRows = jvmPagedRows(corr?.results || [], gc.safepoints || []);
   return `<section class="panel jvm-gc-panel">
     <div class="panel-head">
       <div class="panel-title"><span>JVM Stall / GC Correlation</span></div>
@@ -3302,9 +3305,59 @@ function renderJvmGcPanel() {
           <button class="mini" data-action="clearJvmGcLog" style="margin-left:auto">Clear GC data</button>
         </div>
         ${summary?.recommendations?.length ? `<div class="jvm-recs">${summary.recommendations.map(r => `<div class="investigation-note ${r.severity}"><b>${escapeHtml(r.severity)}</b> <span>${escapeHtml(r.text)}</span></div>`).join("")}</div>` : ""}
+        <div class="jvm-chart-section">
+          <div class="jvm-chart-toolbar">
+            <button class="mini" data-chart-zoom="zoomIn" data-jvm-zoom title="Zoom in">${icons.zoomIn}</button>
+            <button class="mini" data-chart-zoom="zoomOut" data-jvm-zoom title="Zoom out">${icons.zoomOut}</button>
+            <button class="mini" data-chart-zoom="resetZoom" data-jvm-zoom title="Reset zoom">${icons.reset}</button>
+            <button class="mini" data-chart-zoom="panLeft" data-jvm-zoom title="Pan left">${icons.arrowLeft}</button>
+            <button class="mini" data-chart-zoom="panRight" data-jvm-zoom title="Pan right">${icons.arrowRight}</button>
+          </div>
+          <div class="bdp-chart-grid jvm-chart-grid">
+            <article>
+              <div class="bdp-chart-title"><strong>GC pauses vs Recv-Q / skmem:r</strong><span>zoom + crosshair</span></div>
+              <svg class="chart bdp-chart" data-jvm-chart="recvq" role="img" aria-label="JVM GC correlation chart"></svg>
+              ${renderJvmLegend("timeline")}
+            </article>
+            <article>
+              <div class="bdp-chart-title"><strong>Pause duration vs Delta Recv-Q</strong><span>scatter + crosshair</span></div>
+              <svg class="chart bdp-chart" data-jvm-chart="scatter" role="img" aria-label="GC pause scatter plot"></svg>
+              ${renderJvmLegend("scatter")}
+            </article>
+          </div>
+        </div>
         <div class="jvm-gc-results">
-          <table class="mini-table"><thead><tr><th>GC#</th><th>Type</th><th>Cause</th><th>Duration</th><th>Score</th><th>Severity</th><th>Signals</th></tr></thead><tbody>
-            ${(corr?.results || []).filter(r => r.score > 0).slice(0, 30).map(r => `<tr>
+          <div class="jvm-table-head">
+            <strong>Correlated JVM stall events</strong>
+            <span>${formatNumber(jvmRows.total)} row(s)</span>
+          </div>
+          ${renderJvmPagination(jvmRows.total, jvmRows.totalPages, jvmRows.start)}
+          <div class="table-wrap jvm-table-wrap"><table class="mini-table jvm-gc-table"><thead><tr>
+            ${renderJvmSortHeader("time", "Timestamp")}
+            ${renderJvmSortHeader("nature", "Stall nature")}
+            ${renderJvmSortHeader("id", "GC#")}
+            ${renderJvmSortHeader("type", "Type")}
+            ${renderJvmSortHeader("cause", "Cause")}
+            ${renderJvmSortHeader("duration", "Duration")}
+            ${renderJvmSortHeader("score", "Score")}
+            ${renderJvmSortHeader("severity", "Severity")}
+            ${renderJvmSortHeader("signals", "Signals")}
+          </tr></thead><tbody>
+            ${jvmRows.rows.map(r => `<tr class="jvm-severity-${escapeHtml(jvmSeverityClass(r.severity))}">
+              <td class="mono-cell">${escapeHtml(preciseDateTimeLabel(r.timestampMs))}</td>
+              <td><span class="jvm-nature">${escapeHtml(jvmStallNature(r))}</span></td>
+              <td>${escapeHtml(String(r.eventId ?? r.pause.id))}</td>
+              <td>${escapeHtml(r.pause.type || "-")}</td>
+              <td>${escapeHtml(r.pause.cause || "-")}</td>
+              <td>${Number(r.durationMs || 0).toFixed(1)} ms</td>
+              <td>${Number(r.score || 0).toFixed(2)}</td>
+              <td><span class="jvm-severity-pill ${escapeHtml(jvmSeverityClass(r.severity))}">${escapeHtml(jvmSeverityLabel(r.severity))}</span></td>
+              <td>${escapeHtml(r.symptoms?.signals?.map(s => s.signal).join(", ") || "-")}</td>
+            </tr>`).join("")}
+          </tbody></table></div>
+          ${renderJvmPagination(jvmRows.total, jvmRows.totalPages, jvmRows.start)}
+          ${"" /* legacy JVM table replaced by sortable paginated table above */}
+          <template hidden>${(corr?.results || []).filter(r => r.score > 0).slice(0, 30).map(r => `<tr>
               <td>${r.pause.id}</td>
               <td>${escapeHtml(r.pause.type)}</td>
               <td>${escapeHtml(r.pause.cause || "—")}</td>
@@ -3313,22 +3366,152 @@ function renderJvmGcPanel() {
               <td><span class="risk ${r.severity}">${r.severity}</span></td>
               <td>${r.symptoms.signals.map(s => s.signal).join(", ") || "—"}</td>
             </tr>`).join("")}
-          </tbody></table>
-          ${corr?.results?.filter(r => r.score > 0).length === 0 ? "<p>No correlated pauses detected. GC pauses did not coincide with TCP symptom changes in the available snapshots.</p>" : ""}
-        </div>
-        <div class="bdp-chart-grid" style="margin-top:12px">
-          <article>
-            <div class="bdp-chart-title"><strong>GC pauses vs Recv-Q / skmem:r</strong><span>over time</span></div>
-            <svg class="chart bdp-chart" data-jvm-chart="recvq" role="img" aria-label="JVM GC correlation chart"></svg>
-          </article>
-          <article>
-            <div class="bdp-chart-title"><strong>Pause duration vs ΔRecv-Q</strong><span>scatter</span></div>
-            <svg class="chart bdp-chart" data-jvm-chart="scatter" role="img" aria-label="GC pause scatter plot"></svg>
-          </article>
+          </template>
+          ${jvmRows.total === 0 ? "<p>No correlated pauses detected. GC pauses did not coincide with TCP symptom changes in the available snapshots.</p>" : ""}
         </div>
       `}
     </div>
   </section>`;
+}
+
+function jvmLegendSeries(kind) {
+  if (kind === "scatter") {
+    return [
+      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24" },
+      { key: "scatter_high", label: "High score pauses", color: "#ef4444" },
+      { key: "scatter_low", label: "Low score pauses", color: "#7dd3fc" }
+    ];
+  }
+  return [
+    { key: "recvq", label: "Recv-Q", color: "#7dd3fc" },
+    { key: "gc_pause", label: "GC pause window", color: "#fbbf24" },
+    { key: "gc_high", label: "High score GC", color: "#ef4444" }
+  ];
+}
+
+function jvmSeriesHidden(key) {
+  return state.hiddenJvmSeries?.has(key);
+}
+
+function renderJvmLegend(kind) {
+  return `<div class="bdp-legend jvm-legend" data-jvm-legend="${escapeHtml(kind)}">
+    ${jvmLegendSeries(kind).map(item => `<span data-jvm-series-key="${escapeHtml(item.key)}" style="cursor:pointer;${jvmSeriesHidden(item.key) ? "opacity:.4;text-decoration:line-through" : ""}"><i style="--legend-color:${item.color}"></i>${escapeHtml(item.label)}</span>`).join("")}
+  </div>`;
+}
+
+function jvmSeverityClass(severity) {
+  return String(severity || "info").replace(/_/g, "-");
+}
+
+function jvmSeverityLabel(severity) {
+  return {
+    warning_high: "warning high",
+    warning: "warning",
+    critical: "critical",
+    info: "info",
+    none: "none"
+  }[severity] || String(severity || "info").replace(/_/g, " ");
+}
+
+function jvmSeverityRank(severity) {
+  return { critical: 5, warning_high: 4, warning: 3, info: 2, none: 1 }[severity] || 0;
+}
+
+function jvmStallNature(row) {
+  if (row.kind === "safepoint") return "Safepoint";
+  const pause = row.pause || {};
+  const labels = [];
+  if (pause.type) labels.push(`${pause.type} GC`);
+  if (pause.evacuationFailure) labels.push("evacuation failure");
+  if (pause.humongousAllocation) labels.push("humongous allocation");
+  if (pause.cause) labels.push(pause.cause);
+  return labels.length ? labels.join(" / ") : "Other JVM pause";
+}
+
+function preciseDateTimeLabel(epochMs) {
+  if (!epochMs) return "-";
+  return dateTimeFormatter(resolvedNumberLocale(), {
+    timeZone: resolvedTimeZone(),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    fractionalSecondDigits: 3
+  }, "precise-date-time").format(new Date(epochMs));
+}
+
+function jvmTableRows(results = [], safepoints = []) {
+  const history = visibleHistory().filter(sample => sample.epochMs);
+  const alignedSafepoints = alignTimestamps(safepoints.map(item => ({ ...item, durationMs: item.totalMs })), history, state.jvmGc.clockOffsetMs);
+  return [
+    ...results.filter(row => row.score > 0).map(row => ({ ...row, kind: "gc", eventId: row.pause.id, durationMs: row.pause.durationMs, timestampMs: row.epochMs })),
+    ...alignedSafepoints.map((pause, index) => ({
+      kind: "safepoint",
+      eventId: `SP-${index + 1}`,
+      pause: { id: `SP-${index + 1}`, type: "Safepoint", cause: "JVM safepoint", durationMs: pause.durationMs || pause.totalMs || 0 },
+      epochMs: pause.alignedEpochMs || pause.epochMs,
+      timestampMs: pause.alignedEpochMs || pause.epochMs,
+      durationMs: pause.durationMs || pause.totalMs || 0,
+      score: 0,
+      severity: "info",
+      symptoms: { signals: [{ signal: "safepoint" }] },
+      classification: ["safepoint"]
+    }))
+  ];
+}
+
+function sortedJvmRows(results = [], safepoints = []) {
+  const table = state.jvmTable || (state.jvmTable = { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" });
+  const direction = table.sortDir === "asc" ? 1 : -1;
+  const valueFor = row => ({
+    time: row.timestampMs || 0,
+    nature: jvmStallNature(row),
+    id: String(row.eventId ?? row.pause?.id ?? ""),
+    type: row.pause?.type || "",
+    cause: row.pause?.cause || "",
+    duration: row.durationMs || 0,
+    score: row.score || 0,
+    severity: jvmSeverityRank(row.severity),
+    signals: row.symptoms?.signals?.map(signal => signal.signal).join(", ") || ""
+  }[table.sortKey] ?? "");
+  return jvmTableRows(results, safepoints).sort((a, b) => {
+    const av = valueFor(a);
+    const bv = valueFor(b);
+    const order = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv), undefined, { numeric: true });
+    return order * direction || (b.timestampMs || 0) - (a.timestampMs || 0);
+  });
+}
+
+function jvmPagedRows(results = [], safepoints = []) {
+  const rows = sortedJvmRows(results, safepoints);
+  const table = state.jvmTable || (state.jvmTable = { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" });
+  const totalPages = Math.max(1, Math.ceil(rows.length / table.pageSize));
+  table.page = Math.min(Math.max(1, table.page), totalPages);
+  const start = (table.page - 1) * table.pageSize;
+  return { rows: rows.slice(start, start + table.pageSize), total: rows.length, totalPages, start };
+}
+
+function renderJvmSortHeader(key, label) {
+  const active = state.jvmTable?.sortKey === key;
+  const icon = !active ? icons.sortNeutral : state.jvmTable.sortDir === "asc" ? icons.sortAsc : icons.sortDesc;
+  return `<th><button class="table-sort jvm-sort ${active ? "active" : ""}" data-jvm-sort="${escapeHtml(key)}">${escapeHtml(label)} ${icon}</button></th>`;
+}
+
+function renderJvmPagination(total, totalPages, start) {
+  if (!total) return "";
+  const table = state.jvmTable;
+  const end = Math.min(total, start + table.pageSize);
+  return `<div class="pager jvm-pager">
+    <span class="pager-filter-count">${formatNumber(total)} JVM event row(s)</span>
+    <select class="pager-size" data-jvm-page-size title="Rows per page" aria-label="JVM rows per page">${[10, 20, 50, 100].map(value => `<option value="${value}" ${table.pageSize === value ? "selected" : ""}>${value}/p</option>`).join("")}</select>
+    <button class="icon" data-jvm-page="first" title="First page" aria-label="First JVM page">${icons.first}</button>
+    <button class="icon" data-jvm-page="prev" title="Previous page" aria-label="Previous JVM page">${icons.previous}</button>
+    <span>${formatNumber(start + 1)}-${formatNumber(end)} / ${formatNumber(total)} - page ${table.page}/${totalPages}</span>
+    <button class="icon" data-jvm-page="next" title="Next page" aria-label="Next JVM page">${icons.next}</button>
+    <button class="icon" data-jvm-page="last" data-total-pages="${totalPages}" title="Last page" aria-label="Last JVM page">${icons.last}</button>
+  </div>`;
 }
 
 function runJvmCorrelation() {
@@ -3351,11 +3534,182 @@ function drawJvmCharts() {
 
   // Timeline chart: Recv-Q + GC bars
   const svg1 = document.querySelector("[data-jvm-chart='recvq']");
-  if (svg1) drawJvmTimelineChart(svg1, gc.correlation.results, history);
+  if (svg1) drawJvmTimelineChartInteractive(svg1, gc.correlation.results, history);
 
   // Scatter plot
   const svg2 = document.querySelector("[data-jvm-chart='scatter']");
-  if (svg2) drawJvmScatterChart(svg2, gc.correlation.results);
+  if (svg2) drawJvmScatterChartInteractive(svg2, gc.correlation.results);
+}
+
+function jvmPauseColor(score) {
+  return score > 0.5 ? "#ef4444" : score > 0.2 ? "#fbbf24" : "#7dd3fc";
+}
+
+function drawJvmTimelineChartInteractive(svg, results, history) {
+  const w = svg.clientWidth || 700;
+  const h = svg.clientHeight || 300;
+  const pad = { l: 78, r: 22, t: 28, b: 46 };
+  const plotW = w - pad.l - pad.r;
+  const plotH = h - pad.t - pad.b;
+  const t0 = history[0].epochMs;
+  const t1 = history[history.length - 1].epochMs;
+  const span = Math.max(1, t1 - t0);
+  const x = t => pad.l + ((t - t0) / span) * plotW;
+  const maxRecvQ = Math.max(1, ...history.map(s => s.recvQ || 0));
+  const y = value => pad.t + plotH - (value / maxRecvQ) * plotH;
+  const line = history.map((sample, index) => `${index ? "L" : "M"}${x(sample.epochMs).toFixed(1)},${y(sample.recvQ || 0).toFixed(1)}`).join(" ");
+  const bars = results.filter(result => {
+    if (result.score > 0.5 && jvmSeriesHidden("gc_high")) return false;
+    return !jvmSeriesHidden("gc_pause");
+  }).map(result => {
+    const bx = x(result.epochMs);
+    const bw = Math.max(1, (result.pause.durationMs / span) * plotW);
+    return `<rect x="${bx.toFixed(1)}" y="${pad.t}" width="${bw.toFixed(1)}" height="${plotH}" fill="${jvmPauseColor(result.score)}" opacity=".30"><title>GC(${result.pause.id}) ${escapeHtml(result.pause.type)} ${result.pause.durationMs.toFixed(1)}ms score=${result.score.toFixed(2)}</title></rect>`;
+  }).join("");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.innerHTML = `
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
+    ${bars}
+    ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="#7dd3fc" stroke-width="2.4"/>`}
+    <text x="${pad.l}" y="17" fill="#edf4ff" font-size="12" font-weight="700">Recv-Q + GC pauses</text>
+    <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Time (${escapeHtml(resolvedTimeZone())})</text>
+    <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
+    <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
+    <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
+    <g class="jvm-crosshair" visibility="hidden" pointer-events="none"></g>
+  `;
+  attachJvmTimelineInteractions(svg, results, history, x, pad, w, h, t0, span);
+}
+
+function drawJvmScatterChartInteractive(svg, results) {
+  const w = svg.clientWidth || 700;
+  const h = svg.clientHeight || 300;
+  const pad = { l: 78, r: 22, t: 28, b: 46 };
+  const plotW = w - pad.l - pad.r;
+  const plotH = h - pad.t - pad.b;
+  const points = results.filter(result => result.symptoms.detected).map(result => {
+    const delta = result.symptoms.signals.find(signal => signal.signal === "recvQ_rise")?.delta || 0;
+    return {
+      id: result.pause.id,
+      type: result.pause.type,
+      durationMs: result.pause.durationMs,
+      delta,
+      score: result.score,
+      severity: result.severity,
+      signals: result.symptoms.signals.map(signal => signal.signal).join(", ")
+    };
+  }).filter(point => {
+    if (point.score > 0.5) return !jvmSeriesHidden("scatter_high");
+    if (point.score > 0.2) return !jvmSeriesHidden("scatter_warning");
+    return !jvmSeriesHidden("scatter_low");
+  });
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  if (!points.length) {
+    svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" fill="#050910"/><text x="24" y="42" fill="#c4d0de" font-size="12">No visible correlated data points.</text>`;
+    return;
+  }
+  const maxDuration = Math.max(1, ...points.map(point => point.durationMs));
+  const maxDelta = Math.max(1, ...points.map(point => point.delta));
+  const x = value => pad.l + (value / maxDuration) * plotW;
+  const y = value => pad.t + plotH - (value / maxDelta) * plotH;
+  const dots = points.map(point => `<circle cx="${x(point.durationMs).toFixed(1)}" cy="${y(point.delta).toFixed(1)}" r="4" fill="${jvmPauseColor(point.score)}" opacity=".82"><title>${point.durationMs.toFixed(1)}ms -> Delta Recv-Q ${point.delta}</title></circle>`).join("");
+  svg.innerHTML = `
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
+    ${dots}
+    <text x="${pad.l}" y="17" fill="#edf4ff" font-size="12" font-weight="700">Pause duration vs Delta Recv-Q</text>
+    <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Pause duration (ms)</text>
+    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Delta Recv-Q (bytes)</text>
+    <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
+    <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
+    <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
+    <g class="jvm-crosshair" visibility="hidden" pointer-events="none"></g>
+  `;
+  attachJvmScatterInteractions(svg, points, x, y, pad, w, h);
+}
+
+function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0, span) {
+  const zone = svg.querySelector(".jvm-hover-zone");
+  const layer = svg.querySelector(".jvm-crosshair");
+  if (!zone || !layer) return;
+  const plotW = w - pad.l - pad.r;
+  zone.addEventListener("mousemove", event => {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = w / rect.width;
+    const locX = (event.clientX - rect.left) * scaleX;
+    const pct = Math.max(0, Math.min(1, (locX - pad.l) / plotW));
+    const targetEpoch = t0 + pct * span;
+    const sample = history.reduce((best, item) => Math.abs(item.epochMs - targetEpoch) < Math.abs(best.epochMs - targetEpoch) ? item : best, history[0]);
+    const pause = results.reduce((best, item) => !best || Math.abs(item.epochMs - targetEpoch) < Math.abs(best.epochMs - targetEpoch) ? item : best, null);
+    const cx = xFn(sample.epochMs);
+    const tooltipW = 230;
+    const tooltipX = cx + tooltipW + 14 > w - pad.r ? cx - tooltipW - 14 : cx + 14;
+    layer.setAttribute("visibility", "visible");
+    layer.innerHTML = `
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
+      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(timeLabel(sample.t || 0, sample.epochMs))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="#7dd3fc" font-size="10.5">Recv-Q: ${escapeHtml(formatMetricValue("recvQ", sample.recvQ || 0))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${pause ? jvmPauseColor(pause.score) : "#94a3b8"}" font-size="10.5">Nearest GC: ${pause ? escapeHtml(`#${pause.pause.id} ${pause.pause.durationMs.toFixed(1)}ms score ${pause.score.toFixed(2)}`) : "n/a"}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">Signals: ${escapeHtml(pause?.symptoms?.signals?.map(signal => signal.signal).join(", ") || "none")}</text>
+    `;
+  });
+  zone.addEventListener("mousedown", event => {
+    svg._jvmDragStart = Math.max(0, Math.min(1, (((event.clientX - svg.getBoundingClientRect().left) * (w / svg.getBoundingClientRect().width)) - pad.l) / plotW));
+  });
+  zone.addEventListener("mouseup", event => {
+    if (svg._jvmDragStart == null) return;
+    const rect = svg.getBoundingClientRect();
+    const end = Math.max(0, Math.min(1, (((event.clientX - rect.left) * (w / rect.width)) - pad.l) / plotW));
+    const start = svg._jvmDragStart;
+    svg._jvmDragStart = null;
+    if (Math.abs(end - start) < 0.02) return;
+    const current = state.chartZoom;
+    const range = current.end - current.start;
+    setZoom(current.start + Math.min(start, end) * range, current.start + Math.max(start, end) * range);
+    runJvmCorrelation();
+    drawJvmCharts();
+  });
+  zone.addEventListener("mouseleave", () => {
+    svg._jvmDragStart = null;
+    layer.setAttribute("visibility", "hidden");
+  });
+}
+
+function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
+  const zone = svg.querySelector(".jvm-hover-zone");
+  const layer = svg.querySelector(".jvm-crosshair");
+  if (!zone || !layer) return;
+  zone.addEventListener("mousemove", event => {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = w / rect.width;
+    const scaleY = h / rect.height;
+    const px = (event.clientX - rect.left) * scaleX;
+    const py = (event.clientY - rect.top) * scaleY;
+    const point = points.reduce((best, item) => {
+      const dx = xFn(item.durationMs) - px;
+      const dy = yFn(item.delta) - py;
+      const distance = dx * dx + dy * dy;
+      return !best || distance < best.distance ? { item, distance } : best;
+    }, null)?.item;
+    if (!point) return;
+    const cx = xFn(point.durationMs);
+    const cy = yFn(point.delta);
+    const tooltipW = 220;
+    const tooltipX = cx + tooltipW + 14 > w - pad.r ? cx - tooltipW - 14 : cx + 14;
+    const tooltipY = Math.max(pad.t + 8, Math.min(h - pad.b - 82, cy - 36));
+    layer.setAttribute("visibility", "visible");
+    layer.innerHTML = `
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffff88" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="${pad.l}" x2="${w - pad.r}" y1="${cy}" y2="${cy}" stroke="#ffffff55" stroke-width="1" stroke-dasharray="3 2"/>
+      <circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="${jvmPauseColor(point.score)}" stroke-width="2"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="#7dd3fc" font-size="10.5">Delta Recv-Q: ${escapeHtml(formatMetricValue("recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
+    `;
+  });
+  zone.addEventListener("mouseleave", () => layer.setAttribute("visibility", "hidden"));
 }
 
 function drawJvmTimelineChart(svg, results, history) {
@@ -5501,6 +5855,8 @@ function resetAllState() {
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
   state.hiddenChartSeries = new Set();
+  state.hiddenJvmSeries = new Set();
+  state.jvmTable = { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" };
   state.correlation = { x: "rtt", y: "sendQ" };
   state.analysisDirty = true;
   state.bandwidthIndex = {};
@@ -7374,6 +7730,9 @@ function bindEvents() {
       if (event.currentTarget.hasAttribute("data-bdp-zoom")) {
         state._bdpCache = null;
         drawBdpWindowCharts();
+      } else if (event.currentTarget.hasAttribute("data-jvm-zoom")) {
+        runJvmCorrelation();
+        drawJvmCharts();
       } else if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
     });
   });
@@ -8578,6 +8937,7 @@ function bindEvents() {
   });
   document.querySelector("#onlyAnomalies")?.addEventListener("change", e => { state.table.filters.onlyAnomalies = e.target.checked; state.table.page = 1; render(); });
   document.querySelectorAll("[data-page-size]").forEach(select => select.addEventListener("change", e => { state.table.pageSize = Number(e.target.value); state.table.page = 1; saveTableState(); render(); }));
+  document.querySelectorAll("[data-jvm-page-size]").forEach(select => select.addEventListener("change", e => { state.jvmTable.pageSize = Number(e.target.value); state.jvmTable.page = 1; renderKeepingWorkspacePosition(); }));
   for (const [id, key] of [["anomalySeverity", "severity"], ["anomalyMetric", "metric"], ["anomalySort", "sort"], ["anomalyText", "text"]]) {
     document.querySelector(`#${id}`)?.addEventListener("change", e => { state.anomalyFilters[key] = e.target.value; render(); });
   }
@@ -8608,6 +8968,18 @@ function bindEvents() {
       item.setAttribute("aria-pressed", hidden ? "false" : "true");
     });
     redrawChartCardMetric(metric, `series:${key}`);
+  }));
+  document.querySelectorAll("[data-jvm-series-key]").forEach(item => item.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = event.currentTarget.dataset.jvmSeriesKey;
+    if (!state.hiddenJvmSeries) state.hiddenJvmSeries = new Set();
+    state.hiddenJvmSeries.has(key) ? state.hiddenJvmSeries.delete(key) : state.hiddenJvmSeries.add(key);
+    document.querySelectorAll(`[data-jvm-series-key="${key}"]`).forEach(span => {
+      span.style.opacity = state.hiddenJvmSeries.has(key) ? ".4" : "";
+      span.style.textDecoration = state.hiddenJvmSeries.has(key) ? "line-through" : "";
+    });
+    drawJvmCharts();
   }));
   document.querySelectorAll("[data-chart-stats]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
@@ -8654,6 +9026,29 @@ document.querySelector("#app").addEventListener("click", event => {
     if (action === "next") state.table.page = Math.min(total, state.table.page + 1);
     if (action === "last") state.table.page = total;
     render();
+    return;
+  }
+
+  const jvmSort = event.target.closest("[data-jvm-sort]");
+  if (jvmSort) {
+    event.stopPropagation();
+    const key = jvmSort.dataset.jvmSort;
+    state.jvmTable.sortDir = state.jvmTable.sortKey === key && state.jvmTable.sortDir === "desc" ? "asc" : "desc";
+    state.jvmTable.sortKey = key;
+    state.jvmTable.page = 1;
+    renderKeepingWorkspacePosition();
+    return;
+  }
+
+  const jvmPage = event.target.closest("[data-jvm-page]");
+  if (jvmPage) {
+    const action = jvmPage.dataset.jvmPage;
+    const total = Number(jvmPage.dataset.totalPages || 1);
+    if (action === "first") state.jvmTable.page = 1;
+    if (action === "prev") state.jvmTable.page = Math.max(1, state.jvmTable.page - 1);
+    if (action === "next") state.jvmTable.page = Math.min(total, state.jvmTable.page + 1);
+    if (action === "last") state.jvmTable.page = total;
+    renderKeepingWorkspacePosition();
     return;
   }
 

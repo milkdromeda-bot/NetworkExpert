@@ -136,6 +136,12 @@ test("deep analysis control is rendered as an explicit on off switch", () => {
   assert.match(css, /@media \(max-width:\s*1180px\)[\s\S]*\.analysis-layout \.toolbar\s*\{[^}]*flex-wrap:\s*wrap;/s);
 });
 
+test("modal headers stay visible while long preference dialogs scroll", () => {
+  assert.match(css, /\.modal header\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;[^}]*z-index:\s*12;/s);
+  assert.match(css, /\.modal header\s*\{[^}]*background:\s*#141118;[^}]*box-shadow:\s*0 1px 0 #3b3842/s);
+  assert.match(css, /\.modal header \.icon\s*\{[^}]*flex:\s*0 0 auto;/s);
+});
+
 test("analysis conversation stack keeps vertical gaps compact", () => {
   assert.match(css, /\.analysis-layout \.panel-body\s*\{[^}]*padding-block:\s*10px;/s);
   assert.match(css, /\.analysis-layout \.grid-controls-shell\s*\{[^}]*padding-bottom:\s*8px;/s);
@@ -225,6 +231,51 @@ test("chart statistics modal keeps the percentile curve to the right of a compac
   assert.match(css, /\.stats-summary-card\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*display:\s*flex;/s);
   assert.match(css, /\.stats-window\s*\{[^}]*flex:\s*0 0 auto;[^}]*border:\s*1px solid rgba\(38,\s*50,\s*65,\s*\.9\);/s);
   assert.doesNotMatch(css, /\.stats-dist-card\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
+});
+
+test("JVM stall charts are promoted above the table with metric-like controls", () => {
+  assert.match(main, /hiddenJvmSeries:\s*new Set\(\)/);
+  assert.match(main, /<div class="jvm-chart-section">[\s\S]*data-chart-zoom="zoomIn" data-jvm-zoom[\s\S]*data-jvm-chart="recvq"[\s\S]*renderJvmLegend\("timeline"\)[\s\S]*data-jvm-chart="scatter"[\s\S]*renderJvmLegend\("scatter"\)[\s\S]*<div class="jvm-gc-results">/);
+  assert.match(main, /function jvmLegendSeries\(kind\)/);
+  assert.match(main, /function renderJvmLegend\(kind\)/);
+  assert.match(main, /data-jvm-series-key="\$\{escapeHtml\(item\.key\)\}"/);
+  assert.match(main, /function drawJvmTimelineChartInteractive\(svg, results, history\)/);
+  assert.match(main, /function drawJvmScatterChartInteractive\(svg, results\)/);
+  assert.match(main, /function attachJvmTimelineInteractions\(svg, results, history/);
+  assert.match(main, /function attachJvmScatterInteractions\(svg, points/);
+  assert.match(main, /event\.currentTarget\.hasAttribute\("data-jvm-zoom"\)[\s\S]*runJvmCorrelation\(\);[\s\S]*drawJvmCharts\(\);/);
+  assert.match(main, /document\.querySelectorAll\("\[data-jvm-series-key\]"\)\.forEach/);
+  assert.match(css, /\.jvm-chart-section\s*\{[^}]*margin:\s*10px 0 12px;/s);
+  assert.match(css, /\.jvm-chart-toolbar\s*\{[^}]*display:\s*flex;/s);
+  assert.match(css, /\.jvm-legend\s*\{[^}]*padding:\s*0 12px 10px;/s);
+  assert.match(css, /\.jvm-hover-zone\s*\{[^}]*cursor:\s*crosshair;/s);
+});
+
+test("JVM stall table has precise timestamps nature sorting severity and pagination", () => {
+  assert.match(main, /jvmTable:\s*\{ page:\s*1,\s*pageSize:\s*20,\s*sortKey:\s*"time",\s*sortDir:\s*"desc" \}/);
+  assert.match(main, /function jvmStallNature\(row\)/);
+  assert.match(main, /if \(row\.kind === "safepoint"\) return "Safepoint";/);
+  assert.match(main, /function preciseDateTimeLabel\(epochMs\)/);
+  assert.match(main, /fractionalSecondDigits:\s*3/);
+  assert.match(main, /function renderJvmSortHeader\(key, label\)/);
+  assert.match(main, /data-jvm-sort="\$\{escapeHtml\(key\)\}"/);
+  assert.match(main, /function renderJvmPagination\(total, totalPages, start\)/);
+  assert.match(main, /data-jvm-page-size/);
+  assert.match(main, /data-jvm-page="first"/);
+  assert.match(main, /data-jvm-page="last"/);
+  assert.match(main, /Correlated JVM stall events/);
+  assert.match(main, /renderJvmSortHeader\("time", "Timestamp"\)/);
+  assert.match(main, /renderJvmSortHeader\("nature", "Stall nature"\)/);
+  assert.match(main, /jvm-severity-pill/);
+  assert.match(main, /event\.target\.closest\("\[data-jvm-sort\]"\)/);
+  assert.match(main, /event\.target\.closest\("\[data-jvm-page\]"\)/);
+  assert.match(main, /\[data-jvm-page-size\]/);
+  assert.match(css, /\.jvm-table-head\s*\{[^}]*justify-content:\s*space-between;/s);
+  assert.match(css, /\.jvm-gc-table th,\s*\.jvm-gc-table td\s*\{[^}]*white-space:\s*nowrap;/s);
+  assert.match(css, /\.jvm-severity-pill\.warning-high\s*\{/);
+  assert.match(css, /\.jvm-severity-pill\.warning\s*\{/);
+  assert.match(css, /\.jvm-nature\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+  assert.match(css, /\.risk\.warning_high\s*\{[^}]*color:\s*var\(--orange\);/s);
 });
 
 test("dashboard preset selection keeps the picker responsive", () => {
