@@ -3399,7 +3399,8 @@ function renderJvmGcPanel() {
         <button class="mini" data-chart-zoom="panRight" data-jvm-zoom title="Pan right">${icons.arrowRight}</button>
       </div><span class="jvm-sep"></span>` : ""}
       <div class="bdp-controls" style="margin-left:auto">
-        <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
+        <label><span>Mode</span><select id="jvmCorrelationMode"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (local GC)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (remote GC)</option></select></label>
+        <label style="margin-left:10px"><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
         <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
         <label style="margin-left:10px"><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
       </div>
@@ -3407,7 +3408,8 @@ function renderJvmGcPanel() {
     <div class="panel-body">
       ${!hasPauses ? `<div class="jvm-gc-import">
         <p><strong>Import GC / safepoint log</strong> — Java 17+ Unified Logging format. Large files (50 MB+) are streamed and parsed without freezing.</p>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <div style="display:flex;gap:12px;margin-top:8px;align-items:center;flex-wrap:wrap">
+          <label class="bdp-controls" style="margin:0"><span>SS capture is from</span><select id="jvmCorrelationModeImport"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (GC is local)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (GC is remote)</option></select></label>
           <button class="primary" data-action="pickJvmGcFile">Load & parse file</button>
           <input type="file" id="jvmGcFileInput" accept=".log,.txt" style="display:none"/>
         </div>
@@ -3427,12 +3429,12 @@ function renderJvmGcPanel() {
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article>
-              <div class="bdp-chart-title"><strong>Recv-Q + GC pauses</strong><span>timeline</span></div>
+              <div class="bdp-chart-title"><strong>${gc.mode === "sender" ? "Send-Q + RTT" : "Recv-Q"} + GC pauses</strong><span>timeline</span></div>
               <svg class="chart bdp-chart" data-jvm-chart="recvq" role="img" aria-label="JVM GC correlation chart"></svg>
               ${renderJvmLegend("timeline")}
             </article>
             <article>
-              <div class="bdp-chart-title"><strong>Pause duration vs Delta Recv-Q</strong><span>scatter + crosshair</span></div>
+              <div class="bdp-chart-title"><strong>Pause duration vs Δ${gc.mode === "sender" ? "Send-Q" : "Recv-Q"}</strong><span>scatter</span></div>
               <svg class="chart bdp-chart" data-jvm-chart="scatter" role="img" aria-label="GC pause scatter plot"></svg>
               ${renderJvmLegend("scatter")}
             </article>
@@ -3495,7 +3497,7 @@ function jvmLegendSeries(kind) {
     ];
   }
   return [
-    { key: "recvq", label: "Recv-Q", color: "#7dd3fc", tip: "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough — a key slow consumer signal." },
+    { key: "recvq", label: state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q", color: state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc", tip: state.jvmGc.mode === "sender" ? "TCP send queue depth in bytes. Rises when the remote receiver cannot drain data — indicates the remote GC stall is blocking ACKs." : "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough — a key slow consumer signal." },
     { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1–20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
     { key: "gc_mixed", label: "Mixed GC", color: "#fbbf24", tip: "G1 mixed collections evacuating both young and old regions. Typically longer than young GC and may indicate heap pressure building up." },
     { key: "gc_full", label: "Full / Remark", color: "#ef4444", tip: "Full GC, Remark, or Cleanup pauses. These are the longest and most disruptive. Full GC indicates heap exhaustion or fragmentation." },
@@ -3641,7 +3643,8 @@ function runJvmCorrelation() {
     pauses: gc.pauses,
     safepoints: gc.safepoints,
     history,
-    clockOffsetMs: gc.clockOffsetMs
+    clockOffsetMs: gc.clockOffsetMs,
+    mode: gc.mode || "receiver"
   });
 }
 
@@ -3650,9 +3653,10 @@ function drawJvmCharts() {
   if (!gc.correlation?.results?.length) return;
   const history = visibleHistory().filter(s => s.epochMs);
   if (!history.length) return;
-  const sevOrder = ["info", "warning", "warning_high", "critical"];
+  const sevOrder = ["none", "info", "warning", "warning_high", "critical"];
   const minSev = gc.severityFilter && gc.severityFilter !== "all" ? sevOrder.indexOf(gc.severityFilter) : 0;
-  const filtered = gc.correlation.results.filter(r => sevOrder.indexOf(r.severity) >= minSev);
+  const t0 = history[0].epochMs, t1 = history[history.length - 1].epochMs;
+  const filtered = gc.correlation.results.filter(r => r.epochMs >= t0 && r.epochMs <= t1 && sevOrder.indexOf(r.severity) >= minSev);
   const selected = gc.selectedEpoch ? filtered.filter(r => r.epochMs === gc.selectedEpoch) : filtered;
 
   // Timeline chart: Recv-Q + GC bars
@@ -3678,9 +3682,19 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   const t1 = history[history.length - 1].epochMs;
   const span = Math.max(1, t1 - t0);
   const x = t => pad.l + ((t - t0) / span) * plotW;
-  const maxRecvQ = Math.max(1, ...history.map(s => s.recvQ || 0));
-  const y = value => pad.t + plotH - (value / maxRecvQ) * plotH;
-  const line = history.map((sample, index) => `${index ? "L" : "M"}${x(sample.epochMs).toFixed(1)},${y(sample.recvQ || 0).toFixed(1)}`).join(" ");
+  const senderMode = state.jvmGc.mode === "sender";
+  const primaryMetric = senderMode ? "sendQ" : "recvQ";
+  const primaryLabel = senderMode ? "Send-Q (bytes)" : "Recv-Q (bytes)";
+  const primaryColor = senderMode ? "#38bdf8" : "#7dd3fc";
+  const maxPrimary = Math.max(1, ...history.map(s => s[primaryMetric] || 0));
+  const y = value => pad.t + plotH - (value / maxPrimary) * plotH;
+  const line = history.map((sample, index) => `${index ? "L" : "M"}${x(sample.epochMs).toFixed(1)},${y(sample[primaryMetric] || 0).toFixed(1)}`).join(" ");
+  // Secondary line: RTT in sender mode
+  const secondaryLine = senderMode ? (() => {
+    const maxRtt = Math.max(1, ...history.map(s => s.rtt || 0));
+    const y2 = v => pad.t + plotH - (v / maxRtt) * plotH;
+    return history.map((s, i) => `${i ? "L" : "M"}${x(s.epochMs).toFixed(1)},${y2(s.rtt || 0).toFixed(1)}`).join(" ");
+  })() : null;
   const pauseTypeColor = type => {
     if (type === "Young") return "#4ade80";
     if (type === "Mixed") return "#fbbf24";
@@ -3727,9 +3741,58 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     const ay = pad.t - 4 + a.level * levelHeight;
     return `<text x="${a.ax.toFixed(1)}" y="${ay}" text-anchor="middle" fill="${a.color}" font-size="9" font-weight="700">${escapeHtml(a.label)}</text>`;
   }).join("");
+  // Detect Send-Q plateaus > 0 lasting more than 3 seconds
+  let plateauAnnotations = "";
+  if (senderMode) {
+    const plateaus = [];
+    let start = null;
+    for (let i = 0; i < history.length; i++) {
+      const s = history[i];
+      if ((s.sendQ || 0) > 0) {
+        if (!start) start = s;
+      } else {
+        if (start && s.epochMs - start.epochMs >= 3000) {
+          plateaus.push({ startMs: start.epochMs, endMs: history[i - 1].epochMs, value: start.sendQ });
+        }
+        start = null;
+      }
+    }
+    if (start && history[history.length - 1].epochMs - start.epochMs >= 3000) {
+      plateaus.push({ startMs: start.epochMs, endMs: history[history.length - 1].epochMs, value: start.sendQ });
+    }
+    plateauAnnotations = plateaus.map(p => {
+      const px1 = x(p.startMs), px2 = x(p.endMs);
+      const midX = (px1 + px2) / 2;
+      return `<rect x="${px1.toFixed(1)}" y="${pad.t}" width="${(px2 - px1).toFixed(1)}" height="${plotH}" fill="#ff5c77" opacity=".08"/>` +
+        `<line x1="${px1.toFixed(1)}" x2="${px2.toFixed(1)}" y1="${pad.t + 14}" y2="${pad.t + 14}" stroke="#ff5c77" stroke-width="2" stroke-dasharray="6 3"/>` +
+        `<text x="${midX.toFixed(1)}" y="${pad.t + 12}" text-anchor="middle" fill="#ff5c77" font-size="9" font-weight="700">Send-Q plateau ${((p.endMs - p.startMs) / 1000).toFixed(1)}s</text>`;
+    }).join("");
+  }
+  // Detect TCP state changes from raw timestamped snapshots
+  const stateChanges = [];
+  const rawSnaps = parsedTimestampSnapshots();
+  const selected = socketsById().get(state.selectedId) || state.sockets[0];
+  if (selected && rawSnaps.length) {
+    const localPeer = `${selected.local}|${selected.peer}`;
+    let prevState = "";
+    for (const snap of rawSnaps) {
+      if (!snap.epochMs || snap.epochMs < t0 || snap.epochMs > t1) continue;
+      const match = (snap.sockets || []).find(s => `${s.local}|${s.peer}` === localPeer);
+      if (match && match.state && match.state !== prevState) {
+        if (prevState) stateChanges.push({ epochMs: snap.epochMs, from: prevState, to: match.state });
+        prevState = match.state;
+      }
+    }
+  }
+  const stateChangesSvg = stateChanges.map(sc => {
+    const sx = x(sc.epochMs);
+    return `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${pad.t}" y2="${pad.t + plotH}" stroke="#e879f9" stroke-width="1.5" stroke-dasharray="4 2"/>` +
+      `<rect x="${sx.toFixed(1) - 1}" y="${pad.t + plotH - 16}" width="${(sc.from + " → " + sc.to).length * 5 + 10}" height="14" rx="3" fill="rgba(10,16,24,.85)"/>` +
+      `<text x="${(Number(sx.toFixed(1)) + 4)}" y="${pad.t + plotH - 6}" fill="#e879f9" font-size="8" font-weight="600">${escapeHtml(sc.from)} → ${escapeHtml(sc.to)}</text>`;
+  }).join("");
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * maxRecvQ);
-  const yTicksSvg = yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#1a2636"/><text x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="10">${formatMetricValue("recvQ", v)}</text>`).join("");
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * maxPrimary);
+  const yTicksSvg = yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#1a2636"/><text x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="10">${formatMetricValue(primaryMetric, v)}</text>`).join("");
   const xTimeTicks = [0, 0.25, 0.5, 0.75, 1].map(f => {
     const epoch = t0 + f * span;
     const sample = history.reduce((best, s) => Math.abs(s.epochMs - epoch) < Math.abs(best.epochMs - epoch) ? s : best, history[0]);
@@ -3742,9 +3805,12 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     ${yTicksSvg}
     ${bars}
     ${annotationsSvg}
-    ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="#7dd3fc" stroke-width="2.4"/>`}
+    ${plateauAnnotations}
+    ${stateChangesSvg}
+    ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="${primaryColor}" stroke-width="2.4"/>`}
+    ${secondaryLine && !jvmSeriesHidden("recvq") ? `<path d="${secondaryLine}" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4 3" opacity=".7"/>` : ""}
     <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Time (${escapeHtml(resolvedTimeZone())})</text>
-    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Recv-Q (bytes)</text>
+    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">${escapeHtml(primaryLabel)}</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
@@ -3765,8 +3831,8 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     layer.innerHTML = `
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
-      <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(timeLabel(sample.t || 0, sample.epochMs))}</text>
-      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="#7dd3fc" font-size="10.5">Recv-Q: ${escapeHtml(formatMetricValue("recvQ", sample.recvQ || 0))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${primaryColor}" font-size="10.5">${senderMode ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(primaryMetric, sample[primaryMetric] || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${jvmPauseColor(r.score)}" font-size="10.5">GC #${r.pause.id} ${r.pause.durationMs.toFixed(1)}ms score ${r.score.toFixed(2)}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">${escapeHtml(r.symptoms?.signals?.map(s => s.signal).join(", ") || "none")}</text>
     `;
@@ -3781,7 +3847,7 @@ function drawJvmScatterChartInteractive(svg, results) {
   const plotW = w - pad.l - pad.r;
   const plotH = h - pad.t - pad.b;
   const points = results.filter(result => result.symptoms.detected).map(result => {
-    const delta = result.symptoms.signals.find(signal => signal.signal === "recvQ_rise")?.delta || 0;
+    const delta = result.symptoms.signals.find(signal => signal.signal === (state.jvmGc.mode === "sender" ? "sendQ_rise" : "recvQ_rise"))?.delta || 0;
     return {
       id: result.pause.id,
       type: result.pause.type,
@@ -3854,8 +3920,8 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
       ${dragSel}
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
-      <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(timeLabel(sample.t || 0, sample.epochMs))}</text>
-      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="#7dd3fc" font-size="10.5">Recv-Q: ${escapeHtml(formatMetricValue("recvQ", sample.recvQ || 0))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", sample[state.jvmGc.mode === "sender" ? "sendQ" : "recvQ"] || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${pause ? jvmPauseColor(pause.score) : "#94a3b8"}" font-size="10.5">Nearest GC: ${pause ? escapeHtml(`#${pause.pause.id} ${pause.pause.durationMs.toFixed(1)}ms score ${pause.score.toFixed(2)}`) : "n/a"}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">Signals: ${escapeHtml(pause?.symptoms?.signals?.map(signal => signal.signal).join(", ") || "none")}</text>
     `;
@@ -3920,7 +3986,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="#7dd3fc" font-size="10.5">Delta Recv-Q: ${escapeHtml(formatMetricValue("recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
     // Sync to timeline chart
@@ -4000,7 +4066,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="#7dd3fc" font-size="10.5">Delta Recv-Q: ${escapeHtml(formatMetricValue("recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
   };
@@ -9251,6 +9317,15 @@ function bindEvents() {
     });
   });
   document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
+  document.querySelector("#jvmCorrelationModeImport")?.addEventListener("change", e => {
+    state.jvmGc.mode = e.target.value;
+  });
+  document.querySelector("#jvmCorrelationMode")?.addEventListener("change", e => {
+    state.jvmGc.mode = e.target.value;
+    runJvmCorrelation();
+    render();
+    requestAnimationFrame(drawJvmCharts);
+  });
   document.querySelector("#jvmSyncCrosshair")?.addEventListener("change", e => {
     state.jvmGc.syncCrosshair = e.target.checked;
   });
