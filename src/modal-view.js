@@ -46,6 +46,8 @@ export function createModalView(context) {
     formatNumber,
     renderPercentileDistribution,
     renderDatalist,
+    analysisTabGuide,
+    analysisTabDocs = [],
     appVersion = "1.0.0.0",
     splashImageUrl = "./images/ultimateNetworkExpert.png"
   } = context;
@@ -254,6 +256,39 @@ export function createModalView(context) {
       </section>
     </div>`;
   }
+
+  function renderAnalysisViewGuideModal() {
+    const active = analysisTabGuide?.(state.activeTab);
+    const docs = analysisTabDocs.length ? analysisTabDocs : active ? [active] : [];
+    return `<div class="analysis-view-guide-modal">
+      <section class="analysis-view-guide-hero">
+        <div>
+          <span class="tooltip-kicker">How to read Analysis</span>
+          <strong>${active ? `Current view: ${escapeHtml(active.label)}` : "Choose the right view for the question"}</strong>
+          <p>${escapeHtml(active?.short || "Analysis views move from high-level hypotheses to raw socket evidence. Start broad, then drill into the exact proof.")}</p>
+        </div>
+        <ol>
+          <li><b>Start with Diagnosis</b> for prioritized hypotheses.</li>
+          <li><b>Use Advisor</b> for next checks and mitigation direction.</li>
+          <li><b>Verify in Sockets, Timeline, Charts, or Expert</b> before deciding root cause.</li>
+        </ol>
+      </section>
+      <section class="analysis-view-guide-grid">
+        ${docs.map(tab => `<article class="field-card analysis-view-guide-card ${state.activeTab === tab.id ? "active" : ""}">
+          <header>
+            <span>${escapeHtml(tab.label)}</span>
+            ${state.activeTab === tab.id ? `<em>current</em>` : ""}
+          </header>
+          <p>${escapeHtml(tab.short)}</p>
+          <dl>
+            <div><dt>Use it when</dt><dd>${escapeHtml(tab.use)}</dd></div>
+            <div><dt>Shows</dt><dd>${escapeHtml(tab.shows)}</dd></div>
+            <div><dt>Best next move</dt><dd>${escapeHtml(tab.next)}</dd></div>
+          </dl>
+        </article>`).join("")}
+      </section>
+    </div>`;
+  }
   
   function renderModal() {
     const modalTitle = state.modal === "columns" ? "Columns and order"
@@ -262,28 +297,30 @@ export function createModalView(context) {
           : state.modal === "preImport" ? "Import options"
             : state.modal === "columnHelp" ? "Column intelligence"
               : state.modal === "metricHelp" ? "Metric intelligence"
-                : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
-                  : state.modal === "serviceAliases" ? "Service labels"
-                    : state.modal === "serviceOverride" ? "Service classification"
-                      : state.modal === "topology" ? "Recording topology"
-                        : state.modal === "annotation" ? "Annotations"
-                          : state.modal === "resetWorkspace" ? "Reset workspace"
-                          : state.modal === "splash" ? "Ultimate Network Expert"
-                          : "ss field documentation";
+                : state.modal === "analysisViewGuide" ? "Analysis view guide"
+                  : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
+                    : state.modal === "serviceAliases" ? "Service labels"
+                      : state.modal === "serviceOverride" ? "Service classification"
+                        : state.modal === "topology" ? "Recording topology"
+                          : state.modal === "annotation" ? "Annotations"
+                            : state.modal === "resetWorkspace" ? "Reset workspace"
+                            : state.modal === "splash" ? "Ultimate Network Expert"
+                            : "ss field documentation";
     const modalBody = state.modal === "columns" ? renderColumnChooser()
       : state.modal === "thresholds" ? renderThresholdConfig()
         : state.modal === "layout" ? renderLayoutPrefs()
           : state.modal === "preImport" ? renderPreImportFilters()
             : state.modal === "columnHelp" ? renderColumnHelpDetail()
               : state.modal === "metricHelp" ? renderMetricHelpDetail()
-                : state.modal === "chartStats" ? renderChartStatsModal()
-                  : state.modal === "serviceAliases" ? renderServiceAliasesModal()
-                    : state.modal === "serviceOverride" ? renderServiceOverrideModal()
-                      : state.modal === "topology" ? renderTopologyModal()
-                        : state.modal === "annotation" ? renderAnnotationModal()
-                          : state.modal === "resetWorkspace" ? renderResetWorkspaceModal()
-                          : state.modal === "splash" ? renderSplashModal()
-                          : renderFields();
+                : state.modal === "analysisViewGuide" ? renderAnalysisViewGuideModal()
+                  : state.modal === "chartStats" ? renderChartStatsModal()
+                    : state.modal === "serviceAliases" ? renderServiceAliasesModal()
+                      : state.modal === "serviceOverride" ? renderServiceOverrideModal()
+                        : state.modal === "topology" ? renderTopologyModal()
+                          : state.modal === "annotation" ? renderAnnotationModal()
+                            : state.modal === "resetWorkspace" ? renderResetWorkspaceModal()
+                            : state.modal === "splash" ? renderSplashModal()
+                            : renderFields();
     return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
       <section class="modal ${state.modal || ""}">
         <header><strong>${modalTitle}</strong><button class="icon" data-action="closeModal">${icons.x}</button></header>

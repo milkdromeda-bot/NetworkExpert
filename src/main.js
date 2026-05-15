@@ -982,6 +982,129 @@ function chartMetricList() {
   return ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "rcv_rtt", "rcv_space", "rcv_ssthresh", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.rb", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_sent", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"];
 }
 
+const ANALYSIS_TAB_GUIDE = [
+  {
+    id: "diagnosis",
+    label: "diagnosis",
+    short: "Prioritized root-cause hypotheses from the current evidence.",
+    use: "Start here after parsing a capture.",
+    shows: "A concise ranking of likely problems, confidence, impact, and supporting signals.",
+    next: "Open Advisor for the recommended checks, then verify the evidence in Sockets or Charts."
+  },
+  {
+    id: "advisor",
+    label: "advisor",
+    short: "Actionable investigation paths and next best checks.",
+    use: "Use when you need a practical path instead of raw metrics.",
+    shows: "Grouped findings, mitigation ideas, and command-line evidence to confirm or reject a hypothesis.",
+    next: "Follow the top finding, then jump to the relevant socket, chart, or conversation."
+  },
+  {
+    id: "templates",
+    label: "templates",
+    short: "Ready-made investigation views for common TCP situations.",
+    use: "Use when you recognize a pattern such as slow consumer, retransmission, or microburst.",
+    shows: "Curated filters and chart presets that focus the analysis on one scenario.",
+    next: "Apply the closest template, then inspect the reduced evidence set."
+  },
+  {
+    id: "map",
+    label: "map",
+    short: "Logical topology of endpoints, flows, and service labels.",
+    use: "Use when you need to understand who talks to whom.",
+    shows: "Endpoint grouping, conversation links, and recording-scoped service classification.",
+    next: "Click a link or endpoint to focus the related sockets and anomalies."
+  },
+  {
+    id: "conversations",
+    label: "conversations",
+    short: "Aggregated client/server flows instead of individual socket rows.",
+    use: "Use when many sockets belong to the same path or peer.",
+    shows: "Total traffic, worst risk, endpoints, processes, and anomaly summaries per flow.",
+    next: "Sort by risk, Send-Q, Recv-Q, RTT, or throughput to find the noisy path."
+  },
+  {
+    id: "expert",
+    label: "expert",
+    short: "Advanced TCP correlations for low-level evidence review.",
+    use: "Use after a hypothesis exists and you need stronger technical proof.",
+    shows: "Metric pairings such as Send-Q vs RTO, cwnd vs pacing, and drops vs RX bursts.",
+    next: "Look for synchronized movement across independent signals, not one isolated metric."
+  },
+  {
+    id: "timeline",
+    label: "timeline",
+    short: "Chronological socket events and state changes.",
+    use: "Use when timing matters or a socket changes state during the capture.",
+    shows: "State transitions, anomaly timing, queue changes, and selected annotations.",
+    next: "Zoom around the event and compare nearby charts."
+  },
+  {
+    id: "alerts",
+    label: "alerts",
+    short: "Active rule-based warnings and threshold matches.",
+    use: "Use when you want repeatable operational checks.",
+    shows: "Configured alert rules, active matches, severity, and acknowledgement state.",
+    next: "Tune thresholds only after confirming the signal is meaningful for your environment."
+  },
+  {
+    id: "compare",
+    label: "compare",
+    short: "Before/after comparison against a saved baseline.",
+    use: "Use when a known-good capture or previous state exists.",
+    shows: "New, resolved, and changed risks between the baseline and current analysis.",
+    next: "Set a baseline before a change window, then compare after the incident or deployment."
+  },
+  {
+    id: "sockets",
+    label: "sockets",
+    short: "Detailed socket table with filters, sorting, and column intelligence.",
+    use: "Use when you need exact per-socket evidence.",
+    shows: "Raw and enriched socket fields, state transitions, process, queues, timers, memory, and endpoints.",
+    next: "Filter tightly, then open row details or column intelligence for interpretation."
+  },
+  {
+    id: "groups",
+    label: "groups",
+    short: "Aggregations by process, peer, service, state, or risk.",
+    use: "Use when the problem is systemic rather than one socket.",
+    shows: "Grouped counts, totals, worst risk, queues, drops, and throughput.",
+    next: "Find the group with concentrated risk, then drill down to its sockets."
+  },
+  {
+    id: "anomalies",
+    label: "anomalies",
+    short: "Only the detected symptoms, stripped of normal rows.",
+    use: "Use when the capture is large and you want the problem list first.",
+    shows: "Detected symptoms, severity, related socket, metric, and recommended context.",
+    next: "Treat anomalies as clues, then verify them with timeline and chart evidence."
+  },
+  {
+    id: "fields",
+    label: "fields",
+    short: "Dictionary of parsed ss fields and their meaning.",
+    use: "Use when a column or ss metric is unfamiliar.",
+    shows: "Field definitions, source, limitations, and parsing context.",
+    next: "Use field definitions to avoid overinterpreting ambiguous Linux TCP internals."
+  }
+];
+
+function analysisTabGuide(tabId) {
+  return ANALYSIS_TAB_GUIDE.find(tab => tab.id === tabId) || ANALYSIS_TAB_GUIDE[0];
+}
+
+function renderAnalysisTabs() {
+  return `<div class="tabs analysis-tabs" role="tablist" aria-label="Analysis views">
+    <div class="analysis-tab-scroll">
+      ${ANALYSIS_TAB_GUIDE.map(tab => `<button class="tab analysis-tab ${state.activeTab === tab.id ? "active" : ""}" data-tab="${tab.id}" role="tab" aria-selected="${state.activeTab === tab.id ? "true" : "false"}" aria-describedby="analysis-tab-tip-${tab.id}" title="${escapeHtml(tab.short)}">
+        <span>${escapeHtml(tab.label)}</span>
+        <span class="analysis-tab-tooltip" id="analysis-tab-tip-${tab.id}" role="tooltip"><strong>${escapeHtml(tab.label)}</strong>${escapeHtml(tab.short)}</span>
+      </button>`).join("")}
+    </div>
+    <button class="analysis-view-guide-button" type="button" data-action="showAnalysisViewGuide" title="Open the guide for Analysis views"><i class="ri-question-line"></i> View guide</button>
+  </div>`;
+}
+
 const PRE_IMPORT_PRESETS = [
   { id: "tcp", label: "TCP", description: "Keep tcp and tcp6 sockets.", filters: { protocol: "tcp" } },
   { id: "udp", label: "UDP", description: "Keep udp and udp6 sockets.", filters: { protocol: "udp" } },
@@ -3038,9 +3161,7 @@ function renderAnalysisPage() {
             <button class="icon" data-action="details" title="Socket details">${icons.activity}</button>
           </div>
         </div>
-        <div class="tabs">
-          ${["diagnosis", "advisor", "templates", "map", "conversations", "expert", "timeline", "alerts", "compare", "sockets", "groups", "anomalies", "fields"].map(tab => `<button class="tab ${state.activeTab === tab ? "active" : ""}" data-tab="${tab}">${tab}</button>`).join("")}
-        </div>
+        ${renderAnalysisTabs()}
         <div class="panel-body">${renderActiveTab()}</div>
       </div>
     </section>
@@ -4715,7 +4836,7 @@ function renderDiagnosticHypothesis(item) {
       <pre class="code">${escapeHtml(item.commands.join("\n"))}</pre>
     </details>
     ${item.learnMore?.length ? `<details class="diagnosis-learn-more">
-      <summary><i class="ri-book-open-line"></i> En savoir plus</summary>
+      <summary><i class="ri-book-open-line"></i> Learn more</summary>
       <ul>${item.learnMore.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>
     </details>` : ""}
     <footer>
@@ -5748,6 +5869,8 @@ function modalView() {
     formatNumber,
     renderPercentileDistribution,
     renderDatalist,
+    analysisTabGuide,
+    analysisTabDocs: ANALYSIS_TAB_GUIDE,
     appVersion: APP_VERSION,
     splashImageUrl: APP_SPLASH_IMAGE
   });
@@ -8576,6 +8699,10 @@ function bindEvents() {
     }
     if (action === "showSplash") {
       state.modal = "splash";
+      render();
+    }
+    if (action === "showAnalysisViewGuide") {
+      state.modal = "analysisViewGuide";
       render();
     }
     if (action === "confirmResetWorkspace") {

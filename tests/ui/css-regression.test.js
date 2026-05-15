@@ -217,10 +217,14 @@ test("ss editor offers calm themes and defaults to pastel", () => {
 test("diagnostic cards expose optional deep explanations", () => {
   assert.match(main, /item\.learnMore\?\.length/);
   assert.match(main, /class="diagnosis-learn-more"/);
-  assert.match(main, /En savoir plus/);
+  assert.match(main, /Learn more/);
+  assert.doesNotMatch(main, /En savoir plus/);
   assert.match(main, /ri-book-open-line/);
   assert.match(main, /item\.learnMore\.map\(entry => `<li>\$\{escapeHtml\(entry\)\}<\/li>`\)\.join\(""\)/);
   assert.match(css, /\.diagnosis-learn-more\s*\{/);
+  assert.match(css, /\.advisor-card\s*\{[^}]*border-left:\s*2px solid rgba\(255,\s*209,\s*102,\s*\.75\);/s);
+  assert.match(css, /\.evidence-row span\s*\{[^}]*border:\s*1px solid rgba\(94,\s*104,\s*121,\s*\.42\);/s);
+  assert.match(css, /\.advisor-card details\s*\{[^}]*border:\s*1px solid rgba\(94,\s*104,\s*121,\s*\.38\);/s);
   assert.match(css, /\.diagnosis-learn-more ul\s*\{[^}]*line-height:\s*1\.5;/s);
   assert.match(css, /\.diagnosis-learn-more li\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
 });
@@ -282,6 +286,24 @@ test("chart-only toolbar is hidden from the charts advisor tab", () => {
   assert.match(main, /state\.chartsTab === "advisor" \? `\$\{renderInvestigationContext\(\)/);
   assert.match(main, /renderTailLatencyLensPanel\(\)/);
   assert.doesNotMatch(main, /\$\{renderChartsGlobalToolbar\(\)\}\s*\n\s*\$\{renderChartsPage\(\)\}/);
+});
+
+test("analysis tabs expose short guidance and a single detailed view guide", () => {
+  assert.match(main, /const ANALYSIS_TAB_GUIDE = \[/);
+  assert.match(main, /function renderAnalysisTabs\(\)/);
+  assert.match(main, /data-action="showAnalysisViewGuide"/);
+  assert.match(main, /class="analysis-tab-tooltip"/);
+  assert.match(main, /state\.modal = "analysisViewGuide"/);
+  assert.match(main, /analysisTabDocs:\s*ANALYSIS_TAB_GUIDE/);
+  assert.match(modalView, /state\.modal === "analysisViewGuide" \? "Analysis view guide"/);
+  assert.match(modalView, /function renderAnalysisViewGuideModal\(\)/);
+  assert.match(modalView, /How to read Analysis/);
+  assert.match(modalView, /Best next move/);
+  assert.match(css, /\.analysis-tabs\s*\{[^}]*justify-content:\s*space-between;/s);
+  assert.match(css, /\.analysis-tab-tooltip\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*99999;/s);
+  assert.match(css, /\.analysis-view-guide-button\s*\{[^}]*white-space:\s*nowrap;/s);
+  assert.match(css, /\.analysis-view-guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(230px,\s*1fr\)\);/s);
+  assert.match(css, /\.modal\.analysisViewGuide\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 30px\)\);/s);
 });
 
 test("topology action uses a dedicated modal opener", () => {
