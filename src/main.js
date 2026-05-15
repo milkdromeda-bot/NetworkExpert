@@ -3285,7 +3285,8 @@ function renderJvmGcPanel() {
       <div class="panel-title"><span>JVM Stall / GC Correlation</span></div>
       <div class="bdp-controls">
         <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
-        <label><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
+        <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
+        <label style="margin-left:10px"><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
       </div>
     </div>
     <div class="panel-body">
@@ -3537,14 +3538,17 @@ function drawJvmCharts() {
   if (!gc.correlation?.results?.length) return;
   const history = visibleHistory().filter(s => s.epochMs);
   if (!history.length) return;
+  const sevOrder = ["info", "warning", "warning_high", "critical"];
+  const minSev = gc.severityFilter && gc.severityFilter !== "all" ? sevOrder.indexOf(gc.severityFilter) : 0;
+  const filtered = gc.correlation.results.filter(r => sevOrder.indexOf(r.severity) >= minSev);
 
   // Timeline chart: Recv-Q + GC bars
   const svg1 = document.querySelector("[data-jvm-chart='recvq']");
-  if (svg1) drawJvmTimelineChartInteractive(svg1, gc.correlation.results, history);
+  if (svg1) drawJvmTimelineChartInteractive(svg1, filtered, history);
 
   // Scatter plot
   const svg2 = document.querySelector("[data-jvm-chart='scatter']");
-  if (svg2) drawJvmScatterChartInteractive(svg2, gc.correlation.results);
+  if (svg2) drawJvmScatterChartInteractive(svg2, filtered);
 }
 
 function jvmPauseColor(score) {
@@ -3585,6 +3589,27 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     <g class="jvm-crosshair" visibility="hidden" pointer-events="none"></g>
   `;
   attachJvmTimelineInteractions(svg, results, history, x, pad, w, h, t0, span);
+  // Expose for cross-chart sync
+  svg._jvmShowTooltipForId = (gcId) => {
+    const r = results.find(item => item.pause.id === gcId);
+    if (!r) return;
+    const layer = svg.querySelector(".jvm-crosshair");
+    if (!layer) return;
+    const cx = x(r.epochMs);
+    const sample = history.reduce((best, item) => Math.abs(item.epochMs - r.epochMs) < Math.abs(best.epochMs - r.epochMs) ? item : best, history[0]);
+    const tooltipW = 230;
+    const tooltipX = cx + tooltipW + 14 > w - pad.r ? cx - tooltipW - 14 : cx + 14;
+    layer.setAttribute("visibility", "visible");
+    layer.innerHTML = `
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
+      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(timeLabel(sample.t || 0, sample.epochMs))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="#7dd3fc" font-size="10.5">Recv-Q: ${escapeHtml(formatMetricValue("recvQ", sample.recvQ || 0))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${jvmPauseColor(r.score)}" font-size="10.5">GC #${r.pause.id} ${r.pause.durationMs.toFixed(1)}ms score ${r.score.toFixed(2)}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">${escapeHtml(r.symptoms?.signals?.map(s => s.signal).join(", ") || "none")}</text>
+    `;
+  };
+  svg._jvmHideTooltip = () => { const l = svg.querySelector(".jvm-crosshair"); if (l) l.setAttribute("visibility", "hidden"); };
 }
 
 function drawJvmScatterChartInteractive(svg, results) {
@@ -3631,6 +3656,9 @@ function drawJvmScatterChartInteractive(svg, results) {
     <g class="jvm-crosshair" visibility="hidden" pointer-events="none"></g>
   `;
   attachJvmScatterInteractions(svg, points, x, y, pad, w, h);
+  // Expose coordinate fns for cross-chart sync
+  svg._jvmScatterX = r => { const p = points.find(pt => pt.id === r.pause?.id); return p ? x(p.durationMs) : 0; };
+  svg._jvmScatterY = r => { const p = points.find(pt => pt.id === r.pause?.id); return p ? y(p.delta) : 0; };
 }
 
 function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0, span) {
@@ -3658,6 +3686,11 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${pause ? jvmPauseColor(pause.score) : "#94a3b8"}" font-size="10.5">Nearest GC: ${pause ? escapeHtml(`#${pause.pause.id} ${pause.pause.durationMs.toFixed(1)}ms score ${pause.score.toFixed(2)}`) : "n/a"}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">Signals: ${escapeHtml(pause?.symptoms?.signals?.map(signal => signal.signal).join(", ") || "none")}</text>
     `;
+    // Sync crosshair to scatter chart
+    if (state.jvmGc.syncCrosshair !== false && pause) {
+      const scatterSvg = document.querySelector("[data-jvm-chart='scatter']");
+      if (scatterSvg?._jvmShowTooltipForId) scatterSvg._jvmShowTooltipForId(pause.pause.id);
+    }
   });
   zone.addEventListener("mousedown", event => {
     svg._jvmDragStart = Math.max(0, Math.min(1, (((event.clientX - svg.getBoundingClientRect().left) * (w / svg.getBoundingClientRect().width)) - pad.l) / plotW));
@@ -3678,6 +3711,10 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
   zone.addEventListener("mouseleave", () => {
     svg._jvmDragStart = null;
     layer.setAttribute("visibility", "hidden");
+    if (state.jvmGc.syncCrosshair !== false) {
+      const scatterSvg = document.querySelector("[data-jvm-chart='scatter']");
+      if (scatterSvg?._jvmHideTooltip) scatterSvg._jvmHideTooltip();
+    }
   });
 }
 
@@ -3714,8 +3751,41 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="#7dd3fc" font-size="10.5">Delta Recv-Q: ${escapeHtml(formatMetricValue("recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
+    // Sync to timeline chart
+    if (state.jvmGc.syncCrosshair !== false) {
+      const tlSvg = document.querySelector("[data-jvm-chart='recvq']");
+      if (tlSvg?._jvmShowTooltipForId) tlSvg._jvmShowTooltipForId(point.id);
+    }
   });
-  zone.addEventListener("mouseleave", () => layer.setAttribute("visibility", "hidden"));
+  zone.addEventListener("mouseleave", () => {
+    layer.setAttribute("visibility", "hidden");
+    if (state.jvmGc.syncCrosshair !== false) {
+      const tlSvg = document.querySelector("[data-jvm-chart='recvq']");
+      if (tlSvg?._jvmHideTooltip) tlSvg._jvmHideTooltip();
+    }
+  });
+  // Expose function for cross-chart sync
+  svg._jvmShowTooltipForId = (gcId) => {
+    const point = points.find(p => p.id === gcId);
+    if (!point) { layer.setAttribute("visibility", "hidden"); return; }
+    const cx = xFn(point.durationMs);
+    const cy = yFn(point.delta);
+    const tooltipW = 220;
+    const tooltipX = cx + tooltipW + 14 > w - pad.r ? cx - tooltipW - 14 : cx + 14;
+    const tooltipY = Math.max(pad.t + 8, Math.min(h - pad.b - 82, cy - 36));
+    layer.setAttribute("visibility", "visible");
+    layer.innerHTML = `
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffff88" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="${pad.l}" x2="${w - pad.r}" y1="${cy}" y2="${cy}" stroke="#ffffff55" stroke-width="1" stroke-dasharray="3 2"/>
+      <circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="${jvmPauseColor(point.score)}" stroke-width="2"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="#7dd3fc" font-size="10.5">Delta Recv-Q: ${escapeHtml(formatMetricValue("recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
+    `;
+  };
+  svg._jvmHideTooltip = () => layer.setAttribute("visibility", "hidden");
 }
 
 function drawJvmTimelineChart(svg, results, history) {
@@ -8889,6 +8959,9 @@ function bindEvents() {
     });
   });
   document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
+  document.querySelector("#jvmSyncCrosshair")?.addEventListener("change", e => {
+    state.jvmGc.syncCrosshair = e.target.checked;
+  });
   document.querySelector("#jvmSeverityFilter")?.addEventListener("change", e => {
     state.jvmGc.severityFilter = e.target.value;
     if (state.jvmTable) state.jvmTable.page = 1;
