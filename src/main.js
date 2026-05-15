@@ -3019,27 +3019,6 @@ function renderKeepingModalPosition() {
   }
 }
 
-function shouldEagerRenderIngestRaw() {
-  return state.ingestRawExpanded || state.raw.length <= INGEST_RAW_EAGER_LIMIT;
-}
-
-function renderIngestRawPreview() {
-  const previewHead = state.raw.slice(0, 2200).trim();
-  const previewTail = state.raw.length > 2200 ? state.raw.slice(-1400).trim() : "";
-  return `<div class="raw-preview-card">
-    <div class="raw-preview-head">
-      <strong>Large capture kept out of the live textarea</strong>
-      <span>${formatNumber(state.raw.length)} characters loaded from ${escapeHtml(state.sourceName)}</span>
-    </div>
-    <p class="hint">This is the main freeze source when switching from Analysis to Import: rebuilding a huge textarea with the full raw capture blocks the browser thread. Use the lightweight preview below, or explicitly open the full editor only when you really need it.</p>
-    <div class="toolbar import-actions">
-      <button data-action="showRawInput">${icons.upload} Open full raw editor</button>
-      <button class="primary" data-action="parse">${icons.play} Analyze</button>
-    </div>
-    <pre class="code raw-preview">${escapeHtml(previewHead)}${previewTail ? `\n\n... truncated ...\n\n${escapeHtml(previewTail)}` : ""}</pre>
-  </div>`;
-}
-
 function renderIngestEditor() {
   const editorThemePicker = renderSsEditorThemePicker();
   return `<div class="cm-search-hints">
@@ -3631,17 +3610,7 @@ function renderJvmGcPanel() {
             </tr>`).join("")}
           </tbody></table></div>
           ${renderJvmPagination(jvmRows.total, jvmRows.totalPages, jvmRows.start)}
-          ${"" /* legacy JVM table replaced by sortable paginated table above */}
-          <template hidden>${(corr?.results || []).filter(r => r.score > 0).slice(0, 30).map(r => `<tr>
-              <td>${r.pause.id}</td>
-              <td>${escapeHtml(r.pause.type)}</td>
-              <td>${escapeHtml(r.pause.cause || "—")}</td>
-              <td>${r.pause.durationMs.toFixed(1)} ms</td>
-              <td>${r.score.toFixed(2)}</td>
-              <td><span class="risk ${r.severity}">${r.severity}</span></td>
-              <td>${r.symptoms.signals.map(s => s.signal).join(", ") || "—"}</td>
-            </tr>`).join("")}
-          </template>
+          
           ${jvmRows.total === 0 ? "<p>No correlated pauses detected. GC pauses did not coincide with TCP symptom changes in the available snapshots.</p>" : ""}
         </div>
       `}
@@ -4232,68 +4201,6 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
     `;
   };
   svg._jvmHideTooltip = () => layer.setAttribute("visibility", "hidden");
-}
-
-function drawJvmTimelineChart(svg, results, history) {
-  const w = svg.clientWidth || 700, h = svg.clientHeight || 260;
-  const pad = { l: 70, r: 20, t: 24, b: 40 };
-  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
-  const t0 = history[0].epochMs, t1 = history[history.length - 1].epochMs;
-  const span = Math.max(1, t1 - t0);
-  const x = t => pad.l + ((t - t0) / span) * plotW;
-  const maxRecvQ = Math.max(1, ...history.map(s => s.recvQ || 0));
-  const y = v => pad.t + plotH - (v / maxRecvQ) * plotH;
-
-  // Recv-Q line
-  const line = history.map((s, i) => `${i ? "L" : "M"}${x(s.epochMs).toFixed(1)},${y(s.recvQ || 0).toFixed(1)}`).join(" ");
-  // GC bars
-  const bars = results.map(r => {
-    const bx = x(r.epochMs);
-    const bw = Math.max(1, (r.pause.durationMs / span) * plotW);
-    const color = r.score > 0.5 ? "#ef4444" : r.score > 0.2 ? "#fbbf24" : "#64748b";
-    return `<rect x="${bx.toFixed(1)}" y="${pad.t}" width="${bw.toFixed(1)}" height="${plotH}" fill="${color}" opacity=".3"><title>GC(${r.pause.id}) ${r.pause.type} ${r.pause.durationMs.toFixed(1)}ms score=${r.score.toFixed(2)}</title></rect>`;
-  }).join("");
-
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.innerHTML = `
-    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
-    ${bars}
-    <path d="${line}" fill="none" stroke="#7dd3fc" stroke-width="2"/>
-    <text x="${pad.l}" y="16" fill="#edf4ff" font-size="12" font-weight="700">Recv-Q + GC pauses</text>
-    <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
-    <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
-  `;
-}
-
-function drawJvmScatterChart(svg, results) {
-  const w = svg.clientWidth || 700, h = svg.clientHeight || 260;
-  const pad = { l: 70, r: 20, t: 24, b: 40 };
-  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
-  const pts = results.filter(r => r.symptoms.detected).map(r => {
-    const dRecvQ = r.symptoms.signals.find(s => s.signal === "recvQ_rise")?.delta || 0;
-    return { dur: r.pause.durationMs, delta: dRecvQ, score: r.score };
-  });
-  if (!pts.length) { svg.innerHTML = `<text x="50" y="40" fill="#c4d0de" font-size="12">No correlated data points</text>`; return; }
-  const maxDur = Math.max(1, ...pts.map(p => p.dur));
-  const maxDelta = Math.max(1, ...pts.map(p => p.delta));
-  const x = v => pad.l + (v / maxDur) * plotW;
-  const y = v => pad.t + plotH - (v / maxDelta) * plotH;
-
-  const dots = pts.map(p => {
-    const color = p.score > 0.5 ? "#ef4444" : p.score > 0.2 ? "#fbbf24" : "#7dd3fc";
-    return `<circle cx="${x(p.dur).toFixed(1)}" cy="${y(p.delta).toFixed(1)}" r="4" fill="${color}" opacity=".8"><title>${p.dur.toFixed(1)}ms → ΔRecv-Q ${p.delta}</title></circle>`;
-  }).join("");
-
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.innerHTML = `
-    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
-    ${dots}
-    <text x="${pad.l}" y="16" fill="#edf4ff" font-size="12" font-weight="700">Pause duration vs ΔRecv-Q</text>
-    <text x="${w / 2}" y="${h - 6}" text-anchor="middle" fill="#8c9aab" font-size="11">Pause duration (ms)</text>
-    <text x="14" y="${h / 2}" transform="rotate(-90 14 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">ΔRecv-Q (bytes)</text>
-    <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
-    <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
-  `;
 }
 
 function renderChartInfo(title, summary, detail) {
