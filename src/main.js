@@ -3284,6 +3284,7 @@ function renderJvmGcPanel() {
     <div class="panel-head">
       <div class="panel-title"><span>JVM Stall / GC Correlation</span></div>
       <div class="bdp-controls">
+        <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""}>Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""}>Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""}>Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""}>Critical</option></select></label>
         <label><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
       </div>
     </div>
@@ -3476,7 +3477,12 @@ function sortedJvmRows(results = [], safepoints = []) {
     severity: jvmSeverityRank(row.severity),
     signals: row.symptoms?.signals?.map(signal => signal.signal).join(", ") || ""
   }[table.sortKey] ?? "");
-  return jvmTableRows(results, safepoints).sort((a, b) => {
+  return jvmTableRows(results, safepoints).filter(row => {
+    const f = state.jvmGc.severityFilter;
+    if (!f || f === "all") return true;
+    const order = ["info", "warning", "warning_high", "critical"];
+    return order.indexOf(row.severity) >= order.indexOf(f);
+  }).sort((a, b) => {
     const av = valueFor(a);
     const bv = valueFor(b);
     const order = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv), undefined, { numeric: true });
@@ -8883,6 +8889,12 @@ function bindEvents() {
     });
   });
   document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
+  document.querySelector("#jvmSeverityFilter")?.addEventListener("change", e => {
+    state.jvmGc.severityFilter = e.target.value;
+    if (state.jvmTable) state.jvmTable.page = 1;
+    render();
+    requestAnimationFrame(drawJvmCharts);
+  });
   document.querySelector("#jvmClockOffset")?.addEventListener("change", e => {
     state.jvmGc.clockOffsetMs = Number(e.target.value) || 0;
     runJvmCorrelation();
