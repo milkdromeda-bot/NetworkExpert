@@ -1096,9 +1096,8 @@ function analysisTabGuide(tabId) {
 function renderAnalysisTabs() {
   return `<div class="tabs analysis-tabs" role="tablist" aria-label="Analysis views">
     <div class="analysis-tab-scroll">
-      ${ANALYSIS_TAB_GUIDE.map(tab => `<button class="tab analysis-tab ${state.activeTab === tab.id ? "active" : ""}" data-tab="${tab.id}" role="tab" aria-selected="${state.activeTab === tab.id ? "true" : "false"}" aria-describedby="analysis-tab-tip-${tab.id}" title="${escapeHtml(tab.short)}">
+      ${ANALYSIS_TAB_GUIDE.map(tab => `<button class="tab analysis-tab ${state.activeTab === tab.id ? "active" : ""}" data-tab="${tab.id}" role="tab" aria-selected="${state.activeTab === tab.id ? "true" : "false"}" aria-label="${escapeHtml(`${tab.label}: ${tab.short}`)}" title="${escapeHtml(tab.short)}">
         <span>${escapeHtml(tab.label)}</span>
-        <span class="analysis-tab-tooltip" id="analysis-tab-tip-${tab.id}" role="tooltip"><strong>${escapeHtml(tab.label)}</strong>${escapeHtml(tab.short)}</span>
       </button>`).join("")}
     </div>
     <button class="analysis-view-guide-button" type="button" data-action="showAnalysisViewGuide" title="Open the guide for Analysis views"><i class="ri-question-line"></i> View guide</button>

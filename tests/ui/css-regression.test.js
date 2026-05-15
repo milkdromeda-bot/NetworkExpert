@@ -292,7 +292,9 @@ test("analysis tabs expose short guidance and a single detailed view guide", () 
   assert.match(main, /const ANALYSIS_TAB_GUIDE = \[/);
   assert.match(main, /function renderAnalysisTabs\(\)/);
   assert.match(main, /data-action="showAnalysisViewGuide"/);
-  assert.match(main, /class="analysis-tab-tooltip"/);
+  assert.match(main, /aria-label="\$\{escapeHtml\(`\$\{tab\.label\}: \$\{tab\.short\}`\)\}"/);
+  assert.match(main, /title="\$\{escapeHtml\(tab\.short\)\}"/);
+  assert.doesNotMatch(main, /class="analysis-tab-tooltip"/);
   assert.match(main, /state\.modal = "analysisViewGuide"/);
   assert.match(main, /analysisTabDocs:\s*ANALYSIS_TAB_GUIDE/);
   assert.match(modalView, /state\.modal === "analysisViewGuide" \? "Analysis view guide"/);
@@ -300,7 +302,7 @@ test("analysis tabs expose short guidance and a single detailed view guide", () 
   assert.match(modalView, /How to read Analysis/);
   assert.match(modalView, /Best next move/);
   assert.match(css, /\.analysis-tabs\s*\{[^}]*justify-content:\s*space-between;/s);
-  assert.match(css, /\.analysis-tab-tooltip\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*99999;/s);
+  assert.doesNotMatch(css, /\.analysis-tab-tooltip/);
   assert.match(css, /\.analysis-view-guide-button\s*\{[^}]*white-space:\s*nowrap;/s);
   assert.match(css, /\.analysis-view-guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(230px,\s*1fr\)\);/s);
   assert.match(css, /\.modal\.analysisViewGuide\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 30px\)\);/s);
