@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseSs } from "../../src/parser.js";
-import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots, socketKey, timestampBlocks } from "../../src/timeline.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots, socketIdentityKey, socketKey, timestampBlocks } from "../../src/timeline.js";
 
 function generateLightSample() {
   const socketRows = Array.from({ length: 10 }, (_, index) => {
@@ -107,6 +107,32 @@ test("socket keys distinguish state for the same endpoints", () => {
   ].join("\n"));
 
   assert.notEqual(socketKey(a), socketKey(b));
+});
+
+test("socket identity keeps one kernel socket across ESTAB to FIN-WAIT transition", () => {
+  const raw = [
+    "2026-05-15T13:29:04,072603250+00:00",
+    'tcp ESTAB 0 3592575 192.168.145.205:20001 192.168.145.204:46413 users:(("java",pid=2208995,fd=279)) timer:(persist,2.928ms,0) uid:1002 ino:384285756 sk:1009b skmem:(r0,rb6291456,t0,tb3620864,f2049,w3659775,o0,bl0,d0) rtt:18.118/19.524 cwnd:416 bytes_sent:5050465321 bytes_received:445438 notsent:3592575',
+    "2026-05-15T13:29:04,117551117+00:00",
+    "tcp FIN-WAIT-1 0 3592576 192.168.145.205:20001 192.168.145.204:46413 timer:(persist,2.884ms,0) uid:65534 ino:0 sk:1009b skmem:(r0,rb6291456,t0,tb3620864,f2049,w3659775,o0,bl0,d0) rtt:18.118/19.524 cwnd:416 bytes_sent:5050465321 bytes_received:445438 notsent:3592576"
+  ].join("\n");
+  const sockets = aggregateTimestampedSockets(raw);
+
+  assert.equal(sockets.length, 1);
+  assert.equal(sockets[0].state, "FIN-WAIT-1");
+  assert.deepEqual(sockets[0].stateTransitions, ["ESTAB", "FIN-WAIT-1"]);
+  assert.equal(sockets[0].details.values.sk, "1009b");
+  assert.equal(sockets[0].details.process.name, "java");
+});
+
+test("socket identity prefers kernel sk over state for timeline matching", () => {
+  const [estab, finWait] = parseSs([
+    "tcp ESTAB 0 1 10.0.0.1:1000 10.0.0.2:443 sk:abc",
+    "tcp FIN-WAIT-1 0 2 10.0.0.1:1000 10.0.0.2:443 sk:abc"
+  ].join("\n"));
+
+  assert.notEqual(socketKey(estab), socketKey(finWait));
+  assert.equal(socketIdentityKey(estab), socketIdentityKey(finWait));
 });
 
 test("empty captures produce no timestamp blocks or sockets", () => {

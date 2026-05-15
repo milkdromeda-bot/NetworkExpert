@@ -28,6 +28,7 @@ export function createModalView(context) {
     renderFields,
     getColumn,
     columnHelp,
+    metricHelp,
     renderThresholdSummary,
     expertDefaultThresholds,
     annotationSocketId,
@@ -259,28 +260,30 @@ export function createModalView(context) {
       : state.modal === "thresholds" ? "Threshold configuration"
         : state.modal === "layout" ? "Chart layout preferences"
           : state.modal === "preImport" ? "Import options"
-            : state.modal === "columnHelp" ? "Column guide"
-              : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
-                : state.modal === "serviceAliases" ? "Service labels"
-                  : state.modal === "serviceOverride" ? "Service classification"
-                    : state.modal === "topology" ? "Recording topology"
-                      : state.modal === "annotation" ? "Annotations"
-                        : state.modal === "resetWorkspace" ? "Reset workspace"
-                        : state.modal === "splash" ? "Ultimate Network Expert"
-                        : "ss field documentation";
+            : state.modal === "columnHelp" ? "Column intelligence"
+              : state.modal === "metricHelp" ? "Metric intelligence"
+                : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
+                  : state.modal === "serviceAliases" ? "Service labels"
+                    : state.modal === "serviceOverride" ? "Service classification"
+                      : state.modal === "topology" ? "Recording topology"
+                        : state.modal === "annotation" ? "Annotations"
+                          : state.modal === "resetWorkspace" ? "Reset workspace"
+                          : state.modal === "splash" ? "Ultimate Network Expert"
+                          : "ss field documentation";
     const modalBody = state.modal === "columns" ? renderColumnChooser()
       : state.modal === "thresholds" ? renderThresholdConfig()
         : state.modal === "layout" ? renderLayoutPrefs()
           : state.modal === "preImport" ? renderPreImportFilters()
             : state.modal === "columnHelp" ? renderColumnHelpDetail()
-              : state.modal === "chartStats" ? renderChartStatsModal()
-                : state.modal === "serviceAliases" ? renderServiceAliasesModal()
-                  : state.modal === "serviceOverride" ? renderServiceOverrideModal()
-                    : state.modal === "topology" ? renderTopologyModal()
-                      : state.modal === "annotation" ? renderAnnotationModal()
-                        : state.modal === "resetWorkspace" ? renderResetWorkspaceModal()
-                        : state.modal === "splash" ? renderSplashModal()
-                        : renderFields();
+              : state.modal === "metricHelp" ? renderMetricHelpDetail()
+                : state.modal === "chartStats" ? renderChartStatsModal()
+                  : state.modal === "serviceAliases" ? renderServiceAliasesModal()
+                    : state.modal === "serviceOverride" ? renderServiceOverrideModal()
+                      : state.modal === "topology" ? renderTopologyModal()
+                        : state.modal === "annotation" ? renderAnnotationModal()
+                          : state.modal === "resetWorkspace" ? renderResetWorkspaceModal()
+                          : state.modal === "splash" ? renderSplashModal()
+                          : renderFields();
     return html`<div class="modal-backdrop ${state.modal ? "open" : ""}">
       <section class="modal ${state.modal || ""}">
         <header><strong>${modalTitle}</strong><button class="icon" data-action="closeModal">${icons.x}</button></header>
@@ -385,6 +388,28 @@ export function createModalView(context) {
       <article class="stats-dist-card">
         <strong>Percentile distribution</strong>
         ${renderPercentileDistribution(metric, stats)}
+      </article>
+    </div>`;
+  }
+
+  function renderMetricHelpDetail() {
+    const help = metricHelp(state.helpMetric);
+    return `<div class="column-help-detail metric-help-detail">
+      <article class="field-card">
+        <span class="tooltip-kicker">Monitoring metric</span>
+        <strong>${escapeHtml(help.label)}</strong>
+        <p>${escapeHtml(help.summary)}</p>
+        <p><b>Source:</b> ${escapeHtml(help.source)}</p>
+        <p><b>Unit:</b> ${escapeHtml(help.unit)}</p>
+      </article>
+      <article class="field-card">
+        <strong>Current thresholds</strong>
+        ${renderThresholdSummary({ metric: help.metric, threshold: help.threshold })}
+        <p class="hint">${escapeHtml(help.rationale)}</p>
+      </article>
+      <article class="field-card metric-help-correlations">
+        <strong>Correlate with</strong>
+        <div class="chart-tooltip-correlate"><span>${help.correlations.map(item => `<em>${escapeHtml(item)}</em>`).join("")}</span></div>
       </article>
     </div>`;
   }

@@ -2464,9 +2464,17 @@ tr:hover, tr.selected { background: #101a27; }
   border-right: 1px solid color-mix(in srgb, var(--metric-color, var(--cyan)) 52%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--metric-color, var(--cyan)) 52%, transparent);
 }
-.chart-info:hover .chart-tooltip,
-.chart-info:focus .chart-tooltip,
-.chart-tooltip:hover {
+.chart-tooltip-floating {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: none;
+  z-index: 99999;
+}
+.chart-tooltip-floating::before {
+  display: none;
+}
+.chart-tooltip-floating.open {
   display: grid;
   gap: 9px;
 }
@@ -2482,6 +2490,12 @@ tr:hover, tr.selected { background: #101a27; }
   color: var(--soft);
   font-size: 12px;
   line-height: 1.48;
+}
+.chart-tooltip button {
+  justify-self: start;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 .chart-tooltip-correlate {
   display: grid;
@@ -2540,6 +2554,17 @@ tr:hover, tr.selected { background: #101a27; }
   text-align: left;
   pointer-events: auto;
 }
+.column-tooltip-floating {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: none;
+  z-index: 99999;
+}
+.column-tooltip-floating.open {
+  display: grid;
+  gap: 8px;
+}
 .column-tooltip::before {
   content: "";
   position: absolute;
@@ -2547,12 +2572,6 @@ tr:hover, tr.selected { background: #101a27; }
   right: 0;
   top: -10px;
   height: 10px;
-}
-th:hover .column-tooltip,
-th:focus-within .column-tooltip,
-.column-tooltip:hover {
-  display: grid;
-  gap: 8px;
 }
 .tooltip-kicker {
   color: var(--cyan);
@@ -2865,6 +2884,9 @@ th:focus-within .column-tooltip,
   grid-template-columns: minmax(280px, 1.2fr) minmax(260px, .8fr);
   gap: 12px;
 }
+.metric-help-correlations {
+  grid-column: 1 / -1;
+}
 .risk { font-weight: 800; }
 .risk.critical { color: var(--red); }
 .risk.high { color: var(--orange); }
@@ -2886,6 +2908,25 @@ th:focus-within .column-tooltip,
 .badge.udp { border-color: rgba(76, 222, 138, .7); color: var(--green); }
 .badge.listen { border-color: rgba(255, 209, 102, .7); color: var(--yellow); }
 .badge.danger { border-color: rgba(255, 92, 119, .8); color: var(--red); }
+.state-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+.state-transition-chip {
+  display: inline-flex;
+  max-width: 150px;
+  padding: 3px 7px;
+  border: 1px solid rgba(93, 183, 255, .34);
+  border-radius: 999px;
+  color: #a9d8ff;
+  background: rgba(93, 183, 255, .08);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .app-service-chip {
   display: inline-flex;

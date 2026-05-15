@@ -7,7 +7,7 @@ import { defaultAlertRules, evaluateAlertRules as evaluateAlertRuleEvents, loadA
 import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTemplateProfile, applyDashboardPreset as applyDashboardPresetProfile, applyDashboardProfile as applySavedDashboardProfile, dashboardSnapshot as createDashboardSnapshot } from "./profiles.js";
 import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot } from "./compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
-import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots as parseTimestampedSnapshots, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots as parseTimestampedSnapshots, socketIdentityKey, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 import { detectMicroburstWindow } from "./microburst.js";
 import { detectTailLatencyLens } from "./tail-latency.js";
 import { applyContextAction, openTopologyModal, setActiveInvestigation } from "./navigation.js";
@@ -225,6 +225,7 @@ let state = {
   modal: null,
   statsMetric: null,
   helpColumn: null,
+  helpMetric: null,
   ssOptionHelpKey: "-i",
   showSsOptions: false,
   annotationDraft: buildAnnotationDraft({ sourceName: "empty workspace" }),
@@ -1044,7 +1045,7 @@ function buildSocketBandwidthIndex() {
   const samples = {};
   for (const block of parsedTimestampSnapshots()) {
     for (const socket of block.sockets) {
-      const key = socketKey(socket);
+      const key = socketIdentityKey(socket);
       const current = {
         epochMs: block.epochMs,
         bytes_acked: metricValue(socket, "bytes_acked"),
@@ -1070,7 +1071,7 @@ function buildSocketBandwidthIndex() {
 
 function socketBandwidth(socket, metric) {
   if (!socket) return 0;
-  const indexed = state.bandwidthIndex?.[socketKey(socket)];
+  const indexed = state.bandwidthIndex?.[socketIdentityKey(socket)];
   if (indexed?.[metric] != null) return indexed[metric];
   if (metric === "tx_bps") return metricValue(socket, "delivery_rate") || metricValue(socket, "pacing_rate") || 0;
   return 0;
@@ -2435,6 +2436,7 @@ function _hideBusy() { _busyEl.classList.remove("visible"); }
 function render() {
   _showBusy();
   hideAppServiceTooltip();
+  hideFloatingChartTooltipNow();
   if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
   const app = document.querySelector("#app");
@@ -4232,6 +4234,21 @@ function metricCorrelations(metric) {
   }[metric] || ["RTT", "queues", "process", "peer"];
 }
 
+function metricHelp(metric) {
+  const key = chartMetricList().includes(metric) ? metric : state.prefs.graphMetric;
+  const threshold = thresholdFor(key);
+  return {
+    metric: key,
+    label: metricLabel(key),
+    source: metricSource(key),
+    unit: metricUnit(key) || "raw value",
+    summary: metricInterpretation(key),
+    correlations: metricCorrelations(key),
+    threshold,
+    rationale: EXPERT_DEFAULT_THRESHOLDS[key]?.rationale || "Use this metric with queue, timer, process, and peer context. Prefer trends across snapshots over one isolated point."
+  };
+}
+
 function renderChartMetricTooltip(metric) {
   const t = thresholdFor(metric);
   const color = metricColor(metric);
@@ -4249,36 +4266,70 @@ function renderChartMetricTooltip(metric) {
         <b>Correlate with</b>
         <span>${metricCorrelations(metric).map(item => `<em>${escapeHtml(item)}</em>`).join("")}</span>
       </div>
+      <button data-metric-help="${escapeHtml(metric)}" type="button"><i class="ri-expand-diagonal-line"></i> Expand intelligence</button>
     </span>
   </span>`;
 }
 
-function updateChartTooltipPosition(info) {
-  const tooltip = info?.querySelector(".chart-tooltip");
+let chartTooltipEl = null;
+let chartTooltipHideTimer = 0;
+
+function ensureFloatingChartTooltip() {
+  if (chartTooltipEl?.isConnected) return chartTooltipEl;
+  chartTooltipEl = document.createElement("div");
+  chartTooltipEl.id = "floatingChartTooltip";
+  chartTooltipEl.className = "chart-tooltip chart-tooltip-floating";
+  chartTooltipEl.setAttribute("role", "tooltip");
+  chartTooltipEl.addEventListener("mouseenter", () => clearTimeout(chartTooltipHideTimer));
+  chartTooltipEl.addEventListener("mouseleave", hideFloatingChartTooltipSoon);
+  chartTooltipEl.addEventListener("click", event => {
+    const help = event.target.closest("[data-metric-help]");
+    if (!help) return;
+    event.stopPropagation();
+    state.helpMetric = help.dataset.metricHelp;
+    state.modal = "metricHelp";
+    hideFloatingChartTooltipNow();
+    render();
+  });
+  document.body.appendChild(chartTooltipEl);
+  return chartTooltipEl;
+}
+
+function positionFloatingChartTooltip(info, tooltip) {
   if (!tooltip) return;
-  const gutter = 16;
-  tooltip.classList.remove("chart-tooltip--flip", "chart-tooltip--above");
-  tooltip.style.removeProperty("--tooltip-shift");
-
-  const previousDisplay = tooltip.style.display;
-  const previousVisibility = tooltip.style.visibility;
-  tooltip.style.display = "grid";
+  const gutter = 12;
   tooltip.style.visibility = "hidden";
+  tooltip.classList.add("open");
+  const infoRect = info.getBoundingClientRect();
+  const rect = tooltip.getBoundingClientRect();
+  const below = infoRect.bottom + 10;
+  const above = infoRect.top - rect.height - 10;
+  const top = below + rect.height <= window.innerHeight - gutter ? below : Math.max(gutter, above);
+  const idealLeft = infoRect.left + infoRect.width / 2 - rect.width / 2;
+  const left = Math.min(Math.max(gutter, idealLeft), Math.max(gutter, window.innerWidth - rect.width - gutter));
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(top)}px`;
+  tooltip.style.visibility = "visible";
+}
 
-  let rect = tooltip.getBoundingClientRect();
-  if (rect.right > window.innerWidth - gutter) tooltip.classList.add("chart-tooltip--flip");
-  if (rect.bottom > window.innerHeight - gutter) tooltip.classList.add("chart-tooltip--above");
+function showFloatingChartTooltip(info) {
+  const inlineTooltip = info?.querySelector(".chart-tooltip:not(.chart-tooltip-floating)");
+  if (!inlineTooltip) return;
+  clearTimeout(chartTooltipHideTimer);
+  const tooltip = ensureFloatingChartTooltip();
+  tooltip.innerHTML = inlineTooltip.innerHTML;
+  tooltip.style.setProperty("--metric-color", getComputedStyle(info).getPropertyValue("--metric-color") || "var(--cyan)");
+  positionFloatingChartTooltip(info, tooltip);
+}
 
-  rect = tooltip.getBoundingClientRect();
-  const shift = rect.left < gutter
-    ? gutter - rect.left
-    : rect.right > window.innerWidth - gutter
-      ? (window.innerWidth - gutter) - rect.right
-      : 0;
-  if (shift) tooltip.style.setProperty("--tooltip-shift", `${Math.round(shift)}px`);
+function hideFloatingChartTooltipSoon() {
+  clearTimeout(chartTooltipHideTimer);
+  chartTooltipHideTimer = setTimeout(hideFloatingChartTooltipNow, 180);
+}
 
-  tooltip.style.display = previousDisplay;
-  tooltip.style.visibility = previousVisibility;
+function hideFloatingChartTooltipNow() {
+  clearTimeout(chartTooltipHideTimer);
+  chartTooltipEl?.classList.remove("open");
 }
 
 function ensureAppServiceTooltip() {
@@ -4332,11 +4383,82 @@ function hideAppServiceTooltip() {
   document.querySelector("#appServiceTooltip")?.classList.remove("open");
 }
 
+let columnTooltipEl = null;
+let columnTooltipHideTimer = 0;
+
+function ensureFloatingColumnTooltip() {
+  if (columnTooltipEl?.isConnected) return columnTooltipEl;
+  columnTooltipEl = document.createElement("div");
+  columnTooltipEl.id = "floatingColumnTooltip";
+  columnTooltipEl.className = "column-tooltip column-tooltip-floating";
+  columnTooltipEl.setAttribute("role", "tooltip");
+  columnTooltipEl.addEventListener("mouseenter", () => clearTimeout(columnTooltipHideTimer));
+  columnTooltipEl.addEventListener("mouseleave", hideFloatingColumnTooltipSoon);
+  columnTooltipEl.addEventListener("click", event => {
+    const help = event.target.closest("[data-column-help]");
+    if (!help) return;
+    event.stopPropagation();
+    state.helpColumn = help.dataset.columnHelp;
+    state.modal = "columnHelp";
+    hideFloatingColumnTooltipNow();
+    render();
+  });
+  document.body.appendChild(columnTooltipEl);
+  return columnTooltipEl;
+}
+
+function positionFloatingColumnTooltip(header, tooltip) {
+  const gutter = 12;
+  const headerRect = header.getBoundingClientRect();
+  tooltip.style.visibility = "hidden";
+  tooltip.classList.add("open");
+  const rect = tooltip.getBoundingClientRect();
+  const below = headerRect.bottom + 8;
+  const above = headerRect.top - rect.height - 8;
+  const top = below + rect.height <= window.innerHeight - gutter ? below : Math.max(gutter, above);
+  const idealLeft = headerRect.left + headerRect.width / 2 - rect.width / 2;
+  const left = Math.min(Math.max(gutter, idealLeft), Math.max(gutter, window.innerWidth - rect.width - gutter));
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(top)}px`;
+  tooltip.style.visibility = "visible";
+}
+
+function showFloatingColumnTooltip(header) {
+  const inlineTooltip = header.querySelector(".column-tooltip:not(.column-tooltip-floating)");
+  if (!inlineTooltip) return;
+  clearTimeout(columnTooltipHideTimer);
+  const tooltip = ensureFloatingColumnTooltip();
+  tooltip.innerHTML = inlineTooltip.innerHTML;
+  positionFloatingColumnTooltip(header, tooltip);
+}
+
+function hideFloatingColumnTooltipSoon() {
+  clearTimeout(columnTooltipHideTimer);
+  columnTooltipHideTimer = setTimeout(hideFloatingColumnTooltipNow, 120);
+}
+
+function hideFloatingColumnTooltipNow() {
+  clearTimeout(columnTooltipHideTimer);
+  columnTooltipEl?.classList.remove("open");
+}
+
 function bindSmartChartTooltips() {
   document.querySelectorAll(".chart-info").forEach(info => {
-    const refresh = () => updateChartTooltipPosition(info);
-    info.addEventListener("mouseenter", refresh);
-    info.addEventListener("focus", refresh);
+    info.addEventListener("mouseenter", () => showFloatingChartTooltip(info));
+    info.addEventListener("focusin", () => showFloatingChartTooltip(info));
+    info.addEventListener("mouseleave", hideFloatingChartTooltipSoon);
+    info.addEventListener("focusout", hideFloatingChartTooltipSoon);
+  });
+}
+
+function bindColumnHelpTooltips() {
+  document.querySelectorAll("th .column-tooltip").forEach(inlineTooltip => {
+    const header = inlineTooltip.closest("th");
+    if (!header) return;
+    header.addEventListener("mouseenter", () => showFloatingColumnTooltip(header));
+    header.addEventListener("focusin", () => showFloatingColumnTooltip(header));
+    header.addEventListener("mouseleave", hideFloatingColumnTooltipSoon);
+    header.addEventListener("focusout", hideFloatingColumnTooltipSoon);
   });
 }
 
@@ -5437,6 +5559,7 @@ function modalView() {
     renderFields,
     getColumn,
     columnHelp,
+    metricHelp,
     renderThresholdSummary,
     expertDefaultThresholds: EXPERT_DEFAULT_THRESHOLDS,
     annotationSocketId,
@@ -8051,6 +8174,7 @@ function handleGlobalKeydown(event) {
 function bindEvents() {
   document.onkeydown = handleGlobalKeydown;
   bindSmartChartTooltips();
+  bindColumnHelpTooltips();
   document.querySelectorAll("[data-charts-tab]").forEach(btn => {
     btn.addEventListener("click", event => {
       const tab = event.currentTarget.dataset.chartsTab;
@@ -8664,7 +8788,7 @@ function bindEvents() {
       }
     }
     if (action === "closeModal") {
-      state.modal = null; state.helpColumn = null; state.annotationContext = null;
+      state.modal = null; state.helpColumn = null; state.helpMetric = null; state.annotationContext = null;
       const fast = document.querySelector(".modal-overlay-fast");
       if (fast) { fast.remove(); return; }
       render();
@@ -9074,6 +9198,12 @@ function bindEvents() {
     event.stopPropagation();
     state.helpColumn = event.currentTarget.dataset.columnHelp;
     state.modal = "columnHelp";
+    render();
+  }));
+  document.querySelectorAll("[data-metric-help]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    state.helpMetric = event.currentTarget.dataset.metricHelp;
+    state.modal = "metricHelp";
     render();
   }));
   document.querySelectorAll("[data-hide-col]").forEach(btn => btn.addEventListener("click", event => {

@@ -9,9 +9,15 @@ export function createTableColumns({
   renderPeerCell,
   metricValue
 }) {
+  const renderState = s => {
+    const transitions = Array.isArray(s.stateTransitions) ? s.stateTransitions.filter(Boolean) : [];
+    const transitionTitle = transitions.length > 1 ? ` title="${escapeHtml(`Observed state transition: ${transitions.join(" -> ")}`)}"` : "";
+    const transitionBadge = transitions.length > 1 ? `<span class="state-transition-chip"${transitionTitle}>${escapeHtml(transitions[0])} -> ${escapeHtml(s.state)}</span>` : "";
+    return `<span class="state-stack"><span class="badge ${s.state === "LISTEN" ? "listen" : ""}">${escapeHtml(s.state)}</span>${transitionBadge}</span>`;
+  };
   return [
     { key: "risk", label: "Risk", value: s => riskRank(s.risk), render: s => `<span class="risk ${s.risk}">${s.risk}</span>` },
-    { key: "state", label: "State", value: s => s.state, render: s => `<span class="badge ${s.state === "LISTEN" ? "listen" : ""}">${escapeHtml(s.state)}</span>` },
+    { key: "state", label: "State", value: s => s.state, render: renderState },
     { key: "family", label: "Proto", value: s => s.family, render: s => `<span class="badge ${s.family.includes("udp") ? "udp" : "tcp"}">${escapeHtml(s.family)}</span>` },
     { key: "application", label: "App", value: s => applicationServiceSortKey(s), render: s => renderApplicationServiceChip(s) || `<span class="muted">-</span>` },
     { key: "recvQ", label: "Recv-Q", value: s => s.recvQ, render: s => renderTableMetricCell("recvQ", s.recvQ) },

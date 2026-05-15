@@ -4,9 +4,20 @@ export function socketKey(socket) {
   return `${socket.local}|${socket.peer}|${socket.state}`;
 }
 
+export function socketIdentityKey(socket) {
+  const local = socket?.local || "";
+  const peer = socket?.peer || "";
+  const family = socket?.family || "";
+  const sk = socket?.details?.values?.sk;
+  if (sk) return `sk:${sk}|${family}|${local}|${peer}`;
+  const ino = socket?.details?.values?.ino;
+  if (ino) return `ino:${ino}|${family}|${local}|${peer}`;
+  return socketKey(socket);
+}
+
 export function stableSocketId(socket) {
   let hash = 2166136261;
-  for (const char of socketKey(socket)) {
+  for (const char of socketIdentityKey(socket)) {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 16777619);
   }
@@ -46,10 +57,17 @@ export function parsedTimestampSnapshots(raw = "") {
 export function aggregateParsedSocketsByKey(sockets) {
   const byKey = new Map();
   for (const socket of sockets) {
-    const key = socketKey(socket);
+    const key = socketIdentityKey(socket);
     const previous = byKey.get(key);
     byKey.set(key, {
       ...socket,
+      details: {
+        ...socket.details,
+        process: socket.details?.process || previous?.details?.process || null
+      },
+      stateTransitions: previous
+        ? [...new Set([...(previous.stateTransitions || [previous.state]), socket.state])]
+        : [socket.state],
       firstSeenMs: previous?.firstSeenMs,
       lastSeenMs: previous?.lastSeenMs,
       snapshotCount: (previous?.snapshotCount || 0) + 1
@@ -65,10 +83,17 @@ export function aggregateTimestampedSockets(raw = "") {
   const byKey = new Map();
   for (const block of snapshots) {
     for (const socket of block.sockets) {
-      const key = socketKey(socket);
+      const key = socketIdentityKey(socket);
       const previous = byKey.get(key);
       byKey.set(key, {
         ...socket,
+        details: {
+          ...socket.details,
+          process: socket.details?.process || previous?.details?.process || null
+        },
+        stateTransitions: previous
+          ? [...new Set([...(previous.stateTransitions || [previous.state]), socket.state])]
+          : [socket.state],
         firstSeenMs: previous?.firstSeenMs ?? block.epochMs,
         lastSeenMs: block.epochMs,
         snapshotCount: (previous?.snapshotCount || 0) + 1
@@ -80,10 +105,10 @@ export function aggregateTimestampedSockets(raw = "") {
 
 export function buildSocketHistoryFromSnapshots(snapshots = [], selectedSocket = null) {
   if (!snapshots.length || !selectedSocket) return [];
-  const key = socketKey(selectedSocket);
+  const key = socketIdentityKey(selectedSocket);
   const start = snapshots[0].epochMs;
   const rows = snapshots.map(block => {
-    const exact = block.sockets.find(socket => socketKey(socket) === key)
+    const exact = block.sockets.find(socket => socketIdentityKey(socket) === key)
       || block.sockets.find(socket => socket.local === selectedSocket.local && socket.peer === selectedSocket.peer);
     return {
       socketId: selectedSocket.id,

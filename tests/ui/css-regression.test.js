@@ -7,6 +7,7 @@ const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8")
 const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
 const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
 const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
+const tableColumns = readFileSync(new URL("../../src/table-columns.js", import.meta.url), "utf8");
 
 test("table settings header stays above nearby column hover tooltips", () => {
   assert.match(css, /th:not\(\.table-settings-head\):hover/);
@@ -15,6 +16,23 @@ test("table settings header stays above nearby column hover tooltips", () => {
   assert.match(css, /\.row-menu\.table-settings-menu\.open\s*\{[^}]*grid-template-rows:\s*auto auto auto minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.table-settings-column-list\s*\{[^}]*min-height:\s*0;/s);
   assert.match(css, /\.table-settings-search\s*\{/);
+});
+
+test("column help tooltip is layered above socket table rows", () => {
+  assert.match(main, /function ensureFloatingColumnTooltip\(\)/);
+  assert.match(main, /document\.body\.appendChild\(columnTooltipEl\)/);
+  assert.match(main, /function bindColumnHelpTooltips\(\)/);
+  assert.match(main, /bindColumnHelpTooltips\(\);/);
+  assert.match(css, /\.column-tooltip-floating\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*99999;/s);
+  assert.match(css, /\.column-tooltip-floating\.open\s*\{[^}]*display:\s*grid;/s);
+  assert.doesNotMatch(css, /th:hover \.column-tooltip,\s*th:focus-within \.column-tooltip,\s*\.column-tooltip:hover\s*\{/);
+});
+
+test("state column can show socket lifecycle transitions", () => {
+  assert.match(tableColumns, /stateTransitions/);
+  assert.match(tableColumns, /Observed state transition:/);
+  assert.match(tableColumns, /class="state-transition-chip"/);
+  assert.match(css, /\.state-transition-chip\s*\{[^}]*text-overflow:\s*ellipsis;/s);
 });
 
 test("application service chip tooltip stays viewport-safe and truncates labels", () => {
@@ -40,7 +58,7 @@ test("import progress is shown in the ss stats header while loading", () => {
 
 test("file import flow has one clear filter entry point", () => {
   assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open file<\/button>/);
-  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open file<\/button>\s*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>\s*<button data-action="sample10m"[\s\S]*Sample<\/button>/);
+  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open file<\/button>\s*<button data-action="showEditor"[\s\S]*Editor<\/button>\s*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>\s*<button data-action="sample10m"[\s\S]*Sample<\/button>/);
   assert.doesNotMatch(main, /<button data-action="toggleSsOptions"[^>]*>[\s\S]*Capture<\/button>/);
   assert.match(main, /data-action="copySsCommand"[\s\S]*Copy<\/button>/);
   assert.match(main, /toast\("ss command copied", "Paste it on the target server to collect the ss evidence\."\);/);
@@ -69,7 +87,7 @@ test("file import flow has one clear filter entry point", () => {
 
 test("capture helper card aligns title and explanation cleanly", () => {
   assert.match(main, /<div class="capture-flow-card">\s*<i class="ri-route-line" aria-hidden="true"><\/i>\s*<div class="capture-flow-copy">/s);
-  assert.match(css, /\.capture-flow-card\s*\{[^}]*grid-template-columns:\s*28px minmax\(0,\s*1fr\);[^}]*align-items:\s*start;/s);
+  assert.match(css, /\.capture-flow-card\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
   assert.match(css, /\.capture-flow-copy\s*\{[^}]*display:\s*grid;[^}]*gap:\s*3px;[^}]*min-width:\s*0;/s);
   assert.match(css, /\.capture-flow-card strong\s*\{[^}]*display:\s*block;[^}]*line-height:\s*1\.25;/s);
 });
@@ -92,7 +110,7 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /data-action="loadSsCommandEndpointExample"/);
   assert.doesNotMatch(main, /market-data example/);
   assert.doesNotMatch(main, /lfxbench_tcp-laloRcvMarketSimu/);
-  assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"0\.01"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
+  assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"1"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
   assert.match(main, /const teeRisk = Boolean\(c\.outputPath && c\.appendOutput !== false && c\.loop && interval <= 0\.05\);/);
   assert.match(main, /terminal output plus <code>tee<\/code> can become the bottleneck/);
   assert.match(main, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
@@ -112,13 +130,11 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(css, /\.ss-command-warning\.hidden\s*\{[^}]*display:\s*none;/s);
 });
 
-test("ss command opens beside the editor instead of pushing it below", () => {
-  assert.match(main, /<div class="ingest-card-layout">[\s\S]*<aside class="ingest-command-card">[\s\S]*<section class="ingest-editor-card">\$\{renderIngestEditor\(\)\}<\/section>/);
+test("ss command panel is isolated from the raw editor view", () => {
+  assert.match(main, /<div class="ingest-ss-command-panel">[\s\S]*\$\{renderSsCommandBuilder\(\)\}[\s\S]*data-action="copySsCommand"/);
+  assert.match(main, /data-action="showEditor"[\s\S]*Editor/);
   assert.match(main, /function renderIngestEditor\(\)/);
-  assert.match(css, /\.ingest-card-layout\s*\{[^}]*grid-template-columns:\s*minmax\(420px,\s*\.48fr\) minmax\(520px,\s*\.52fr\);[^}]*align-items:\s*start;/s);
-  assert.match(css, /\.ingest-command-card\s*\{[^}]*max-height:\s*clamp\(520px,\s*calc\(100vh - 245px\),\s*760px\);[^}]*overflow:\s*auto;/s);
-  assert.match(css, /\.ingest-editor-card\s*\{[^}]*padding:\s*10px;/s);
-  assert.match(css, /\.ingest-card-layout \.ss-command-builder,\s*\.ingest-card-layout \.ss-option-card-layout\s*\{[^}]*grid-template-columns:\s*1fr;/s);
+  assert.match(main, /activePanel === "capture" \? `<div class="ingest-ss-command-panel">[\s\S]*` : renderIngestEditor\(\)/);
 });
 
 test("topbar anomaly pill uses a compact warning icon", () => {
@@ -303,6 +319,16 @@ test("metric charts expose BDP-like interactive legends and detailed crosshair",
   assert.match(main, /function chartSeriesKey\(metric, key\)/);
   assert.match(main, /function metricChartSeries\(metric, showThreshold = true\)/);
   assert.match(main, /function renderMetricChartLegend\(metric\)/);
+  assert.match(main, /function metricHelp\(metric\)/);
+  assert.match(main, /data-metric-help="\$\{escapeHtml\(metric\)\}"/);
+  assert.match(main, /state\.modal = "metricHelp"/);
+  assert.match(main, /function ensureFloatingChartTooltip\(\)/);
+  assert.match(main, /document\.body\.appendChild\(chartTooltipEl\)/);
+  assert.match(main, /function showFloatingChartTooltip\(info\)/);
+  assert.match(main, /hideFloatingChartTooltipSoon/);
+  assert.match(modalView, /state\.modal === "metricHelp" \? "Metric intelligence"/);
+  assert.match(modalView, /function renderMetricHelpDetail\(\)/);
+  assert.doesNotMatch(modalView, /Column guide/);
   assert.match(main, /data-chart-series-toggle="\$\{escapeHtml\(metric\)\}"/);
   assert.match(main, /data-chart-series-key="\$\{escapeHtml\(item\.key\)\}"/);
   assert.match(main, /chartSeriesHidden\(metric,\s*"value"\)/);
@@ -318,6 +344,11 @@ test("metric charts expose BDP-like interactive legends and detailed crosshair",
   assert.match(css, /\.metric-chart-legend\s*\{[^}]*flex-wrap:\s*wrap;/s);
   assert.match(css, /\.chart-legend-item\s*\{[^}]*border-radius:\s*999px;/s);
   assert.match(css, /\.chart-legend-item\.is-muted\s*\{[^}]*text-decoration:\s*line-through;/s);
+  assert.match(css, /\.chart-tooltip button\s*\{[^}]*justify-self:\s*start;/s);
+  assert.match(css, /\.chart-tooltip-floating\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*99999;/s);
+  assert.match(css, /\.chart-tooltip-floating\.open\s*\{[^}]*display:\s*grid;/s);
+  assert.doesNotMatch(css, /\.chart-info:hover \.chart-tooltip,\s*\.chart-info:focus \.chart-tooltip,\s*\.chart-tooltip:hover\s*\{/);
+  assert.match(css, /\.metric-help-correlations\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
 });
 
 test("chart statistics modal keeps the percentile curve to the right of a compact table", () => {

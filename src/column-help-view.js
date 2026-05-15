@@ -58,6 +58,6 @@ export function renderColumnTooltip(col, context) {
     <strong>${context.escapeHtml(col.label)}</strong>
     <p>${context.escapeHtml(help.summary)}</p>
     ${renderThresholdSummary(help, context)}
-    <button data-column-help="${col.key}" type="button"><i class="ri-expand-diagonal-line"></i> Expand guide</button>
+    <button data-column-help="${col.key}" type="button"><i class="ri-expand-diagonal-line"></i> Expand intelligence</button>
   </div>`;
 }

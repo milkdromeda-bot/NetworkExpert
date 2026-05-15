@@ -58,6 +58,12 @@ export function parseDetails(text) {
   }
   const users = text.match(/users:\(\("([^"]+)",pid=(\d+),fd=(\d+)/);
   if (users) details.process = { name: users[1], pid: Number(users[2]), fd: Number(users[3]) };
+  const sk = text.match(/\bsk:([0-9a-fA-F]+)/);
+  if (sk) details.values.sk = sk[1].toLowerCase();
+  const ino = text.match(/\bino:(\d+)/);
+  if (ino) details.values.ino = Number(ino[1]);
+  const uid = text.match(/\buid:(\d+)/);
+  if (uid) details.values.uid = Number(uid[1]);
 
   const wscale = text.match(/wscale:(\d+)[:,](\d+)/);
   if (wscale) details.values.wscale = { send: Number(wscale[1]), receive: Number(wscale[2]) };
@@ -76,7 +82,7 @@ export function parseDetails(text) {
 
   for (const match of text.matchAll(/\b([a-z_]+):([^\s,)]+)/g)) {
     const key = match[1];
-    if (["skmem", "timer", "users", "wscale", "rtt", "rwnd_limited", "sndbuf_limited"].includes(key)) continue;
+    if (["skmem", "timer", "users", "wscale", "rtt", "rwnd_limited", "sndbuf_limited", "sk", "ino", "uid"].includes(key)) continue;
     details.values[key] = parseNumber(match[2]) ?? match[2];
   }
   for (const flag of ["ts", "sack", "ecn", "ecnseen", "fastopen", "cubic", "bbr", "reno"]) {
