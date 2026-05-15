@@ -3311,17 +3311,16 @@ function renderJvmGcPanel() {
         <details style="margin-top:8px"><summary>Recommended JVM logging flags</summary><pre style="font-size:11px;margin-top:4px">${escapeHtml(RECOMMENDED_JVM_LOGGING)}</pre></details>
       </div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
+          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
           <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} total</strong>
           <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}</em>
-          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:auto;right:0"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
-          </em>
+          <span style="margin-left:auto;font-size:11px;color:var(--soft)">${summary?.recommendations?.map(r => `<b style="color:${r.severity === "critical" ? "#ff5c77" : r.severity === "warning" ? "#ffd166" : "#39d6d6"}">${escapeHtml(r.severity)}</b> ${escapeHtml(r.text)}`).join(" · ") || ""}</span>
         </div>
-        ${summary?.recommendations?.length ? `<div class="jvm-recs">${summary.recommendations.map(r => `<div class="investigation-note ${r.severity}"><b>${escapeHtml(r.severity)}</b> <span>${escapeHtml(r.text)}</span></div>`).join("")}</div>` : ""}
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article>
-              <div class="bdp-chart-title"><strong>GC pauses vs Recv-Q / skmem:r</strong><span>zoom + crosshair</span></div>
+              <div class="bdp-chart-title"><strong>Recv-Q + GC pauses</strong><span>timeline</span></div>
               <svg class="chart bdp-chart" data-jvm-chart="recvq" role="img" aria-label="JVM GC correlation chart"></svg>
               ${renderJvmLegend("timeline")}
             </article>
@@ -3349,7 +3348,7 @@ function renderJvmGcPanel() {
             ${renderJvmSortHeader("severity", "Severity")}
             ${renderJvmSortHeader("signals", "Signals")}
           </tr></thead><tbody>
-            ${jvmRows.rows.map(r => `<tr class="jvm-severity-${escapeHtml(jvmSeverityClass(r.severity))}">
+            ${jvmRows.rows.map(r => `<tr class="jvm-severity-${escapeHtml(jvmSeverityClass(r.severity))}" data-jvm-row-epoch="${r.timestampMs || r.epochMs || ""}" style="cursor:pointer">
               <td class="mono-cell">${escapeHtml(preciseDateTimeLabel(r.timestampMs))}</td>
               <td><span class="jvm-nature">${escapeHtml(jvmStallNature(r))}</span></td>
               <td>${escapeHtml(String(r.eventId ?? r.pause.id))}</td>
@@ -3403,7 +3402,7 @@ function jvmSeriesHidden(key) {
 
 function renderJvmLegend(kind) {
   return `<div class="bdp-legend jvm-legend" data-jvm-legend="${escapeHtml(kind)}">
-    ${jvmLegendSeries(kind).map(item => `<span data-jvm-series-key="${escapeHtml(item.key)}" style="cursor:pointer;${jvmSeriesHidden(item.key) ? "opacity:.4;text-decoration:line-through" : ""}" title="${escapeHtml(item.tip)}"><i style="--legend-color:${item.color}"></i>${escapeHtml(item.label)}</span>`).join("")}
+    ${jvmLegendSeries(kind).map(item => `<span class="jvm-legend-item" data-jvm-series-key="${escapeHtml(item.key)}" style="cursor:pointer;${jvmSeriesHidden(item.key) ? "opacity:.4;text-decoration:line-through" : ""}"><i style="--legend-color:${item.color}"></i>${escapeHtml(item.label)}<span class="jvm-legend-tip">${escapeHtml(item.tip)}</span></span>`).join("")}
   </div>`;
 }
 
@@ -3547,14 +3546,15 @@ function drawJvmCharts() {
   const sevOrder = ["info", "warning", "warning_high", "critical"];
   const minSev = gc.severityFilter && gc.severityFilter !== "all" ? sevOrder.indexOf(gc.severityFilter) : 0;
   const filtered = gc.correlation.results.filter(r => sevOrder.indexOf(r.severity) >= minSev);
+  const selected = gc.selectedEpoch ? filtered.filter(r => r.epochMs === gc.selectedEpoch) : filtered;
 
   // Timeline chart: Recv-Q + GC bars
   const svg1 = document.querySelector("[data-jvm-chart='recvq']");
-  if (svg1) drawJvmTimelineChartInteractive(svg1, filtered, history);
+  if (svg1) drawJvmTimelineChartInteractive(svg1, selected, history);
 
   // Scatter plot
   const svg2 = document.querySelector("[data-jvm-chart='scatter']");
-  if (svg2) drawJvmScatterChartInteractive(svg2, filtered);
+  if (svg2) drawJvmScatterChartInteractive(svg2, selected);
 }
 
 function jvmPauseColor(score) {
@@ -3564,7 +3564,7 @@ function jvmPauseColor(score) {
 function drawJvmTimelineChartInteractive(svg, results, history) {
   const w = svg.clientWidth || 700;
   const h = svg.clientHeight || 300;
-  const pad = { l: 78, r: 22, t: 28, b: 46 };
+  const pad = { l: 96, r: 22, t: 28, b: 46 };
   const plotW = w - pad.l - pad.r;
   const plotH = h - pad.t - pad.b;
   const t0 = history[0].epochMs;
@@ -3596,14 +3596,20 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * maxRecvQ);
   const yTicksSvg = yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#1a2636"/><text x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="10">${formatMetricValue("recvQ", v)}</text>`).join("");
+  const xTimeTicks = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const epoch = t0 + f * span;
+    const sample = history.reduce((best, s) => Math.abs(s.epochMs - epoch) < Math.abs(best.epochMs - epoch) ? s : best, history[0]);
+    return { px: pad.l + f * plotW, label: timeLabel(sample.t || 0, sample.epochMs) };
+  });
+  const xTimeTicksSvg = xTimeTicks.map(t => `<line x1="${t.px}" x2="${t.px}" y1="${pad.t}" y2="${h - pad.b}" stroke="#1a2636"/><text x="${t.px}" y="${h - pad.b + 14}" text-anchor="middle" fill="#8c9aab" font-size="10">${escapeHtml(t.label)}</text>`).join("");
   svg.innerHTML = `
     <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
+    ${xTimeTicksSvg}
     ${yTicksSvg}
     ${bars}
     ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="#7dd3fc" stroke-width="2.4"/>`}
-    <text x="${pad.l}" y="17" fill="#edf4ff" font-size="12" font-weight="700">Recv-Q + GC pauses</text>
     <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Time (${escapeHtml(resolvedTimeZone())})</text>
-    <text x="4" y="${h / 2}" transform="rotate(-90 4 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Recv-Q (bytes)</text>
+    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Recv-Q (bytes)</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
@@ -3636,7 +3642,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
 function drawJvmScatterChartInteractive(svg, results) {
   const w = svg.clientWidth || 700;
   const h = svg.clientHeight || 300;
-  const pad = { l: 78, r: 22, t: 28, b: 46 };
+  const pad = { l: 96, r: 22, t: 28, b: 46 };
   const plotW = w - pad.l - pad.r;
   const plotH = h - pad.t - pad.b;
   const points = results.filter(result => result.symptoms.detected).map(result => {
@@ -3648,7 +3654,8 @@ function drawJvmScatterChartInteractive(svg, results) {
       delta,
       score: result.score,
       severity: result.severity,
-      signals: result.symptoms.signals.map(signal => signal.signal).join(", ")
+      signals: result.symptoms.signals.map(signal => signal.signal).join(", "),
+      epochMs: result.epochMs
     };
   }).filter(point => {
     if (point.score > 0.5) return !jvmSeriesHidden("scatter_high");
@@ -3664,13 +3671,18 @@ function drawJvmScatterChartInteractive(svg, results) {
   const maxDelta = Math.max(1, ...points.map(point => point.delta));
   const x = value => pad.l + (value / maxDuration) * plotW;
   const y = value => pad.t + plotH - (value / maxDelta) * plotH;
+  const xTicks = [0, 0.25, 0.5, 0.75, 1].map(f => { const v = f * maxDuration; return v < 10 ? Math.round(v * 10) / 10 : Math.round(v); });
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * maxDelta));
+  const xTicksSvg = xTicks.map(v => `<line x1="${x(v)}" x2="${x(v)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#1a2636"/><text x="${x(v)}" y="${h - pad.b + 14}" text-anchor="middle" fill="#8c9aab" font-size="10">${v} ms</text>`).join("");
+  const yTicksSvg = yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#1a2636"/><text x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="10">${formatMetricValue("recvQ", v)}</text>`).join("");
   const dots = points.map(point => `<circle cx="${x(point.durationMs).toFixed(1)}" cy="${y(point.delta).toFixed(1)}" r="4" fill="${jvmPauseColor(point.score)}" opacity=".82"><title>${point.durationMs.toFixed(1)}ms -> Delta Recv-Q ${point.delta}</title></circle>`).join("");
   svg.innerHTML = `
     <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
+    ${xTicksSvg}
+    ${yTicksSvg}
     ${dots}
-    <text x="${pad.l}" y="17" fill="#edf4ff" font-size="12" font-weight="700">Pause duration vs Delta Recv-Q</text>
-    <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Pause duration (ms)</text>
-    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Delta Recv-Q (bytes)</text>
+    <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#8c9aab" font-size="11">Pause duration (ms)</text>
+    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">ΔRecv-Q (bytes)</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
@@ -3731,7 +3743,6 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
     const current = state.chartZoom;
     const range = current.end - current.start;
     setZoom(current.start + Math.min(start, end) * range, current.start + Math.max(start, end) * range);
-    runJvmCorrelation();
     drawJvmCharts();
   });
   zone.addEventListener("mouseleave", () => {
@@ -3788,6 +3799,53 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
     if (state.jvmGc.syncCrosshair !== false) {
       const tlSvg = document.querySelector("[data-jvm-chart='recvq']");
       if (tlSvg?._jvmHideTooltip) tlSvg._jvmHideTooltip();
+    }
+  });
+  zone.addEventListener("click", event => {
+    const rect = svg.getBoundingClientRect();
+    const px = (event.clientX - rect.left) * (w / rect.width);
+    const py = (event.clientY - rect.top) * (h / rect.height);
+    const point = points.reduce((best, item) => {
+      const dx = xFn(item.durationMs) - px;
+      const dy = yFn(item.delta) - py;
+      const d = dx * dx + dy * dy;
+      return !best || d < best.d ? { item, d } : best;
+    }, null)?.item;
+    if (!point || !point.epochMs) return;
+    // Zoom timeline to ±5s around this pause
+    const history = visibleHistory().filter(s => s.epochMs);
+    if (!history.length) return;
+    const t0 = history[0].epochMs, t1 = history[history.length - 1].epochMs;
+    const totalSpan = Math.max(1, t1 - t0);
+    const windowMs = 5000;
+    const center = (point.epochMs - t0) / totalSpan;
+    const halfW = windowMs / totalSpan;
+    const current = state.chartZoom;
+    const range = current.end - current.start;
+    const absCenter = current.start + center * range;
+    setZoom(Math.max(0, absCenter - halfW), Math.min(1, absCenter + halfW));
+    state._bdpCache = null;
+    state.jvmGc.selectedEpoch = null;
+    drawJvmCharts();
+    // Show a red vertical marker on the timeline at the clicked point
+    const tlSvg = document.querySelector("[data-jvm-chart='recvq']");
+    if (tlSvg) {
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      marker.setAttribute("class", "jvm-click-marker");
+      const history2 = visibleHistory().filter(s => s.epochMs);
+      if (history2.length) {
+        const tt0 = history2[0].epochMs, tt1 = history2[history2.length - 1].epochMs;
+        const tSpan = Math.max(1, tt1 - tt0);
+        const mw = tlSvg.clientWidth || 700;
+        const mPad = 96;
+        const mPlotW = mw - mPad - 22;
+        const mx = mPad + ((point.epochMs - tt0) / tSpan) * mPlotW;
+        marker.innerHTML = `<line x1="${mx}" x2="${mx}" y1="28" y2="${(tlSvg.clientHeight || 300) - 46}" stroke="#ff3355" stroke-width="2.5" opacity="1"/><polygon points="${mx - 5},28 ${mx + 5},28 ${mx},36" fill="#ff3355"/>`;
+        marker.style.transition = "opacity .5s";
+        tlSvg.appendChild(marker);
+        setTimeout(() => { marker.style.opacity = "0"; }, 1500);
+        setTimeout(() => { marker.remove(); }, 2000);
+      }
     }
   });
   // Expose function for cross-chart sync
@@ -7833,7 +7891,7 @@ function bindEvents() {
         state._bdpCache = null;
         drawBdpWindowCharts();
       } else if (event.currentTarget.hasAttribute("data-jvm-zoom")) {
-        runJvmCorrelation();
+        state.jvmGc.selectedEpoch = null;
         drawJvmCharts();
       } else if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
     });
@@ -9190,6 +9248,24 @@ document.querySelector("#app").addEventListener("click", event => {
     if (action === "next") state.jvmTable.page = Math.min(total, state.jvmTable.page + 1);
     if (action === "last") state.jvmTable.page = total;
     renderKeepingWorkspacePosition();
+    return;
+  }
+
+  const jvmRow = event.target.closest("[data-jvm-row-epoch]");
+  if (jvmRow) {
+    const epoch = Number(jvmRow.dataset.jvmRowEpoch);
+    if (!epoch) return;
+    // Toggle selection: click again to deselect
+    if (state.jvmGc.selectedEpoch === epoch) {
+      state.jvmGc.selectedEpoch = null;
+      document.querySelectorAll("[data-jvm-row-epoch]").forEach(r => r.style.background = "");
+    } else {
+      state.jvmGc.selectedEpoch = epoch;
+      document.querySelectorAll("[data-jvm-row-epoch]").forEach(r => {
+        r.style.background = Number(r.dataset.jvmRowEpoch) === epoch ? "rgba(93,183,255,.15)" : "";
+      });
+    }
+    drawJvmCharts();
     return;
   }
 
