@@ -18,6 +18,7 @@ import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
 import { alignTimestamps, correlateJvmStalls, DEFAULT_WINDOWS as JVM_DEFAULT_WINDOWS } from "./jvm-correlation.js";
+import { parsePidstat, parseNstat, correlateCpuWithStalls, extractTcpCounters } from "./pidstat-parser.js";
 import { buildSsCollectionCommand, commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { validateSsCommandConfig } from "./ss-command-validation.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
@@ -186,7 +187,7 @@ let state = {
   hiddenBdpSeries: new Set(),
   hiddenChartSeries: new Set(),
   hiddenJvmSeries: new Set(),
-  jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0 },
+  jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0, pidstat: null, nstat: null, cpuCorrelation: null },
   jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
   advisorFindings: [],
   bandwidthIndex: {},
@@ -757,6 +758,7 @@ function renderExportMenu(scope = "analysis") {
       <button data-action="saveCharts"><i class="ri-image-line"></i><span>Export PNG</span><small>Save visible charts as image</small></button>
       <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>PDF report</span><small>Readable incident snapshot</small></button>
       <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><small>PDF, CSV, JSON and chart PNGs</small></button>
+      <button data-export-action="jira"><i class="ri-clipboard-line"></i><span>Copy Jira report</span><small>Wiki markup for ticket</small></button>
     </div>
   </span>`;
 }
@@ -3557,6 +3559,16 @@ function renderJvmGcPanel() {
           <button data-action="parseJvmGcLog" style="margin-top:6px">Parse pasted text</button>
         </details>
         <details style="margin-top:8px"><summary>Recommended JVM logging flags</summary><pre style="font-size:11px;margin-top:4px">${escapeHtml(RECOMMENDED_JVM_LOGGING)}</pre></details>
+        <details style="margin-top:8px"><summary>Optional: pidstat / nstat (CPU correlation)</summary>
+          <p style="font-size:12px;color:var(--muted);margin:6px 0">Import pidstat or nstat output to correlate CPU scheduling with GC pauses.</p>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button data-action="pickPidstatFile">Load pidstat</button>
+            <button data-action="pickNstatFile">Load nstat</button>
+            <input type="file" id="pidstatFileInput" accept=".log,.txt,.out" style="display:none"/>
+            <input type="file" id="nstatFileInput" accept=".log,.txt,.out" style="display:none"/>
+          </div>
+          <pre style="font-size:10px;margin-top:6px;color:var(--muted)">pidstat -druwt -p &lt;pid&gt; 1 &gt; pidstat.log\nnstat -az &gt; nstat.log</pre>
+        </details>
       </div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
           <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
@@ -3565,6 +3577,16 @@ function renderJvmGcPanel() {
           <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}</em>
           <span style="margin-left:auto;font-size:11px;color:var(--soft)">${summary?.recommendations?.map(r => `<b style="color:${r.severity === "critical" ? "#ff5c77" : r.severity === "warning" ? "#ffd166" : "#39d6d6"}">${escapeHtml(r.severity)}</b> ${escapeHtml(r.text)}`).join(" · ") || ""}</span>
         </div>
+        ${gc.cpuCorrelation?.summary ? `<div class="bdp-context-line info" style="margin-top:8px">
+          <i class="ri-cpu-line" style="font-size:16px;color:#a78bfa"></i>
+          <strong>CPU correlation: ${gc.cpuCorrelation.summary.correlatedCount} GC pause(s) with CPU scheduling issues</strong>
+          <em>Max wait: ${gc.cpuCorrelation.summary.maxWaitObserved.toFixed(1)}% · Saturation events: ${gc.cpuCorrelation.summary.cpuSaturationEvents} · High cswch: ${gc.cpuCorrelation.summary.highContextSwitchEvents}</em>
+        </div>` : ""}
+        ${gc.nstat ? `<div class="bdp-context-line info" style="margin-top:4px">
+          <i class="ri-bar-chart-line" style="font-size:16px;color:#7dd3fc"></i>
+          <strong>nstat counters</strong>
+          <em>Retrans: ${gc.nstat.retransSegs} · Timeouts: ${gc.nstat.timeouts} · ListenDrops: ${gc.nstat.listenDrops} · MemPressure: ${gc.nstat.tcpMemoryPressures} · RcvPruned: ${gc.nstat.rcvPruned}</em>
+        </div>` : ""}
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article>
@@ -7530,6 +7552,71 @@ function buildReportChartSvg(metric, width = 760, height = 280) {
   return svg;
 }
 
+function buildJiraReport() {
+  const sockets = reportVisibleSockets();
+  const anomalies = reportRelevantAnomalies(sockets);
+  const hypotheses = diagnosticHypotheses();
+  const now = new Date().toISOString();
+  const lines = [];
+  lines.push(`h1. Network Incident Report`);
+  lines.push(`*Source:* ${state.sourceName}`);
+  lines.push(`*Generated:* ${now}`);
+  lines.push(`*Sockets:* ${sockets.length} | *Anomalies:* ${anomalies.length} | *Critical:* ${sockets.filter(s => s.risk === "critical").length}`);
+  lines.push("");
+  // Hypotheses
+  if (hypotheses.length) {
+    lines.push(`h2. Diagnostic Hypotheses`);
+    for (const h of hypotheses) {
+      lines.push(`h3. ${h.severity.toUpperCase()} — ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
+      lines.push(h.summary);
+      if (h.evidence.length) {
+        lines.push(`*Evidence:*`);
+        h.evidence.forEach(e => lines.push(`* ${e}`));
+      }
+      if (h.counterEvidence.length) {
+        lines.push(`*Counter-evidence:*`);
+        h.counterEvidence.forEach(e => lines.push(`* ${e}`));
+      }
+      if (h.actionableCommands?.length) {
+        lines.push(`*Actionable commands:*`);
+        lines.push(`{code}`);
+        h.actionableCommands.forEach(c => lines.push(c));
+        lines.push(`{code}`);
+      }
+      lines.push("");
+    }
+  }
+  // Top anomalies
+  if (anomalies.length) {
+    lines.push(`h2. Top Anomalies`);
+    lines.push(`||Severity||Socket||Title||`);
+    anomalies.slice(0, 15).forEach(a => {
+      lines.push(`|${a.severity}|${a.socketId}|${a.title}|`);
+    });
+    lines.push("");
+  }
+  // Top sockets
+  const topSockets = reportTopSockets(sockets, 5);
+  if (topSockets.length) {
+    lines.push(`h2. Top Affected Sockets`);
+    lines.push(`||Local||Peer||State||Send-Q||Recv-Q||RTT||`);
+    topSockets.forEach(s => {
+      lines.push(`|${s.local}|${s.peer}|${s.state}|${s.sendQ}|${s.recvQ}|${s.details?.rtt || 0}ms|`);
+    });
+    lines.push("");
+  }
+  // Validation commands
+  lines.push(`h2. Validation Commands`);
+  lines.push(`{code}`);
+  lines.push(`ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all`);
+  if (hypotheses[0]?.commands?.length) hypotheses[0].commands.slice(0, 3).forEach(c => lines.push(c));
+  lines.push(`{code}`);
+  lines.push("");
+  lines.push(`----`);
+  lines.push(`_Generated by Ultimate Network Expert v${APP_VERSION}_`);
+  return lines.join("\n");
+}
+
 function captureIncidentReportCharts(limit = 5) {
   const captures = [];
   const seen = new Set();
@@ -8765,6 +8852,8 @@ function bindEvents() {
       renderKeepingWorkspacePosition();
     }
     if (action === "pickJvmGcFile") { document.querySelector("#jvmGcFileInput")?.click(); }
+    if (action === "pickPidstatFile") { document.querySelector("#pidstatFileInput")?.click(); }
+    if (action === "pickNstatFile") { document.querySelector("#nstatFileInput")?.click(); }
     if (action === "parseJvmGcLog") {
       const text = document.querySelector("#jvmGcLogInput")?.value || "";
       if (!text.trim()) { toast("No GC log", "Paste a GC log or load a file first.", "warn"); return; }
@@ -9406,6 +9495,7 @@ function bindEvents() {
     state.openExportMenuPos = null;
     if (action === "pdf") openIncidentReport();
     if (action === "pack") exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger"));
+    if (action === "jira") { copyTextToClipboard(buildJiraReport()); toast("Jira report copied", "Paste into a Jira ticket description or comment."); }
   }));
   document.querySelectorAll("[data-action-menu]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
@@ -9838,6 +9928,35 @@ function bindEvents() {
       requestAnimationFrame(drawJvmCharts);
     }
     pump();
+  });
+  document.querySelector("#pidstatFileInput")?.addEventListener("change", e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.text().then(text => {
+      const { samples } = parsePidstat(text);
+      state.jvmGc.pidstat = samples;
+      // Run CPU correlation if GC pauses exist
+      if (state.jvmGc.pauses.length) {
+        state.jvmGc.cpuCorrelation = correlateCpuWithStalls({
+          pidstatSamples: samples,
+          gcPauses: state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses,
+          history: visibleHistory().filter(s => s.epochMs),
+          clockOffsetMs: state.jvmGc.clockOffsetMs
+        });
+      }
+      toast("pidstat loaded", `${samples.length} CPU samples parsed from ${file.name}.`);
+      render();
+    });
+  });
+  document.querySelector("#nstatFileInput")?.addEventListener("change", e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.text().then(text => {
+      const { counters } = parseNstat(text);
+      state.jvmGc.nstat = extractTcpCounters(counters);
+      toast("nstat loaded", `${counters.size} counters parsed. Key: retrans=${state.jvmGc.nstat.retransSegs}, timeouts=${state.jvmGc.nstat.timeouts}, listenDrops=${state.jvmGc.nstat.listenDrops}.`);
+      render();
+    });
   });
   document.querySelector("#bdpDirectionSelect")?.addEventListener("change", e => {
     state.prefs.bdpDirection = normalizeBdpDirection(e.target.value);
