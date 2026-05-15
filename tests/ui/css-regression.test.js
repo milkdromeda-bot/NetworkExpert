@@ -320,6 +320,11 @@ test("metric charts expose BDP-like interactive legends and detailed crosshair",
   assert.match(main, /function metricChartSeries\(metric, showThreshold = true\)/);
   assert.match(main, /function renderMetricChartLegend\(metric\)/);
   assert.match(main, /function metricHelp\(metric\)/);
+  assert.match(main, /function metricReliabilityProfile\(metric\)/);
+  assert.match(main, /function metricDiagnosticGuidance\(metric\)/);
+  assert.match(main, /profile:\s*metricReliabilityProfile\(key\)/);
+  assert.match(main, /guidance:\s*metricDiagnosticGuidance\(key\)/);
+  assert.match(main, /Backoff is defensive waiting, not automatically a bad network/);
   assert.match(main, /data-metric-help="\$\{escapeHtml\(metric\)\}"/);
   assert.match(main, /state\.modal = "metricHelp"/);
   assert.match(main, /function ensureFloatingChartTooltip\(\)/);
@@ -328,6 +333,13 @@ test("metric charts expose BDP-like interactive legends and detailed crosshair",
   assert.match(main, /hideFloatingChartTooltipSoon/);
   assert.match(modalView, /state\.modal === "metricHelp" \? "Metric intelligence"/);
   assert.match(modalView, /function renderMetricHelpDetail\(\)/);
+  assert.match(modalView, /Evidence quality/);
+  assert.match(modalView, /Diagnostic reading/);
+  assert.match(modalView, /Next expert checks/);
+  assert.match(modalView, /metric-help-thresholds/);
+  assert.match(modalView, /metric-help-meta/);
+  assert.match(modalView, /help\.profile\.confidence/);
+  assert.match(modalView, /help\.guidance\.investigate/);
   assert.doesNotMatch(modalView, /Column guide/);
   assert.match(main, /data-chart-series-toggle="\$\{escapeHtml\(metric\)\}"/);
   assert.match(main, /data-chart-series-key="\$\{escapeHtml\(item\.key\)\}"/);
@@ -349,6 +361,12 @@ test("metric charts expose BDP-like interactive legends and detailed crosshair",
   assert.match(css, /\.chart-tooltip-floating\.open\s*\{[^}]*display:\s*grid;/s);
   assert.doesNotMatch(css, /\.chart-info:hover \.chart-tooltip,\s*\.chart-info:focus \.chart-tooltip,\s*\.chart-tooltip:hover\s*\{/);
   assert.match(css, /\.metric-help-correlations\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
+  assert.match(css, /\.modal\.metricHelp\s*\{[^}]*width:\s*min\(1040px,\s*calc\(100vw - 30px\)\);/s);
+  assert.match(css, /\.metric-help-detail\s*\{[^}]*align-items:\s*start;/s);
+  assert.match(css, /\.metric-help-thresholds\s*\{[^}]*grid-template-columns:\s*auto minmax\(420px,\s*1fr\);/s);
+  assert.match(css, /\.metric-help-notes\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
+  assert.match(css, /\.metric-help-note-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(190px,\s*1fr\)\);/s);
+  assert.match(css, /\.metric-help-checks \.metric-help-list\s*\{[^}]*columns:\s*3;/s);
 });
 
 test("chart statistics modal keeps the percentile curve to the right of a compact table", () => {

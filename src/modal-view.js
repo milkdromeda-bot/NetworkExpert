@@ -394,18 +394,50 @@ export function createModalView(context) {
 
   function renderMetricHelpDetail() {
     const help = metricHelp(state.helpMetric);
+    const list = items => `<ul class="metric-help-list">${(items || []).map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
     return `<div class="column-help-detail metric-help-detail">
-      <article class="field-card">
-        <span class="tooltip-kicker">Monitoring metric</span>
-        <strong>${escapeHtml(help.label)}</strong>
-        <p>${escapeHtml(help.summary)}</p>
-        <p><b>Source:</b> ${escapeHtml(help.source)}</p>
-        <p><b>Unit:</b> ${escapeHtml(help.unit)}</p>
-      </article>
-      <article class="field-card">
+      <article class="field-card metric-help-thresholds">
         <strong>Current thresholds</strong>
         ${renderThresholdSummary({ metric: help.metric, threshold: help.threshold })}
         <p class="hint">${escapeHtml(help.rationale)}</p>
+      </article>
+      <article class="field-card metric-help-summary">
+        <span class="tooltip-kicker">Monitoring metric</span>
+        <strong>${escapeHtml(help.label)}</strong>
+        <p>${escapeHtml(help.summary)}</p>
+        <div class="metric-help-meta">
+          <span><b>Source</b> ${escapeHtml(help.source)}</span>
+          <span><b>Unit</b> ${escapeHtml(help.unit)}</span>
+        </div>
+      </article>
+      <article class="field-card metric-help-profile">
+        <strong>Evidence quality</strong>
+        <dl class="metric-help-facts">
+          <div><dt>Signal strength</dt><dd>${escapeHtml(help.profile.confidence)}</dd></div>
+          <div><dt>Scope</dt><dd>${escapeHtml(help.profile.scope)}</dd></div>
+          <div><dt>Limits</dt><dd>${escapeHtml(help.profile.limits)}</dd></div>
+        </dl>
+      </article>
+      <article class="field-card metric-help-notes">
+        <strong>Diagnostic reading</strong>
+        <div class="metric-help-note-grid">
+          <section>
+            <span class="tooltip-kicker">Often OK</span>
+            ${list(help.guidance.benign)}
+          </section>
+          <section>
+            <span class="tooltip-kicker">Investigate when</span>
+            ${list(help.guidance.investigate)}
+          </section>
+          <section>
+            <span class="tooltip-kicker">Do not conclude</span>
+            ${list(help.guidance.avoid)}
+          </section>
+        </div>
+      </article>
+      <article class="field-card metric-help-checks">
+        <strong>Next expert checks</strong>
+        ${list(help.guidance.checks)}
       </article>
       <article class="field-card metric-help-correlations">
         <strong>Correlate with</strong>
