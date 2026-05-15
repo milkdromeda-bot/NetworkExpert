@@ -1381,11 +1381,11 @@ button.mega i {
 .command-row input { min-width: 0; }
 .capture-flow-card {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 10px 14px;
-  align-items: center;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
   margin-bottom: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid rgba(57, 214, 214, .42);
   border-left: 4px solid var(--cyan);
   border-radius: 8px;
@@ -1393,23 +1393,32 @@ button.mega i {
     radial-gradient(circle at 0% 0%, rgba(57, 214, 214, .14), transparent 24%),
     linear-gradient(135deg, rgba(12, 42, 54, .82), rgba(8, 13, 20, .92));
 }
+.capture-flow-card > i {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--cyan);
+  font-size: 18px;
+  line-height: 1;
+}
+.capture-flow-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  align-items: start;
+}
 .capture-flow-card strong {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
   color: #dffcff;
   font-size: 13px;
   font-weight: 900;
-  white-space: nowrap;
-}
-.capture-flow-card strong i {
-  color: var(--cyan);
-  font-size: 18px;
+  line-height: 1.25;
 }
 .capture-flow-card span {
   color: #b8c8d8;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.35;
 }
 .capture-flow-card code {
   color: #9ff8ff;

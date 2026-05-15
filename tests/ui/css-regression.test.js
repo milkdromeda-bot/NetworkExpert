@@ -40,6 +40,12 @@ test("import progress is shown in the ss stats header while loading", () => {
 
 test("file import flow has one clear filter entry point", () => {
   assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open file<\/button>/);
+  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open file<\/button>\s*<button data-action="toggleSsOptions"[\s\S]*Capture<\/button>\s*<button data-action="sample10m"[\s\S]*Sample<\/button>/);
+  assert.match(main, /let state = \{\s*raw:\s*""/);
+  assert.match(main, /sourceName:\s*"empty workspace"/);
+  assert.match(main, /annotationDraft:\s*buildAnnotationDraft\(\{ sourceName:\s*"empty workspace" \}\)/);
+  assert.match(main, /ingestRawExpanded:\s*true/);
+  assert.doesNotMatch(main, /raw:\s*SAMPLE/);
   assert.doesNotMatch(main, /filters are offered after file selection/);
   assert.doesNotMatch(main, /class="import-flow-note"/);
   assert.doesNotMatch(main, /data-action="togglePreImportFilters"/);
@@ -53,6 +59,13 @@ test("file import flow has one clear filter entry point", () => {
   assert.doesNotMatch(css, /\.import-flow-note/);
   assert.match(css, /\.preimport-file-card\s*\{[^}]*grid-template-columns:\s*34px minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.preimport-actions\s*\{[^}]*border-top:\s*1px solid rgba\(111,\s*134,\s*160,\s*\.18\);/s);
+});
+
+test("capture helper card aligns title and explanation cleanly", () => {
+  assert.match(main, /<div class="capture-flow-card">\s*<i class="ri-route-line" aria-hidden="true"><\/i>\s*<div class="capture-flow-copy">/s);
+  assert.match(css, /\.capture-flow-card\s*\{[^}]*grid-template-columns:\s*28px minmax\(0,\s*1fr\);[^}]*align-items:\s*start;/s);
+  assert.match(css, /\.capture-flow-copy\s*\{[^}]*display:\s*grid;[^}]*gap:\s*3px;[^}]*min-width:\s*0;/s);
+  assert.match(css, /\.capture-flow-card strong\s*\{[^}]*display:\s*block;[^}]*line-height:\s*1\.25;/s);
 });
 
 test("topbar anomaly pill uses a compact warning icon", () => {

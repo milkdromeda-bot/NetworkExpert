@@ -148,9 +148,9 @@ function tableDefaults() {
 const initialPrefs = loadPrefs();
 
 let state = {
-  raw: SAMPLE,
+  raw: "",
   command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
-  sourceName: "built-in sample",
+  sourceName: "empty workspace",
   sockets: [],
   selectedId: null,
   activeContextId: null,
@@ -183,7 +183,7 @@ let state = {
   serviceOverrides: loadServiceOverrides(),
   serviceOverrideSocketId: "",
   topologyProfiles: loadTopologyProfiles(),
-  topology: loadTopologyForSource("built-in sample"),
+  topology: loadTopologyForSource("empty workspace"),
   topologyEditId: "",
   topologyDraftMatch: "",
   alertRules: loadAlertRules(),
@@ -207,9 +207,9 @@ let state = {
   helpColumn: null,
   ssOptionHelpKey: "-i",
   showSsOptions: false,
-  annotationDraft: buildAnnotationDraft({ sourceName: "built-in sample" }),
+  annotationDraft: buildAnnotationDraft({ sourceName: "empty workspace" }),
   annotationContext: null,
-  ingestRawExpanded: SAMPLE.length <= INGEST_RAW_EAGER_LIMIT,
+  ingestRawExpanded: true,
   openChartMoveMetric: null,
   openChartMovePos: null,
   chartAnnotationMenuContext: null,
@@ -2841,8 +2841,8 @@ function renderIngestPage() {
         <div class="ingest-toolbar">
           <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
           <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open file</button>
-          <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
           <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> Capture</button>
+          <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
           <span class="ingest-toolbar-spacer"></span>
           <button data-action="toggleWordWrap" class="${state.editorWordWrap ? "primary" : ""}" title="Toggle word wrap"><i class="ri-text-wrap"></i> Wrap</button>
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
@@ -2850,8 +2850,11 @@ function renderIngestPage() {
         </div>
         ${activePanel === "capture" ? `<div class="ingest-expand-panel">
           <div class="capture-flow-card">
-            <strong><i class="ri-route-line"></i> Collection first, parsing second</strong>
-            <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
+            <i class="ri-route-line" aria-hidden="true"></i>
+            <div class="capture-flow-copy">
+              <strong>Collection first, parsing second</strong>
+              <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
+            </div>
           </div>
           <div class="command-row">
             <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
