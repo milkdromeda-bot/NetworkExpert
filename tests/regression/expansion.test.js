@@ -6,7 +6,7 @@ import { analyzeSocket, riskForSocket } from "../../src/analysis.js";
 import { DASHBOARD_PRESETS, dashboardSnapshot, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../../src/profiles.js";
 import { parseSs, metricValue } from "../../src/parser.js";
 import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/search.js";
-import { commandCoverage, toggleCommandOption } from "../../src/ss-command.js";
+import { buildSsCollectionCommand, commandCoverage, extractSsSegment, toggleCommandOption } from "../../src/ss-command.js";
 import { withStableSocketIds } from "../../src/timeline.js";
 
 function socketFrom(line, bandwidth = {}) {
@@ -369,4 +369,37 @@ test("command coverage detects compact and long ss options", () => {
   assert.equal(active("--inet-sockopt"), true);
   assert.equal(active("-a"), true);
   assert.equal(active("-A"), true);
+});
+
+test("ss collection builder creates timestamped loop with endpoint filter and tee append", () => {
+  const command = buildSsCollectionCommand("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all", {
+    timestamp: true,
+    loop: true,
+    intervalSeconds: "0.01",
+    srcIp: "192.168.145.205",
+    srcPort: "20002",
+    dstIp: "192.168.145.115",
+    dstPort: "37678",
+    outputPath: "/tmp/lfxbench_tcp-laloRcvMarketSimu_fullgc_lalo.log",
+    appendOutput: true
+  });
+  assert.equal(command, "while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all '( src 192.168.145.205 and sport = :20002 and dst 192.168.145.115 and dport = :37678 )'; sleep 0.01; done | tee -a '/tmp/lfxbench_tcp-laloRcvMarketSimu_fullgc_lalo.log'");
+});
+
+test("ss option coverage and toggles work on wrapped collection commands", () => {
+  const wrapped = buildSsCollectionCommand("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all", {
+    timestamp: true,
+    loop: true,
+    intervalSeconds: "1",
+    dstPort: "443",
+    outputPath: "/tmp/out.log",
+    appendOutput: true
+  });
+  const coverage = commandCoverage(wrapped, SS_OPTIONS);
+  assert.equal(coverage.find(item => item.short === "-i")?.active, true);
+  const withoutInfo = toggleCommandOption(wrapped, "-i", false);
+  assert.equal(commandCoverage(withoutInfo, SS_OPTIONS).find(item => item.short === "-i")?.active, false);
+  assert.match(withoutInfo, /'\( dport = :443 \)'/);
+  assert.match(withoutInfo, /\| tee -a '\/tmp\/out\.log'$/);
+  assert.match(extractSsSegment(wrapped), /^ss -HOntepmi/);
 });

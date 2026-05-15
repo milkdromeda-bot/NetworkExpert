@@ -71,6 +71,20 @@ test("capture helper card aligns title and explanation cleanly", () => {
   assert.match(css, /\.capture-flow-card strong\s*\{[^}]*display:\s*block;[^}]*line-height:\s*1\.25;/s);
 });
 
+test("ss command panel exposes aligned collection parameters", () => {
+  assert.match(main, /import \{ buildSsCollectionCommand, commandCoverage, toggleCommandOption \} from "\.\/ss-command\.js";/);
+  assert.match(main, /ssCommandConfig:\s*\{ timestamp:\s*true,\s*loop:\s*false,\s*intervalSeconds:\s*"1",\s*srcIp:\s*"",\s*srcPort:\s*"",\s*dstIp:\s*"",\s*dstPort:\s*"",\s*outputPath:\s*"",\s*appendOutput:\s*true \}/);
+  assert.match(main, /function renderSsCommandBuilder\(\)/);
+  assert.match(main, /id="ssCmdTimestamp"[\s\S]*Timestamp each run/);
+  assert.match(main, /id="ssCmdLoop"[\s\S]*Repeat command/);
+  assert.match(main, /id="ssCmdInterval"[\s\S]*seconds between runs/);
+  assert.match(main, /id="ssCmdSrcIp"[\s\S]*id="ssCmdSrcPort"[\s\S]*id="ssCmdDstIp"[\s\S]*id="ssCmdDstPort"/);
+  assert.match(main, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
+  assert.match(main, /state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
+  assert.match(css, /\.ss-command-builder\s*\{[^}]*grid-template-columns:\s*minmax\(220px,\s*\.75fr\) minmax\(360px,\s*1\.35fr\) minmax\(240px,\s*\.9fr\);/s);
+  assert.match(css, /\.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/s);
+});
+
 test("topbar anomaly pill uses a compact warning icon", () => {
   assert.match(main, /incidentWarning/);
   assert.doesNotMatch(main, /incidentCloud/);

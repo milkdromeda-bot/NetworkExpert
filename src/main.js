@@ -18,7 +18,7 @@ import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
 import { alignTimestamps, correlateJvmStalls, DEFAULT_WINDOWS as JVM_DEFAULT_WINDOWS } from "./jvm-correlation.js";
-import { commandCoverage, toggleCommandOption } from "./ss-command.js";
+import { buildSsCollectionCommand, commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
 import { applyChartZoomOperation, clampZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "./chart-zoom.js";
@@ -150,6 +150,7 @@ const initialPrefs = loadPrefs();
 let state = {
   raw: "",
   command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
+  ssCommandConfig: { timestamp: true, loop: false, intervalSeconds: "1", srcIp: "", srcPort: "", dstIp: "", dstPort: "", outputPath: "", appendOutput: true },
   sourceName: "empty workspace",
   sockets: [],
   selectedId: null,
@@ -752,6 +753,44 @@ function renderSsOptionControl(option, coverage, selectedKey) {
       </label>
     </div>
   `;
+}
+
+function renderSsCommandBuilder() {
+  const c = state.ssCommandConfig || {};
+  return `<div class="ss-command-builder">
+    <section class="ss-command-group ss-command-group--mode">
+      <strong>Collection mode</strong>
+      <label class="check inline"><input id="ssCmdTimestamp" type="checkbox" ${c.timestamp !== false ? "checked" : ""}/> Timestamp each run</label>
+      <label class="check inline"><input id="ssCmdLoop" type="checkbox" ${c.loop ? "checked" : ""}/> Repeat command</label>
+      <label><span>Interval</span><input id="ssCmdInterval" type="number" min="0.001" step="0.001" value="${escapeHtml(c.intervalSeconds || "1")}" /><small>seconds between runs, e.g. 0.01</small></label>
+    </section>
+    <section class="ss-command-group ss-command-group--filter">
+      <strong>Socket filter</strong>
+      <label><span>Source IP</span><input id="ssCmdSrcIp" placeholder="192.168.145.205" value="${escapeHtml(c.srcIp || "")}" /></label>
+      <label><span>Source port</span><input id="ssCmdSrcPort" placeholder="20002" value="${escapeHtml(c.srcPort || "")}" /></label>
+      <label><span>Destination IP</span><input id="ssCmdDstIp" placeholder="192.168.145.115" value="${escapeHtml(c.dstIp || "")}" /></label>
+      <label><span>Destination port</span><input id="ssCmdDstPort" placeholder="37678" value="${escapeHtml(c.dstPort || "")}" /></label>
+    </section>
+    <section class="ss-command-group ss-command-group--output">
+      <strong>Output</strong>
+      <label><span>Log file</span><input id="ssCmdOutputPath" placeholder="/tmp/networkexpert_ss.log" value="${escapeHtml(c.outputPath || "")}" /></label>
+      <label class="check inline"><input id="ssCmdAppend" type="checkbox" ${c.appendOutput !== false ? "checked" : ""}/> Append with tee -a</label>
+    </section>
+  </div>`;
+}
+
+function readSsCommandConfig() {
+  return {
+    timestamp: Boolean(document.querySelector("#ssCmdTimestamp")?.checked),
+    loop: Boolean(document.querySelector("#ssCmdLoop")?.checked),
+    intervalSeconds: document.querySelector("#ssCmdInterval")?.value.trim() || "1",
+    srcIp: document.querySelector("#ssCmdSrcIp")?.value.trim() || "",
+    srcPort: document.querySelector("#ssCmdSrcPort")?.value.trim() || "",
+    dstIp: document.querySelector("#ssCmdDstIp")?.value.trim() || "",
+    dstPort: document.querySelector("#ssCmdDstPort")?.value.trim() || "",
+    outputPath: document.querySelector("#ssCmdOutputPath")?.value.trim() || "",
+    appendOutput: Boolean(document.querySelector("#ssCmdAppend")?.checked)
+  };
 }
 
 let _bdpPrecomputeTimer = 0;
@@ -2856,6 +2895,7 @@ function renderIngestPage() {
               <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
             </div>
           </div>
+          ${renderSsCommandBuilder()}
           <div class="command-row">
             <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
             <button class="primary" data-action="applyCommand" title="Apply"><i class="ri-check-line"></i> Apply</button>
@@ -6013,6 +6053,7 @@ function moveVisibleChartMetric(metric, direction) {
 function resetAllState() {
   state.raw = "";
   state.command = "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all";
+  state.ssCommandConfig = { timestamp: true, loop: false, intervalSeconds: "1", srcIp: "", srcPort: "", dstIp: "", dstPort: "", outputPath: "", appendOutput: true };
   setSourceName("empty workspace");
   state.sockets = [];
   state.selectedId = null;
@@ -7941,7 +7982,8 @@ function bindEvents() {
     }
     if (action === "applyCommand") {
       const commandInput = document.querySelector("#commandInput");
-      state.command = commandInput ? commandInput.value : state.command;
+      state.ssCommandConfig = readSsCommandConfig();
+      state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
       toast("ss command updated", "The collection command builder was updated. Existing pasted text is unchanged.");
       renderKeepingWorkspacePosition();
     }
