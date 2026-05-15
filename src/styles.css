@@ -1486,6 +1486,16 @@ button.mega i {
 .ss-command-group--filter {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+.ss-command-example {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: rgba(93, 183, 255, .34);
+  background: rgba(93, 183, 255, .08);
+  color: #d8efff;
+  font-size: 12px;
+}
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .ss-option-chip-wrap {
   display: inline-flex;
@@ -7614,6 +7624,21 @@ button.mega.primary:hover,
   color: #ffffff;
   border-bottom-color: #5fa8e8;
   background: #19161f;
+}
+
+.pref-tabs .tab.active {
+  border-color: #2f6f9f !important;
+  border-bottom-color: #2f6f9f !important;
+  background: #1476bd !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 12px rgba(13,126,181,.25), inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+
+.pref-tabs .tab.active:hover,
+.pref-tabs .tab.active:focus {
+  border-color: #4d8dbd !important;
+  border-bottom-color: #4d8dbd !important;
+  background: #176fae !important;
 }
 
 .tab:hover {

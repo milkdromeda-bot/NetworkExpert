@@ -79,10 +79,15 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /id="ssCmdLoop"[\s\S]*Repeat command/);
   assert.match(main, /id="ssCmdInterval"[\s\S]*seconds between runs/);
   assert.match(main, /id="ssCmdSrcIp"[\s\S]*id="ssCmdSrcPort"[\s\S]*id="ssCmdDstIp"[\s\S]*id="ssCmdDstPort"/);
+  assert.match(main, /placeholder="source address"/);
+  assert.doesNotMatch(main, /placeholder="192\.168\.145\.205"/);
+  assert.match(main, /data-action="loadSsCommandMarketDataExample"/);
+  assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"0\.01"[\s\S]*srcIp:\s*"192\.168\.145\.205"[\s\S]*outputPath:\s*"\/tmp\/lfxbench_tcp-laloRcvMarketSimu_fullgc_lalo\.log"/);
   assert.match(main, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
   assert.match(main, /state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
   assert.match(css, /\.ss-command-builder\s*\{[^}]*grid-template-columns:\s*minmax\(220px,\s*\.75fr\) minmax\(360px,\s*1\.35fr\) minmax\(240px,\s*\.9fr\);/s);
   assert.match(css, /\.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/s);
+  assert.match(css, /\.ss-command-example\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*justify-self:\s*start;/s);
 });
 
 test("topbar anomaly pill uses a compact warning icon", () => {
@@ -198,6 +203,8 @@ test("preferences active tab matches the primary blue selected state", () => {
   assert.match(css, /\.pref-tabs\s*\{[^}]*display:\s*inline-flex;[^}]*border:\s*1px solid rgba\(255,255,255,\.08\);[^}]*border-radius:\s*10px;/s);
   assert.match(css, /\.pref-tabs \.tab\s*\{[^}]*min-height:\s*30px;[^}]*border-radius:\s*7px;/s);
   assert.match(css, /\.pref-tabs \.tab\.active\s*\{[^}]*border-color:\s*#2f6f9f;[^}]*background:\s*#1476bd;[^}]*color:\s*#ffffff;/s);
+  assert.match(css, /\.pref-tabs \.tab\.active\s*\{[^}]*border-color:\s*#2f6f9f !important;[^}]*background:\s*#1476bd !important;[^}]*color:\s*#ffffff !important;/s);
+  assert.match(css, /\.pref-tabs \.tab\.active:hover,\s*\.pref-tabs \.tab\.active:focus\s*\{[^}]*background:\s*#176fae !important;/s);
 });
 
 test("analysis conversation stack keeps vertical gaps compact", () => {

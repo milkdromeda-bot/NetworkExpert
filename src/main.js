@@ -766,14 +766,15 @@ function renderSsCommandBuilder() {
     </section>
     <section class="ss-command-group ss-command-group--filter">
       <strong>Socket filter</strong>
-      <label><span>Source IP</span><input id="ssCmdSrcIp" placeholder="192.168.145.205" value="${escapeHtml(c.srcIp || "")}" /></label>
-      <label><span>Source port</span><input id="ssCmdSrcPort" placeholder="20002" value="${escapeHtml(c.srcPort || "")}" /></label>
-      <label><span>Destination IP</span><input id="ssCmdDstIp" placeholder="192.168.145.115" value="${escapeHtml(c.dstIp || "")}" /></label>
-      <label><span>Destination port</span><input id="ssCmdDstPort" placeholder="37678" value="${escapeHtml(c.dstPort || "")}" /></label>
+      <label><span>Source IP</span><input id="ssCmdSrcIp" placeholder="source address" value="${escapeHtml(c.srcIp || "")}" /></label>
+      <label><span>Source port</span><input id="ssCmdSrcPort" placeholder="source port" value="${escapeHtml(c.srcPort || "")}" /></label>
+      <label><span>Destination IP</span><input id="ssCmdDstIp" placeholder="destination address" value="${escapeHtml(c.dstIp || "")}" /></label>
+      <label><span>Destination port</span><input id="ssCmdDstPort" placeholder="destination port" value="${escapeHtml(c.dstPort || "")}" /></label>
+      <button type="button" class="ss-command-example" data-action="loadSsCommandMarketDataExample"><i class="ri-magic-line"></i> Fill market-data example</button>
     </section>
     <section class="ss-command-group ss-command-group--output">
       <strong>Output</strong>
-      <label><span>Log file</span><input id="ssCmdOutputPath" placeholder="/tmp/networkexpert_ss.log" value="${escapeHtml(c.outputPath || "")}" /></label>
+      <label><span>Log file</span><input id="ssCmdOutputPath" placeholder="/tmp/networkexpert_ss.log (optional)" value="${escapeHtml(c.outputPath || "")}" /></label>
       <label class="check inline"><input id="ssCmdAppend" type="checkbox" ${c.appendOutput !== false ? "checked" : ""}/> Append with tee -a</label>
     </section>
   </div>`;
@@ -7985,6 +7986,23 @@ function bindEvents() {
       state.ssCommandConfig = readSsCommandConfig();
       state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
       toast("ss command updated", "The collection command builder was updated. Existing pasted text is unchanged.");
+      renderKeepingWorkspacePosition();
+    }
+    if (action === "loadSsCommandMarketDataExample") {
+      const commandInput = document.querySelector("#commandInput");
+      state.ssCommandConfig = {
+        timestamp: true,
+        loop: true,
+        intervalSeconds: "0.01",
+        srcIp: "192.168.145.205",
+        srcPort: "20002",
+        dstIp: "192.168.145.115",
+        dstPort: "37678",
+        outputPath: "/tmp/lfxbench_tcp-laloRcvMarketSimu_fullgc_lalo.log",
+        appendOutput: true
+      };
+      state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
+      toast("Example loaded", "The ss command fields now contain the market-data receiver example.");
       renderKeepingWorkspacePosition();
     }
     if (action === "sample") { state.raw = SAMPLE; state.ingestRawExpanded = true; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
