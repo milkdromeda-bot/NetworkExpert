@@ -3282,7 +3282,7 @@ function renderJvmGcPanel() {
   const jvmRows = jvmPagedRows(corr?.results || [], gc.safepoints || []);
   return `<section class="panel jvm-gc-panel">
     <div class="panel-head">
-      <div class="panel-title"><span>JVM Stall / GC Correlation</span></div>
+      <div class="panel-title"><span>JVM Stall / GC Correlation</span>${hasPauses ? `<button class="jvm-clear-btn" data-action="clearJvmGcLog" title="Clear GC data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}</div>
       <div class="bdp-controls">
         <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
         <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
@@ -3303,8 +3303,9 @@ function renderJvmGcPanel() {
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
           <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} total</strong>
-          <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}</em>
-          <button class="mini" data-action="clearJvmGcLog" style="margin-left:auto">Clear GC data</button>
+          <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}
+            <span class="field-info" tabindex="0" aria-label="Score interpretation"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
+          </em>
         </div>
         ${summary?.recommendations?.length ? `<div class="jvm-recs">${summary.recommendations.map(r => `<div class="investigation-note ${r.severity}"><b>${escapeHtml(r.severity)}</b> <span>${escapeHtml(r.text)}</span></div>`).join("")}</div>` : ""}
         <div class="jvm-chart-section">
