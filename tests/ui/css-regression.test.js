@@ -40,7 +40,10 @@ test("import progress is shown in the ss stats header while loading", () => {
 
 test("file import flow has one clear filter entry point", () => {
   assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open file<\/button>/);
-  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open file<\/button>\s*<button data-action="toggleSsOptions"[\s\S]*Capture<\/button>\s*<button data-action="sample10m"[\s\S]*Sample<\/button>/);
+  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open file<\/button>\s*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>\s*<button data-action="sample10m"[\s\S]*Sample<\/button>/);
+  assert.doesNotMatch(main, /<button data-action="toggleSsOptions"[^>]*>[\s\S]*Capture<\/button>/);
+  assert.match(main, /toast\("ss command updated", "The collection command builder was updated\. Existing pasted text is unchanged\."\);/);
+  assert.doesNotMatch(main, /Capture command updated/);
   assert.match(main, /let state = \{\s*raw:\s*""/);
   assert.match(main, /sourceName:\s*"empty workspace"/);
   assert.match(main, /annotationDraft:\s*buildAnnotationDraft\(\{ sourceName:\s*"empty workspace" \}\)/);

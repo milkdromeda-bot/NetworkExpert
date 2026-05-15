@@ -2841,7 +2841,7 @@ function renderIngestPage() {
         <div class="ingest-toolbar">
           <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
           <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open file</button>
-          <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> Capture</button>
+          <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> ss command</button>
           <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
           <span class="ingest-toolbar-spacer"></span>
           <button data-action="toggleWordWrap" class="${state.editorWordWrap ? "primary" : ""}" title="Toggle word wrap"><i class="ri-text-wrap"></i> Wrap</button>
@@ -7151,7 +7151,7 @@ function buildIncidentReportHtml(chartCaptures = []) {
                 <article><span>Filtered sockets in report</span><strong>${escapeHtml(formatNumber(sockets.length))}</strong></article>
               </div>
               <div>
-                <h3>Capture command</h3>
+                <h3>ss command</h3>
                 <pre class="report-code">${escapeHtml(state.command || "n/a")}</pre>
               </div>
               <div>
@@ -7502,7 +7502,7 @@ async function buildIncidentReportPdf(chartAssets = []) {
     `Visible sockets: ${formatNumber(visibleSockets.length)}`,
     `Relevant anomalies: ${formatNumber(anomalies.length)}`,
     `Critical sockets: ${formatNumber(visibleSockets.filter(socket => socket.risk === "critical").length)}`,
-    `Capture command: ${state.command || "n/a"}`
+    `ss command: ${state.command || "n/a"}`
   ];
   y = drawPdfSection(page, "Incident frame", metaLines, margin, y, contentWidth, fonts, colors) - 8;
 
@@ -7942,7 +7942,7 @@ function bindEvents() {
     if (action === "applyCommand") {
       const commandInput = document.querySelector("#commandInput");
       state.command = commandInput ? commandInput.value : state.command;
-      toast("Capture command updated", "The ss command builder was updated. Existing pasted text is unchanged.");
+      toast("ss command updated", "The collection command builder was updated. Existing pasted text is unchanged.");
       renderKeepingWorkspacePosition();
     }
     if (action === "sample") { state.raw = SAMPLE; state.ingestRawExpanded = true; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
