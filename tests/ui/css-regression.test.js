@@ -40,7 +40,8 @@ test("import progress is shown in the ss stats header while loading", () => {
 
 test("file import flow has one clear filter entry point", () => {
   assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open file<\/button>/);
-  assert.match(main, /class="import-flow-note"[\s\S]*filters are offered after file selection/);
+  assert.doesNotMatch(main, /filters are offered after file selection/);
+  assert.doesNotMatch(main, /class="import-flow-note"/);
   assert.doesNotMatch(main, /data-action="togglePreImportFilters"/);
   assert.doesNotMatch(main, /showPreImportFilters/);
   assert.match(modalView, /state\.modal === "preImport" \? "Import options"/);
@@ -49,7 +50,7 @@ test("file import flow has one clear filter entry point", () => {
   assert.doesNotMatch(main, /id="preImportEnabled"/);
   assert.match(main, /toast\("No filter selected", "Use Import full file, or choose at least one preset or field filter\.", "warn"\);/);
   assert.match(main, /if \(!file\) \{\s*document\.querySelector\("#fileInput"\)\?\.click\(\);/s);
-  assert.match(css, /\.import-flow-note\s*\{[^}]*border-radius:\s*999px;[^}]*text-overflow:\s*ellipsis;/s);
+  assert.doesNotMatch(css, /\.import-flow-note/);
   assert.match(css, /\.preimport-file-card\s*\{[^}]*grid-template-columns:\s*34px minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.preimport-actions\s*\{[^}]*border-top:\s*1px solid rgba\(111,\s*134,\s*160,\s*\.18\);/s);
 });
@@ -78,8 +79,11 @@ test("product splash is opened from the version badge and stays bounded", () => 
   assert.match(main, /const APP_VERSION = "1\.0\.0\.0";/);
   assert.match(main, /const APP_SPLASH_IMAGE = "\.\/images\/ultimateNetworkExpert\.png";/);
   assert.match(main, /class="version-pill"[^>]*data-action="showSplash"[\s\S]*v\$\{escapeHtml\(APP_VERSION\)\}/);
+  assert.match(main, /<button class="app-title-info" type="button" data-action="showSplash" aria-label="Open application details">/);
   assert.match(main, /action === "showSplash"[\s\S]*state\.modal = "splash"/);
   assert.match(css, /\.version-pill\s*\{[^}]*max-width:\s*96px;/s);
+  assert.match(css, /\.app-title-info\s*\{[^}]*min-height:\s*22px;[^}]*padding:\s*0;[^}]*cursor:\s*pointer;/s);
+  assert.match(css, /\.app-title-tooltip\s*\{[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);[^}]*width:\s*min\(260px,\s*calc\(100vw - 28px\)\);/s);
   assert.match(css, /\.modal\.splash\s*\{[^}]*width:\s*min\(940px,\s*calc\(100vw - 30px\)\);/s);
   assert.match(css, /\.splash-art img\s*\{[^}]*width:\s*100%;[^}]*max-height:\s*min\(62vh,\s*620px\);[^}]*object-fit:\s*contain;/s);
   assert.match(css, /\.splash-meta p\s*\{[^}]*overflow-wrap:\s*anywhere;/s);

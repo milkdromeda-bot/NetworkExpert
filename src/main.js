@@ -2347,14 +2347,14 @@ function render() {
             <h1>
               Ultimate Network Expert
               <button class="version-pill" data-action="showSplash" title="Show product splash screen and version" aria-label="Show Ultimate Network Expert version">v${escapeHtml(APP_VERSION)}</button>
-              <span class="app-title-info" tabindex="0" aria-label="Application details">
+              <button class="app-title-info" type="button" data-action="showSplash" aria-label="Open application details">
                 <i class="ri-information-line"></i>
                 <span class="app-title-tooltip" role="tooltip">
                   <strong>World-class Linux ss socket analysis</strong>
                   <span>TCP diagnostics, memory, timelines, conversations, dashboards, alerts, and before/after comparison.</span>
                   <small>Source: ${escapeHtml(state.sourceName)}</small>
                 </span>
-              </span>
+              </button>
             </h1>
           </div>
         </div>
@@ -2846,7 +2846,6 @@ function renderIngestPage() {
         <div class="ingest-toolbar">
           <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
           <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open file</button>
-          <span class="import-flow-note"><i class="ri-filter-3-line"></i> filters are offered after file selection</span>
           <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
           <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> Capture</button>
           <span class="ingest-toolbar-spacer"></span>
@@ -8626,6 +8625,13 @@ function bindEvents() {
     state.guideTab = event.currentTarget.dataset.guideTab;
     render();
   }));
+  document.querySelector("#guideSearchInput")?.addEventListener("input", event => {
+    state.guideSearch = event.target.value;
+    const query = event.target.value.toLowerCase();
+    document.querySelectorAll(".guide-content .guide-card, .guide-content .usecase-card, .guide-content .guide-command-card, .guide-content .guide-video-card, .guide-content .guide-ref-link").forEach(el => {
+      el.style.display = query && !el.textContent.toLowerCase().includes(query) ? "none" : "";
+    });
+  });
   document.querySelector(".chart-context-menu")?.addEventListener("click", event => {
     event.stopPropagation();
   });
