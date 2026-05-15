@@ -8613,10 +8613,6 @@ function bindEvents() {
       state.openSsEditorThemeMenu = !state.openSsEditorThemeMenu;
       renderKeepingWorkspacePosition();
     }
-    if (action === "showRawInput") {
-      state.ingestRawExpanded = true;
-      renderKeepingWorkspacePosition();
-    }
     if (action === "toggleGuidedChecklist") {
       state.prefs.guidedChecklistCollapsed = !state.prefs.guidedChecklistCollapsed;
       savePrefs();
