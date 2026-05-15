@@ -87,6 +87,24 @@ function configuredLinkCapacityMbps() {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+function ssCommandTimestamp(date = new Date()) {
+  const pad = value => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function defaultSsLogPath(date = new Date()) {
+  return `/tmp/networkexpert_ss_${ssCommandTimestamp(date)}.log`;
+}
+
+function defaultSsCommandConfig() {
+  return { timestamp: true, loop: false, intervalSeconds: "1", srcIp: "", srcPort: "", dstIp: "", dstPort: "", outputPath: defaultSsLogPath(), appendOutput: true };
+}
+
+function parseUiIntervalSeconds(value) {
+  const number = Number(String(value || "1").trim().replace(",", "."));
+  return Number.isFinite(number) ? number : 1;
+}
+
 function applySsEditorThemePreview(value) {
   const theme = normalizeSsEditorTheme(value);
   const panel = document.querySelector(".ingest-source-panel");
@@ -150,7 +168,7 @@ const initialPrefs = loadPrefs();
 let state = {
   raw: "",
   command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
-  ssCommandConfig: { timestamp: true, loop: false, intervalSeconds: "1", srcIp: "", srcPort: "", dstIp: "", dstPort: "", outputPath: "", appendOutput: true },
+  ssCommandConfig: defaultSsCommandConfig(),
   sourceName: "empty workspace",
   sockets: [],
   selectedId: null,
@@ -757,6 +775,8 @@ function renderSsOptionControl(option, coverage, selectedKey) {
 
 function renderSsCommandBuilder() {
   const c = state.ssCommandConfig || {};
+  const interval = parseUiIntervalSeconds(c.intervalSeconds);
+  const teeRisk = Boolean(c.outputPath && c.appendOutput !== false && c.loop && interval <= 0.05);
   return `<div class="ss-command-builder">
     <section class="ss-command-group ss-command-group--mode">
       <strong>Collection mode</strong>
@@ -770,12 +790,13 @@ function renderSsCommandBuilder() {
       <label><span>Source port</span><input id="ssCmdSrcPort" placeholder="source port" value="${escapeHtml(c.srcPort || "")}" /></label>
       <label><span>Destination IP</span><input id="ssCmdDstIp" placeholder="destination address" value="${escapeHtml(c.dstIp || "")}" /></label>
       <label><span>Destination port</span><input id="ssCmdDstPort" placeholder="destination port" value="${escapeHtml(c.dstPort || "")}" /></label>
-      <button type="button" class="ss-command-example" data-action="loadSsCommandMarketDataExample"><i class="ri-magic-line"></i> Fill market-data example</button>
+      <button type="button" class="ss-command-example" data-action="loadSsCommandEndpointExample"><i class="ri-magic-line"></i> Fill endpoint example</button>
     </section>
     <section class="ss-command-group ss-command-group--output">
       <strong>Output</strong>
-      <label><span>Log file</span><input id="ssCmdOutputPath" placeholder="/tmp/networkexpert_ss.log (optional)" value="${escapeHtml(c.outputPath || "")}" /></label>
+      <label><span>Log file</span><input id="ssCmdOutputPath" placeholder="${escapeHtml(defaultSsLogPath())}" value="${escapeHtml(c.outputPath || "")}" /></label>
       <label class="check inline"><input id="ssCmdAppend" type="checkbox" ${c.appendOutput !== false ? "checked" : ""}/> Append with tee -a</label>
+      ${teeRisk ? `<div class="ss-command-warning"><i class="ri-error-warning-line"></i><span>At ${escapeHtml(String(c.intervalSeconds))}s, terminal output plus <code>tee</code> can become the bottleneck. The recorder may not sustain the requested frequency; prefer local disk, tmpfs, a larger interval, or redirect only if precise cadence matters.</span></div>` : ""}
     </section>
   </div>`;
 }
@@ -6054,7 +6075,7 @@ function moveVisibleChartMetric(metric, direction) {
 function resetAllState() {
   state.raw = "";
   state.command = "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all";
-  state.ssCommandConfig = { timestamp: true, loop: false, intervalSeconds: "1", srcIp: "", srcPort: "", dstIp: "", dstPort: "", outputPath: "", appendOutput: true };
+  state.ssCommandConfig = defaultSsCommandConfig();
   setSourceName("empty workspace");
   state.sockets = [];
   state.selectedId = null;
@@ -7988,21 +8009,21 @@ function bindEvents() {
       toast("ss command updated", "The collection command builder was updated. Existing pasted text is unchanged.");
       renderKeepingWorkspacePosition();
     }
-    if (action === "loadSsCommandMarketDataExample") {
+    if (action === "loadSsCommandEndpointExample") {
       const commandInput = document.querySelector("#commandInput");
       state.ssCommandConfig = {
         timestamp: true,
         loop: true,
         intervalSeconds: "0.01",
-        srcIp: "192.168.145.205",
-        srcPort: "20002",
-        dstIp: "192.168.145.115",
-        dstPort: "37678",
-        outputPath: "/tmp/lfxbench_tcp-laloRcvMarketSimu_fullgc_lalo.log",
+        srcIp: "10.0.0.10",
+        srcPort: "50000",
+        dstIp: "10.0.0.20",
+        dstPort: "443",
+        outputPath: defaultSsLogPath(),
         appendOutput: true
       };
       state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
-      toast("Example loaded", "The ss command fields now contain the market-data receiver example.");
+      toast("Example loaded", "The ss command fields now contain a generic endpoint filter example.");
       renderKeepingWorkspacePosition();
     }
     if (action === "sample") { state.raw = SAMPLE; state.ingestRawExpanded = true; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }

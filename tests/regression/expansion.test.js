@@ -386,6 +386,17 @@ test("ss collection builder creates timestamped loop with endpoint filter and te
   assert.equal(command, "while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all '( src 192.168.145.205 and sport = :20002 and dst 192.168.145.115 and dport = :37678 )'; sleep 0.01; done | tee -a '/tmp/lfxbench_tcp-laloRcvMarketSimu_fullgc_lalo.log'");
 });
 
+test("ss collection builder accepts comma decimal intervals", () => {
+  const command = buildSsCollectionCommand("ss -HOntepmi", {
+    timestamp: true,
+    loop: true,
+    intervalSeconds: "0,01",
+    outputPath: "/tmp/networkexpert_ss_20260515_103715.log",
+    appendOutput: true
+  });
+  assert.match(command, /sleep 0\.01; done \| tee -a '\/tmp\/networkexpert_ss_20260515_103715\.log'$/);
+});
+
 test("ss option coverage and toggles work on wrapped collection commands", () => {
   const wrapped = buildSsCollectionCommand("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all", {
     timestamp: true,

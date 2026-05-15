@@ -1496,6 +1496,27 @@ button.mega i {
   color: #d8efff;
   font-size: 12px;
 }
+.ss-command-warning {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px 9px;
+  border: 1px solid rgba(246, 160, 79, .42);
+  border-radius: 7px;
+  background: rgba(246, 160, 79, .08);
+  color: #ffd6a8;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.ss-command-warning i {
+  color: #f6a04f;
+  font-size: 15px;
+}
+.ss-command-warning code {
+  color: #fff0d8;
+}
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .ss-option-chip-wrap {
   display: inline-flex;
@@ -5571,6 +5592,7 @@ th:focus-within .column-tooltip,
   gap: 3px;
   width: max-content;
   max-width: 100%;
+  margin: 4px 0 8px;
   padding: 3px;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 10px;

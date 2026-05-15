@@ -73,7 +73,8 @@ test("capture helper card aligns title and explanation cleanly", () => {
 
 test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /import \{ buildSsCollectionCommand, commandCoverage, toggleCommandOption \} from "\.\/ss-command\.js";/);
-  assert.match(main, /ssCommandConfig:\s*\{ timestamp:\s*true,\s*loop:\s*false,\s*intervalSeconds:\s*"1",\s*srcIp:\s*"",\s*srcPort:\s*"",\s*dstIp:\s*"",\s*dstPort:\s*"",\s*outputPath:\s*"",\s*appendOutput:\s*true \}/);
+  assert.match(main, /ssCommandConfig:\s*defaultSsCommandConfig\(\)/);
+  assert.match(main, /function defaultSsLogPath\(date = new Date\(\)\)[\s\S]*\/tmp\/networkexpert_ss_\$\{ssCommandTimestamp\(date\)\}\.log/);
   assert.match(main, /function renderSsCommandBuilder\(\)/);
   assert.match(main, /id="ssCmdTimestamp"[\s\S]*Timestamp each run/);
   assert.match(main, /id="ssCmdLoop"[\s\S]*Repeat command/);
@@ -81,13 +82,18 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /id="ssCmdSrcIp"[\s\S]*id="ssCmdSrcPort"[\s\S]*id="ssCmdDstIp"[\s\S]*id="ssCmdDstPort"/);
   assert.match(main, /placeholder="source address"/);
   assert.doesNotMatch(main, /placeholder="192\.168\.145\.205"/);
-  assert.match(main, /data-action="loadSsCommandMarketDataExample"/);
-  assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"0\.01"[\s\S]*srcIp:\s*"192\.168\.145\.205"[\s\S]*outputPath:\s*"\/tmp\/lfxbench_tcp-laloRcvMarketSimu_fullgc_lalo\.log"/);
+  assert.match(main, /data-action="loadSsCommandEndpointExample"/);
+  assert.doesNotMatch(main, /market-data example/);
+  assert.doesNotMatch(main, /lfxbench_tcp-laloRcvMarketSimu/);
+  assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"0\.01"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
+  assert.match(main, /const teeRisk = Boolean\(c\.outputPath && c\.appendOutput !== false && c\.loop && interval <= 0\.05\);/);
+  assert.match(main, /terminal output plus <code>tee<\/code> can become the bottleneck/);
   assert.match(main, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
   assert.match(main, /state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
   assert.match(css, /\.ss-command-builder\s*\{[^}]*grid-template-columns:\s*minmax\(220px,\s*\.75fr\) minmax\(360px,\s*1\.35fr\) minmax\(240px,\s*\.9fr\);/s);
   assert.match(css, /\.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/s);
   assert.match(css, /\.ss-command-example\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*justify-self:\s*start;/s);
+  assert.match(css, /\.ss-command-warning\s*\{[^}]*grid-template-columns:\s*18px minmax\(0,\s*1fr\);[^}]*border:\s*1px solid rgba\(246,\s*160,\s*79,\s*\.42\);/s);
 });
 
 test("topbar anomaly pill uses a compact warning icon", () => {
@@ -200,7 +206,7 @@ test("modal headers stay visible while long preference dialogs scroll", () => {
 
 test("preferences active tab matches the primary blue selected state", () => {
   assert.match(main, /<div class="tabs pref-tabs">/);
-  assert.match(css, /\.pref-tabs\s*\{[^}]*display:\s*inline-flex;[^}]*border:\s*1px solid rgba\(255,255,255,\.08\);[^}]*border-radius:\s*10px;/s);
+  assert.match(css, /\.pref-tabs\s*\{[^}]*display:\s*inline-flex;[^}]*margin:\s*4px 0 8px;[^}]*border:\s*1px solid rgba\(255,255,255,\.08\);[^}]*border-radius:\s*10px;/s);
   assert.match(css, /\.pref-tabs \.tab\s*\{[^}]*min-height:\s*30px;[^}]*border-radius:\s*7px;/s);
   assert.match(css, /\.pref-tabs \.tab\.active\s*\{[^}]*border-color:\s*#2f6f9f;[^}]*background:\s*#1476bd;[^}]*color:\s*#ffffff;/s);
   assert.match(css, /\.pref-tabs \.tab\.active\s*\{[^}]*border-color:\s*#2f6f9f !important;[^}]*background:\s*#1476bd !important;[^}]*color:\s*#ffffff !important;/s);

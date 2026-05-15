@@ -51,6 +51,11 @@ function cleanPort(value) {
   return String(value || "").trim().replace(/^:/, "");
 }
 
+function parseIntervalSeconds(value) {
+  const number = Number(String(value || "1").trim().replace(",", "."));
+  return Number.isFinite(number) ? Math.max(0.001, number) : 1;
+}
+
 function baseSsSegment(command) {
   return (extractSsSegment(command) || "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all")
     .replace(/\s+['"]?\([^)]*\)['"]?\s*$/g, "")
@@ -71,7 +76,7 @@ export function buildSsCollectionCommand(baseCommand, config = {}) {
   const ss = `${baseSsSegment(baseCommand)}${filter ? ` ${shellSingleQuote(filter)}` : ""}`.trim();
   const timestamp = config.timestamp !== false;
   const loop = Boolean(config.loop);
-  const interval = Math.max(0.001, Number(config.intervalSeconds || 1));
+  const interval = parseIntervalSeconds(config.intervalSeconds);
   const outputPath = String(config.outputPath || "").trim();
   let command = loop
     ? `while true; do ${timestamp ? "date --iso-8601=ns; " : ""}${ss}; sleep ${interval}; done`
