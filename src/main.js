@@ -8767,10 +8767,27 @@ function bindEvents() {
   }));
   document.querySelector("#guideSearchInput")?.addEventListener("input", event => {
     state.guideSearch = event.target.value;
-    const query = event.target.value.toLowerCase();
-    document.querySelectorAll(".guide-content .guide-card, .guide-content .usecase-card, .guide-content .guide-command-card, .guide-content .guide-video-card, .guide-content .guide-ref-link").forEach(el => {
-      el.style.display = query && !el.textContent.toLowerCase().includes(query) ? "none" : "";
+    const query = event.target.value.trim();
+    const content = document.querySelector(".guide-content");
+    if (!content) return;
+    // Remove previous highlights
+    content.querySelectorAll("mark.guide-hl").forEach(m => {
+      m.replaceWith(m.textContent);
     });
+    if (!query) return;
+    // Highlight matches in text nodes
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+    const walk = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walk.nextNode()) { if (regex.test(walk.currentNode.textContent)) nodes.push(walk.currentNode); regex.lastIndex = 0; }
+    nodes.forEach(node => {
+      const span = document.createElement("span");
+      span.innerHTML = node.textContent.replace(regex, `<mark class="guide-hl">$1</mark>`);
+      node.parentNode.replaceChild(span, node);
+    });
+    // Scroll to first match
+    const first = content.querySelector("mark.guide-hl");
+    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   document.querySelector(".chart-context-menu")?.addEventListener("click", event => {
     event.stopPropagation();

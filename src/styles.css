@@ -8155,10 +8155,11 @@ progress::-webkit-progress-value {
   gap: 2px;
 }
 .guide-nav-item {
-  display: flex;
+  display: flex !important;
   align-items: center;
+  justify-content: flex-start !important;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -8167,9 +8168,10 @@ progress::-webkit-progress-value {
   font-weight: 500;
   cursor: pointer;
   transition: background .15s, color .15s;
-  text-align: left;
+  text-align: left !important;
+  width: 100%;
 }
-.guide-nav-item i { font-size: 16px; }
+.guide-nav-item i { font-size: 16px; min-width: 16px; text-align: center; }
 .guide-nav-item:hover {
   background: rgba(255,255,255,.04);
   color: #c4d0de;
@@ -8290,3 +8292,10 @@ progress::-webkit-progress-value {
 }
 .guide-ref-link:hover { color: #a8e4ff; }
 .guide-ref-link i { margin-right: 6px; font-size: 12px; }
+
+mark.guide-hl {
+  background: rgba(255,210,50,.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
