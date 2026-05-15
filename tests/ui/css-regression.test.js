@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
+const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
 const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
 const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
 
@@ -193,6 +194,37 @@ test("BDP window module exposes cautious controls and bounded charts", () => {
   assert.match(css, /\.bdp-summary-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6,\s*minmax\(150px,\s*1fr\)\);/s);
   assert.match(css, /\.bdp-chart-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(300px,\s*1fr\)\);/s);
   assert.match(css, /@media \(max-width:\s*720px\)[\s\S]*\.bdp-context-line\s*\{[^}]*grid-template-columns:\s*1fr;/s);
+});
+
+test("metric charts expose BDP-like interactive legends and detailed crosshair", () => {
+  assert.match(main, /hiddenChartSeries:\s*new Set\(\)/);
+  assert.match(main, /function chartSeriesKey\(metric, key\)/);
+  assert.match(main, /function metricChartSeries\(metric, showThreshold = true\)/);
+  assert.match(main, /function renderMetricChartLegend\(metric\)/);
+  assert.match(main, /data-chart-series-toggle="\$\{escapeHtml\(metric\)\}"/);
+  assert.match(main, /data-chart-series-key="\$\{escapeHtml\(item\.key\)\}"/);
+  assert.match(main, /chartSeriesHidden\(metric,\s*"value"\)/);
+  assert.match(main, /chartSeriesHidden\(metric,\s*"warn"\)/);
+  assert.match(main, /chartSeriesHidden\(metric,\s*"danger"\)/);
+  assert.match(main, /document\.querySelectorAll\("\[data-chart-series-toggle\]"\)\.forEach\(button => button\.addEventListener\("click"/);
+  assert.match(main, /state\.hiddenChartSeries\.has\(fullKey\) \? state\.hiddenChartSeries\.delete\(fullKey\) : state\.hiddenChartSeries\.add\(fullKey\)/);
+  assert.match(main, /redrawChartCardMetric\(metric, `series:\$\{key\}`\)/);
+  assert.match(main, /function nearestChartRowIndex\(rows, pct\)/);
+  assert.match(main, /const tooltipMarkup = \(metric, rows, pct, x, b, subtle = false\) =>/);
+  assert.match(main, /Delta/);
+  assert.match(css, /\.chart-card-body\s*\{[^}]*flex-direction:\s*column;/s);
+  assert.match(css, /\.metric-chart-legend\s*\{[^}]*flex-wrap:\s*wrap;/s);
+  assert.match(css, /\.chart-legend-item\s*\{[^}]*border-radius:\s*999px;/s);
+  assert.match(css, /\.chart-legend-item\.is-muted\s*\{[^}]*text-decoration:\s*line-through;/s);
+});
+
+test("chart statistics modal keeps the percentile curve to the right of a compact table", () => {
+  assert.match(modalView, /<article class="stats-table-card">[\s\S]*<strong>Percentile table<\/strong>[\s\S]*<\/article>\s*<article class="stats-dist-card">/);
+  assert.match(modalView, /<article class="stats-table-card">[\s\S]*<strong>Percentile table<\/strong>/);
+  assert.match(css, /\.chart-stats-layout\s*\{[^}]*grid-template-columns:\s*minmax\(190px,\s*\.44fr\) minmax\(460px,\s*1\.56fr\);/s);
+  assert.match(css, /\.stats-summary-card\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*display:\s*flex;/s);
+  assert.match(css, /\.stats-window\s*\{[^}]*flex:\s*0 0 auto;[^}]*border:\s*1px solid rgba\(38,\s*50,\s*65,\s*\.9\);/s);
+  assert.doesNotMatch(css, /\.stats-dist-card\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
 });
 
 test("dashboard preset selection keeps the picker responsive", () => {

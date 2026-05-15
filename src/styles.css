@@ -5219,9 +5219,67 @@ th:focus-within .column-tooltip,
   color: var(--muted);
   font-size: 12px;
 }
+.chart-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.metric-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  margin-top: 0;
+}
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid rgba(82, 101, 122, .7);
+  border-radius: 999px;
+  background: rgba(15, 22, 33, .84);
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+.chart-legend-item:hover,
+.chart-legend-item:focus-visible {
+  border-color: rgba(125, 211, 252, .86);
+  color: var(--text);
+  box-shadow: 0 0 0 2px rgba(125, 211, 252, .16);
+}
+.chart-legend-item i {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--legend-color);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.07);
+}
+.chart-legend-item span,
+.chart-legend-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chart-legend-item small {
+  color: var(--muted);
+  font-weight: 700;
+}
+.chart-legend-item.is-muted {
+  opacity: .42;
+  text-decoration: line-through;
+}
 .chart-stats-layout {
   display: grid;
-  grid-template-columns: minmax(260px, .8fr) minmax(260px, .9fr) minmax(420px, 1.4fr);
+  grid-template-columns: minmax(190px, .44fr) minmax(460px, 1.56fr);
   gap: 12px;
   align-items: stretch;
 }
@@ -5234,23 +5292,34 @@ th:focus-within .column-tooltip,
   padding: 14px;
 }
 .stats-summary-card {
-  display: grid;
-  align-content: space-between;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 18px;
+  min-height: 0;
+  padding-block: 12px;
 }
 .stats-summary-card strong {
   display: block;
-  margin-top: 8px;
-  font-size: 22px;
+  margin-top: 5px;
+  font-size: 21px;
+}
+.stats-summary-card p {
+  max-width: 520px;
+  margin-bottom: 0;
 }
 .stats-window {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   color: var(--soft);
   font-size: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(38, 50, 65, .9);
+  padding: 8px 10px;
+  border: 1px solid rgba(38, 50, 65, .9);
+  border-radius: 8px;
+  background: rgba(5, 9, 16, .62);
 }
 .stats-table {
   width: 100%;

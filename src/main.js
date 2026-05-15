@@ -164,6 +164,7 @@ let state = {
   rawVersion: 0,
   chartRenderToken: 0,
   hiddenBdpSeries: new Set(),
+  hiddenChartSeries: new Set(),
   jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0 },
   advisorFindings: [],
   bandwidthIndex: {},
@@ -3016,7 +3017,10 @@ function renderChartsPage() {
             ${renderChartMoveMenu(m)}
           </div>
         </div>
-        <div class="panel-body"><svg class="chart small-chart ${layout.density}" data-mini-chart="${m}"></svg></div>
+        <div class="panel-body chart-card-body">
+          <svg class="chart small-chart ${layout.density}" data-mini-chart="${m}"></svg>
+          ${renderMetricChartLegend(m)}
+        </div>
       </div>`).join("")}
     </section>
     <section class="panel">
@@ -5262,6 +5266,23 @@ function nearestChartRow(rows, pct) {
   ), rows[0]);
 }
 
+function nearestChartRowIndex(rows, pct) {
+  if (!rows.length) return -1;
+  const first = chartRowTime(rows[0]);
+  const last = chartRowTime(rows[rows.length - 1]);
+  const target = first + Math.max(0, Math.min(1, pct)) * Math.max(1, last - first);
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  rows.forEach((row, index) => {
+    const distance = Math.abs(chartRowTime(row) - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}
+
 function preserveExtremesDownsample(rows, metric, budget) {
   if (rows.length <= budget || budget < 8) return rows;
   const middleBudget = Math.max(2, budget - 2);
@@ -5479,6 +5500,7 @@ function resetAllState() {
   state.selectedMapEdgeId = null;
   state.history = [];
   state.chartMetrics = ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"];
+  state.hiddenChartSeries = new Set();
   state.correlation = { x: "rtt", y: "sendQ" };
   state.analysisDirty = true;
   state.bandwidthIndex = {};
@@ -5589,6 +5611,47 @@ function chartAxisDomain(metric, values, thresholds = []) {
   const max = rawMax + padding;
   return { min, max, span: Math.max(1, max - min), zoomed: true };
 }
+
+function chartSeriesKey(metric, key) {
+  return `${metric}:${key}`;
+}
+
+function chartSeriesHidden(metric, key) {
+  return state.hiddenChartSeries?.has(chartSeriesKey(metric, key));
+}
+
+function metricChartSeries(metric, showThreshold = true) {
+  const threshold = thresholdFor(metric);
+  const series = [
+    { key: "value", label: metricLabel(metric), color: metricColor(metric), kind: "metric" }
+  ];
+  if (showThreshold && state.prefs.chartLayout.showThresholds) {
+    if (Number.isFinite(threshold.warn)) {
+      series.push({ key: "warn", label: "Warning", color: "#ff9f43", kind: "threshold", value: threshold.warn });
+    }
+    if (Number.isFinite(threshold.danger)) {
+      series.push({ key: "danger", label: "Danger", color: "#ff5c77", kind: "threshold", value: threshold.danger });
+    }
+  }
+  return series;
+}
+
+function renderMetricChartLegend(metric) {
+  if (!state.prefs.chartLayout.showLegend) return "";
+  const items = metricChartSeries(metric, true);
+  return `<div class="chart-legend metric-chart-legend" data-chart-legend="${escapeHtml(metric)}" aria-label="${escapeHtml(metricLabel(metric))} series">
+    ${items.map(item => {
+      const hidden = chartSeriesHidden(metric, item.key);
+      const detail = item.kind === "threshold" ? ` - ${formatMetricValue(metric, item.value)}` : "";
+      return `<button type="button" class="chart-legend-item ${hidden ? "is-muted" : ""}" data-chart-series-toggle="${escapeHtml(metric)}" data-chart-series-key="${escapeHtml(item.key)}" aria-pressed="${hidden ? "false" : "true"}" title="Toggle ${escapeHtml(item.label)}${escapeHtml(detail)}">
+        <i style="--legend-color:${item.color}"></i>
+        <span>${escapeHtml(item.label)}</span>
+        ${detail ? `<small>${escapeHtml(detail.replace(/^ - /, ""))}</small>` : ""}
+      </button>`;
+    }).join("")}
+  </div>`;
+}
+
 function renderChartThresholdOverlay(items, pad, w, h) {
   const labels = items
     .filter(item => item.show)
@@ -5651,6 +5714,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const barWidth = Math.max(4, Math.min(18, (w - pad.l - pad.r) / Math.max(8, data.length) * 0.55));
   const pointRadius = chartPointRadius(data.length, style);
   const showPoints = style === "points" || style === "xy" || data.length <= 1500;
+  const showMetricSeries = !chartSeriesHidden(metric, "value");
   const anyDanger = values.some(v => thresholdSeverity(metric, v) === "danger");
   const anyWarn = values.some(v => thresholdSeverity(metric, v) === "warn");
   const stroke = anyDanger ? "#ff5c77" : anyWarn ? "#ff9f43" : metricColor(metric);
@@ -5663,8 +5727,8 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     const row = data.reduce((best, item) => Math.abs(chartRowTime(item) - targetTime) < Math.abs(chartRowTime(best) - targetTime) ? item : best, data[0] || {});
     return { x: pad.l + f * (w - pad.l - pad.r), label: timeLabel(row?.t || 0, row?.epochMs) };
   });
-  const showWarnLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.warn);
-  const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger);
+  const showWarnLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.warn) && !chartSeriesHidden(metric, "warn");
+  const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger) && !chartSeriesHidden(metric, "danger");
   const warnY = showWarnLine ? y(t.warn) : 0;
   const dangerY = showDangerLine ? y(t.danger) : 0;
   const thresholdOverlay = renderChartThresholdOverlay([
@@ -5690,10 +5754,10 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${axis.zoomed ? " - zoomed Y" : ""}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(metric)} ${metricUnit(metric) ? `(${metricUnit(metric)})` : ""}</text>
-    ${style === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
-    ${style === "bars" ? bars : ""}
-    ${style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
-    ${style === "points" || style === "xy" ? points : ""}
+    ${showMetricSeries && style === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
+    ${showMetricSeries && style === "bars" ? bars : ""}
+    ${showMetricSeries && style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
+    ${showMetricSeries && (style === "points" || style === "xy") ? points : ""}
     ${annotationOverlay}
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
@@ -6088,6 +6152,35 @@ function attachChartInteractions(svg) {
     bottom: Number(svg.dataset.plotBottom)
   });
   const clampX = x => Math.max(bounds().left, Math.min(bounds().right, x));
+  const tooltipMarkup = (metric, rows, pct, x, b, subtle = false) => {
+    const idx = nearestChartRowIndex(rows, pct);
+    const row = rows[idx] || {};
+    const prev = idx > 0 ? rows[idx - 1] : null;
+    const value = Number(row[metric] || 0);
+    const prevValue = prev ? Number(prev[metric] || 0) : null;
+    const delta = Number.isFinite(prevValue) ? value - prevValue : null;
+    const severity = thresholdSeverity(metric, value);
+    const threshold = thresholdFor(metric);
+    const items = [
+      !chartSeriesHidden(metric, "value") ? { label: metricLabel(metric), color: thresholdColor(metric, value), value: formatMetricValue(metric, value) } : null,
+      Number.isFinite(delta) ? { label: "Delta", color: delta > 0 ? "#7dd3fc" : delta < 0 ? "#a7f3d0" : "#94a3b8", value: `${delta >= 0 ? "+" : ""}${formatMetricValue(metric, delta)}` } : null,
+      Number.isFinite(threshold.warn) && !chartSeriesHidden(metric, "warn") ? { label: "Warn", color: "#ff9f43", value: formatMetricValue(metric, threshold.warn) } : null,
+      Number.isFinite(threshold.danger) && !chartSeriesHidden(metric, "danger") ? { label: "Danger", color: "#ff5c77", value: formatMetricValue(metric, threshold.danger) } : null
+    ].filter(Boolean).slice(0, 5);
+    const tooltipOpacity = chartTooltipOpacity();
+    const width = 222;
+    const lineH = 16;
+    const showSeverity = severity === "warn" || severity === "danger";
+    const height = Math.max(62, 36 + items.length * lineH + (showSeverity ? 15 : 0));
+    const tooltipX = Math.max(b.left + 6, Math.min(x + 12, b.right - width - 6));
+    const tooltipY = b.top + 8;
+    return `
+      <rect x="${tooltipX}" y="${tooltipY}" width="${width}" height="${height}" rx="8" fill="#0b1018" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
+      <text x="${tooltipX + 10}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="700">${escapeHtml(timeLabel(row.t || 0, row.epochMs))}</text>
+      ${showSeverity ? `<text x="${tooltipX + 142}" y="${tooltipY + 18}" fill="${thresholdColor(metric, value)}" font-size="10" font-weight="800">${escapeHtml(severity.toUpperCase())}</text>` : ""}
+      ${items.map((item, itemIndex) => `<circle cx="${tooltipX + 12}" cy="${tooltipY + 34 + itemIndex * lineH}" r="${subtle ? 2.6 : 3.2}" fill="${item.color}"/><text x="${tooltipX + 20}" y="${tooltipY + 38 + itemIndex * lineH}" fill="#dde8f4" font-size="10.5">${escapeHtml(item.label)}: ${escapeHtml(item.value)}</text>`).join("")}
+    `;
+  };
   const drawOverlay = (x, dragX = null) => {
     const b = bounds();
     const lx = layer();
@@ -6096,17 +6189,12 @@ function attachChartInteractions(svg) {
     const metric = svg.dataset.metric || state.prefs.graphMetric;
     const renderStyle = svg.dataset.renderStyle || state.prefs.graphStyle;
     const rows = renderableHistory(visibleHistory(metric), metric, renderStyle, svg.clientWidth || 640).rows;
-    const row = nearestChartRow(rows, pct);
-    const value = row[metric] || 0;
-    const tooltipOpacity = chartTooltipOpacity();
     const selection = dragX == null ? "" : `<rect x="${Math.min(startX, dragX)}" y="${b.top}" width="${Math.abs(dragX - startX)}" height="${b.bottom - b.top}" fill="#5db7ff" opacity=".18" stroke="#5db7ff" stroke-dasharray="5 4"/>`;
     lx.innerHTML = `
       ${selection}
       <line x1="${x}" x2="${x}" y1="${b.top}" y2="${b.bottom}" stroke="#edf4ff" stroke-width="1.4" stroke-dasharray="4 4"/>
       <line x1="${b.left}" x2="${b.right}" y1="${b.bottom}" y2="${b.bottom}" stroke="#52657a"/>
-      <rect x="${Math.min(x + 10, b.right - 190)}" y="${b.top + 8}" width="180" height="48" rx="6" fill="#0b1018" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
-      <text x="${Math.min(x + 20, b.right - 180)}" y="${b.top + 28}" fill="#edf4ff" font-size="12">${timeLabel(row.t || 0, row.epochMs)}</text>
-      <text x="${Math.min(x + 20, b.right - 180)}" y="${b.top + 46}" fill="${thresholdColor(metric, value)}" font-size="12">${metricLabel(metric)}: ${formatMetricValue(metric, value)}</text>
+      ${tooltipMarkup(metric, rows, pct, x, b)}
     `;
   };
   svg.addEventListener("pointermove", event => {
@@ -6129,14 +6217,9 @@ function attachChartInteractions(svg) {
         const m = other.dataset.metric || state.prefs.graphMetric;
         const rs = other.dataset.renderStyle || state.prefs.graphStyle;
         const rows = renderableHistory(visibleHistory(m), m, rs, other.clientWidth || 640).rows;
-        const row = nearestChartRow(rows, pct);
-        const val = row?.[m] || 0;
-        const tooltipOpacity = chartTooltipOpacity();
         ol.innerHTML = `
           <line x1="${ox}" x2="${ox}" y1="${oTop}" y2="${oBottom}" stroke="#edf4ff" stroke-width="1" stroke-dasharray="4 4" opacity=".5"/>
-          <rect x="${Math.min(ox + 10, oRight - 190)}" y="${oTop + 8}" width="180" height="48" rx="6" fill="#0b1018" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
-          <text x="${Math.min(ox + 20, oRight - 180)}" y="${oTop + 28}" fill="#edf4ff" font-size="12">${timeLabel(row?.t || 0, row?.epochMs)}</text>
-          <text x="${Math.min(ox + 20, oRight - 180)}" y="${oTop + 46}" fill="${thresholdColor(m, val)}" font-size="12">${metricLabel(m)}: ${formatMetricValue(m, val)}</text>
+          ${tooltipMarkup(m, rows, pct, ox, { left: oLeft, right: oRight, top: oTop, bottom: oBottom }, true)}
         `;
       });
     }
@@ -8509,6 +8592,22 @@ function bindEvents() {
       if (card) { card.remove(); return; }
     }
     renderKeepingWorkspacePosition();
+  }));
+  document.querySelectorAll("[data-chart-series-toggle]").forEach(button => button.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const metric = event.currentTarget.dataset.chartSeriesToggle;
+    const key = event.currentTarget.dataset.chartSeriesKey;
+    const fullKey = chartSeriesKey(metric, key);
+    if (!state.hiddenChartSeries) state.hiddenChartSeries = new Set();
+    state.hiddenChartSeries.has(fullKey) ? state.hiddenChartSeries.delete(fullKey) : state.hiddenChartSeries.add(fullKey);
+    document.querySelectorAll("[data-chart-series-toggle]").forEach(item => {
+      if (item.dataset.chartSeriesToggle !== metric || item.dataset.chartSeriesKey !== key) return;
+      const hidden = state.hiddenChartSeries.has(fullKey);
+      item.classList.toggle("is-muted", hidden);
+      item.setAttribute("aria-pressed", hidden ? "false" : "true");
+    });
+    redrawChartCardMetric(metric, `series:${key}`);
   }));
   document.querySelectorAll("[data-chart-stats]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
