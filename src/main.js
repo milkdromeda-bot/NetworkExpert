@@ -2347,13 +2347,8 @@ function render() {
             <h1>
               Ultimate Network Expert
               <button class="version-pill" data-action="showSplash" title="Show product splash screen and version" aria-label="Show Ultimate Network Expert version">v${escapeHtml(APP_VERSION)}</button>
-              <button class="app-title-info" type="button" data-action="showSplash" aria-label="Open application details">
+              <button class="app-title-info" type="button" data-action="showSplash" title="About Ultimate Network Expert" aria-label="Open application details">
                 <i class="ri-information-line"></i>
-                <span class="app-title-tooltip" role="tooltip">
-                  <strong>World-class Linux ss socket analysis</strong>
-                  <span>TCP diagnostics, memory, timelines, conversations, dashboards, alerts, and before/after comparison.</span>
-                  <small>Source: ${escapeHtml(state.sourceName)}</small>
-                </span>
               </button>
             </h1>
           </div>

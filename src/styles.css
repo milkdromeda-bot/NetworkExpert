@@ -397,42 +397,6 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
 .app-title-info i {
   font-size: 14px;
 }
-.app-title-tooltip {
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 12px);
-  transform: translateX(-50%);
-  z-index: 90;
-  display: none;
-  width: min(260px, calc(100vw - 28px));
-  padding: 9px 10px;
-  border: 1px solid rgba(57, 214, 214, .5);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #101926, #070b11);
-  box-shadow: var(--shadow);
-  color: var(--soft);
-  font-size: 11px;
-  line-height: 1.35;
-  text-align: left;
-}
-.app-title-tooltip strong,
-.app-title-tooltip span,
-.app-title-tooltip small {
-  display: block;
-}
-.app-title-tooltip strong {
-  color: var(--text);
-  margin-bottom: 3px;
-}
-.app-title-tooltip small {
-  margin-top: 5px;
-  color: var(--muted);
-}
-.app-title-info:hover .app-title-tooltip,
-.app-title-info:focus .app-title-tooltip,
-.app-title-tooltip:hover {
-  display: block;
-}
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .app-tabs {
   display: inline-flex;
@@ -6994,8 +6958,7 @@ input[type="radio"] {
 .row-menu,
 .chart-move-menu,
 .column-tooltip,
-.chart-tooltip,
-.app-title-tooltip {
+.chart-tooltip {
   border-color: #3b3842;
   background: #1f1d24;
   box-shadow: none;
