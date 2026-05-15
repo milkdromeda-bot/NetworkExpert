@@ -5816,7 +5816,9 @@ function renderGuide() {
     accessRoleLabel,
     ubuntuProfileLabel,
     renderFields,
-    commandForPeer
+    commandForPeer,
+    analysisTabGuide,
+    analysisTabDocs: ANALYSIS_TAB_GUIDE
   }).renderGuide();
 }
 

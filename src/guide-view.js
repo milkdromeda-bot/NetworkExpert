@@ -1,7 +1,7 @@
 import { ACCESS_ROLES, LINUX_PROFILES } from "./expert-config.js";
 
 export function createGuideView(context) {
-  const { state, html, icons, escapeHtml, isAnalystRole, isLxcProfile, envCommand, linuxProfileLabel, accessRoleLabel, ubuntuProfileLabel, renderFields, commandForPeer } = context;
+  const { state, html, icons, escapeHtml, isAnalystRole, isLxcProfile, envCommand, linuxProfileLabel, accessRoleLabel, ubuntuProfileLabel, renderFields, commandForPeer, analysisTabGuide, analysisTabDocs = [] } = context;
 
   function renderGuide() {
     const tab = state.guideTab || "best";
@@ -24,6 +24,7 @@ export function createGuideView(context) {
     ];
     const sections = [
       { key: "best", icon: "ri-lightbulb-line", label: "Best Practices" },
+      { key: "views", icon: "ri-layout-grid-line", label: "Analysis Views" },
       { key: "cases", icon: "ri-route-line", label: "Use Cases" },
       { key: "commands", icon: "ri-terminal-box-line", label: "Commands" },
       { key: "fields", icon: "ri-table-line", label: "Fields" },
@@ -45,6 +46,7 @@ export function createGuideView(context) {
       </aside>
       <main class="guide-content">
         ${tab === "best" ? renderGuideBestPractices() : ""}
+        ${tab === "views" ? renderGuideAnalysisViews() : ""}
         ${tab === "cases" ? renderGuideUseCases() : ""}
         ${tab === "commands" ? commands.map(([title, cmd], index) => renderGuideCommandCard(title, cmd, index)).join("") : ""}
         ${tab === "fields" ? renderFields() : ""}
@@ -65,6 +67,36 @@ export function createGuideView(context) {
       </header>
       <pre class="code">${escapeHtml(command)}</pre>
     </article>`;
+  }
+
+  function renderGuideAnalysisViews() {
+    const active = analysisTabGuide?.("diagnosis") || analysisTabDocs[0];
+    const docs = analysisTabDocs.length ? analysisTabDocs : active ? [active] : [];
+    return `<div class="analysis-view-guide-modal guide-analysis-views">
+      <section class="analysis-view-guide-hero">
+        <div>
+          <span class="tooltip-kicker">Analysis navigation</span>
+          <strong>Choose the right view for the question</strong>
+          <p>Analysis views move from high-level hypotheses to raw socket evidence. Start broad, then drill into the exact proof before deciding root cause.</p>
+        </div>
+        <ol>
+          <li><b>Start with Diagnosis</b> for prioritized hypotheses.</li>
+          <li><b>Use Advisor</b> for next checks and mitigation direction.</li>
+          <li><b>Verify in Sockets, Timeline, Charts, or Expert</b> before deciding root cause.</li>
+        </ol>
+      </section>
+      <section class="analysis-view-guide-grid">
+        ${docs.map(tab => `<article class="field-card analysis-view-guide-card">
+          <header><span>${escapeHtml(tab.label)}</span></header>
+          <p>${escapeHtml(tab.short)}</p>
+          <dl>
+            <div><dt>Use it when</dt><dd>${escapeHtml(tab.use)}</dd></div>
+            <div><dt>Shows</dt><dd>${escapeHtml(tab.shows)}</dd></div>
+            <div><dt>Best next move</dt><dd>${escapeHtml(tab.next)}</dd></div>
+          </dl>
+        </article>`).join("")}
+      </section>
+    </div>`;
   }
   
   function renderGuideBestPractices() {

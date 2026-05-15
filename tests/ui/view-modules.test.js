@@ -134,11 +134,43 @@ test("guide view renders best-practice shell through injected dependencies", () 
     accessRoleLabel: () => "Analyst",
     ubuntuProfileLabel: () => "Ubuntu",
     renderFields: () => "<section>fields</section>",
-    commandForPeer: () => "ss"
+    commandForPeer: () => "ss",
+    analysisTabDocs: []
   }).renderGuide();
   assert.match(guide, /guide-shell/);
   assert.match(guide, /Best Practices/);
   assert.match(guide, /LXC/);
+});
+
+test("guide view includes analysis view documentation as a native section", () => {
+  const state = { guideTab: "views", prefs: { accessRole: "analyst", linuxProfile: "lxc" }, sockets: [] };
+  const guide = createGuideView({
+    state,
+    html,
+    icons,
+    escapeHtml,
+    isAnalystRole: () => true,
+    isLxcProfile: () => true,
+    envCommand: command => command,
+    linuxProfileLabel: () => "LXC",
+    accessRoleLabel: () => "Analyst",
+    ubuntuProfileLabel: () => "Ubuntu",
+    renderFields: () => "<section>fields</section>",
+    commandForPeer: () => "ss",
+    analysisTabGuide: () => null,
+    analysisTabDocs: [{
+      id: "diagnosis",
+      label: "diagnosis",
+      short: "Prioritized root-cause hypotheses.",
+      use: "Start here after parsing.",
+      shows: "Confidence and supporting signals.",
+      next: "Verify in sockets or charts."
+    }]
+  }).renderGuide();
+  assert.match(guide, /Analysis Views/);
+  assert.match(guide, /Analysis navigation/);
+  assert.match(guide, /Best next move/);
+  assert.match(guide, /Prioritized root-cause hypotheses/);
 });
 
 test("guide references omit dead youtube resource cards", () => {
@@ -155,7 +187,8 @@ test("guide references omit dead youtube resource cards", () => {
     accessRoleLabel: () => "Analyst",
     ubuntuProfileLabel: () => "Ubuntu",
     renderFields: () => "<section>fields</section>",
-    commandForPeer: () => "ss"
+    commandForPeer: () => "ss",
+    analysisTabDocs: []
   }).renderGuide();
   assert.match(guide, /Video Resources/);
   assert.match(guide, /Brendan Gregg - Linux Performance Tools/);
