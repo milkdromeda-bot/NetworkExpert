@@ -3292,8 +3292,8 @@ function renderJvmGcPanel() {
         <p><strong>Import GC / safepoint log</strong> — Java 17+ Unified Logging format.</p>
         <textarea id="jvmGcLogInput" rows="6" placeholder="Paste GC log here or drag-drop a file..."></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <button class="primary" data-action="parseJvmGcLog">Parse GC log</button>
-          <button data-action="pickJvmGcFile">Load file</button>
+          <button class="primary" data-action="pickJvmGcFile">Load file</button>
+          <button data-action="parseJvmGcLog">Parse GC log</button>
           <input type="file" id="jvmGcFileInput" accept=".log,.txt" style="display:none"/>
         </div>
         <details style="margin-top:12px"><summary>Recommended JVM logging flags</summary><pre style="font-size:11px;margin-top:4px">${escapeHtml(RECOMMENDED_JVM_LOGGING)}</pre></details>
