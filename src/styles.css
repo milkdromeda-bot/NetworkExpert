@@ -5674,7 +5674,7 @@ th:focus-within .column-tooltip,
 }
 .bdp-context-line {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
