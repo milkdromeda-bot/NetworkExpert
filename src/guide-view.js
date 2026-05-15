@@ -5,6 +5,7 @@ export function createGuideView(context) {
 
   function renderGuide() {
     const tab = state.guideTab || "best";
+    const search = state.guideSearch || "";
     const hostEvidence = isAnalystRole()
       ? envCommand("ip -s link show\nbridge link\ntc -s qdisc show\nethtool -S <iface> | egrep -i 'drop|err|timeout|reset|miss|crc'", { host: true })
       : isLxcProfile()
@@ -18,27 +19,37 @@ export function createGuideView(context) {
       ["Epoch timestamp in milliseconds", envCommand("t_ms=500; while true; do printf 'EPOCH_MS=%s\\n' \"$(date +%s%3N)\"; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$(awk \\\"BEGIN { print $t_ms / 1000 }\\\")\"; done >> ss-epoch-ms.log")],
       ["Quick kernel summary", envCommand("ss -s")],
       ["Top listening ports", envCommand("ss -Hlnptu")],
-      [isAnalystRole() ? "Ops handoff: host-side evidence to request" : "Host-side LXD evidence", hostEvidence],
+      [isAnalystRole() ? "Ops handoff: host-side evidence" : "Host-side LXD evidence", hostEvidence],
       ["Compressed long-running collection", envCommand("t=10; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done | gzip -c >> ss-timeseries.log.gz")]
     ];
-    return html`<div class="guide-shell">
-      <div class="tabs guide-tabs">
-        ${[
-          ["best", "Best practices"],
-          ["cases", "Use cases"],
-          ["commands", "Commands"],
-          ["fields", "Fields"],
-          ["refs", "References"]
-        ].map(([key, label]) => `<button class="tab ${tab === key ? "active" : ""}" data-guide-tab="${key}">${label}</button>`).join("")}
-      </div>
-      <div class="guide-list">
-        <article class="guide-card system-context"><strong>${escapeHtml(linuxProfileLabel())} / ${escapeHtml(accessRoleLabel())} / ${escapeHtml(ubuntuProfileLabel())}</strong><p>${escapeHtml(ACCESS_ROLES[state.prefs.accessRole]?.note || ACCESS_ROLES.analyst.note)}</p><p>${escapeHtml(LINUX_PROFILES[state.prefs.linuxProfile]?.note || LINUX_PROFILES.lxc.note)}</p></article>
+    const sections = [
+      { key: "best", icon: "ri-lightbulb-line", label: "Best Practices" },
+      { key: "cases", icon: "ri-route-line", label: "Use Cases" },
+      { key: "commands", icon: "ri-terminal-box-line", label: "Commands" },
+      { key: "fields", icon: "ri-table-line", label: "Fields" },
+      { key: "refs", icon: "ri-video-line", label: "References & Videos" }
+    ];
+    return html`<div class="guide-shell guide-v2">
+      <aside class="guide-sidebar">
+        <div class="guide-search-wrap">
+          <i class="ri-search-line"></i>
+          <input id="guideSearchInput" class="guide-search" type="search" placeholder="Search guide..." value="${escapeHtml(search)}" autocomplete="off"/>
+        </div>
+        <nav class="guide-nav">
+          ${sections.map(s => `<button class="guide-nav-item ${tab === s.key ? "active" : ""}" data-guide-tab="${s.key}"><i class="${s.icon}"></i><span>${s.label}</span></button>`).join("")}
+        </nav>
+        <div class="guide-context-card">
+          <strong>${escapeHtml(linuxProfileLabel())}</strong>
+          <span>${escapeHtml(accessRoleLabel())} · ${escapeHtml(ubuntuProfileLabel())}</span>
+        </div>
+      </aside>
+      <main class="guide-content">
         ${tab === "best" ? renderGuideBestPractices() : ""}
         ${tab === "cases" ? renderGuideUseCases() : ""}
         ${tab === "commands" ? commands.map(([title, cmd], index) => renderGuideCommandCard(title, cmd, index)).join("") : ""}
         ${tab === "fields" ? renderFields() : ""}
         ${tab === "refs" ? renderGuideReferences() : ""}
-      </div>
+      </main>
     </div>`;
   }
   
@@ -195,9 +206,48 @@ export function createGuideView(context) {
   }
   
   function renderGuideReferences() {
-    return `
-      <article class="guide-card"><strong>ss option coverage</strong><p>The interface covers options from the recent iproute2 man page: formats, families, tables, filters, BPF, contexts, namespaces, diag exports, and event mode.</p></article>
-      <article class="guide-card"><strong>Reference links</strong><p><a href="https://manpages.debian.org/testing/iproute2/ss.8.en.html" target="_blank" rel="noreferrer">Debian testing ss(8), iproute2 6.19</a> - command options, filters, tables, and output modes.</p><p><a href="https://man7.org/linux/man-pages/man7/tcp.7.html" target="_blank" rel="noreferrer">man7 tcp(7)</a> - TCP socket options and TCP_INFO background.</p><p><a href="https://docs.kernel.org/next/networking/ip-sysctl.html" target="_blank" rel="noreferrer">Linux kernel IP sysctl documentation</a> - tcp_rmem, tcp_wmem, tcp_mem, pacing, SACK, ECN, and tuning knobs.</p><p><a href="https://docs.kernel.org/6.12/networking/proc_net_tcp.html" target="_blank" rel="noreferrer">Linux kernel /proc/net/tcp documentation</a> - raw kernel socket table fields.</p></article>`;
+    const videos = [
+      { title: "Brendan Gregg - Linux Performance Tools", url: "https://www.youtube.com/watch?v=FJW8nGV4jxY", channel: "USENIX", tag: "observability" },
+      { title: "Brendan Gregg - BPF Performance Analysis at Netflix", url: "https://www.youtube.com/watch?v=16slh29iN1g", channel: "USENIX ATC", tag: "observability" },
+      { title: "Understanding G1 GC - Monica Beckwith", url: "https://www.youtube.com/watch?v=iGRfyhE02lA", channel: "Devoxx", tag: "jvm" },
+      { title: "Java GC Tuning - Kirk Pepperdine", url: "https://www.youtube.com/watch?v=we_enrM7TSY", channel: "QCon", tag: "jvm" },
+      { title: "Cloudflare - How TCP Sockets Work", url: "https://www.youtube.com/watch?v=PpsEaqJV_A0", channel: "Cloudflare TV", tag: "fundamentals" }
+    ];
+    const docs = [
+      { title: "ss(8) man page - iproute2", url: "https://manpages.debian.org/testing/iproute2/ss.8.en.html", cat: "Man pages" },
+      { title: "tcp(7) - TCP socket options", url: "https://man7.org/linux/man-pages/man7/tcp.7.html", cat: "Man pages" },
+      { title: "Linux IP sysctl documentation", url: "https://docs.kernel.org/next/networking/ip-sysctl.html", cat: "Kernel docs" },
+      { title: "/proc/net/tcp kernel fields", url: "https://docs.kernel.org/6.12/networking/proc_net_tcp.html", cat: "Kernel docs" },
+      { title: "TCP_INFO struct reference", url: "https://github.com/torvalds/linux/blob/master/include/uapi/linux/tcp.h", cat: "Source" },
+      { title: "iproute2 source (ss)", url: "https://github.com/iproute2/iproute2/blob/main/misc/ss.c", cat: "Source" },
+      { title: "Java G1GC Tuning Guide", url: "https://docs.oracle.com/en/java/javase/17/gctuning/garbage-first-g1-garbage-collector.html", cat: "JVM" },
+      { title: "JVM Unified Logging", url: "https://docs.oracle.com/en/java/javase/17/docs/specs/man/java.html#enable-logging-with-the-jvm-unified-logging-framework", cat: "JVM" },
+      { title: "Brendan Gregg - TCP/IP Observability", url: "https://www.brendangregg.com/blog/2018-10-08/dtrace-for-linux-2018.html", cat: "Blog" },
+      { title: "Cloudflare - SYN packet handling", url: "https://blog.cloudflare.com/syn-packet-handling-in-the-wild/", cat: "Blog" }
+    ];
+    const cats = [...new Set(docs.map(d => d.cat))];
+    return `<div class="guide-refs-grid">
+      <section class="guide-refs-videos">
+        <h3><i class="ri-video-line"></i> Video Resources</h3>
+        <div class="guide-video-list">
+          ${videos.map(v => { const vid = v.url.match(/v=([^&]+)/)?.[1] || ""; return `<a class="guide-video-card" href="${escapeHtml(v.url)}" target="_blank" rel="noreferrer">
+            <img class="guide-video-thumb" src="https://img.youtube.com/vi/${escapeHtml(vid)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.style.display='none'" onload="if(this.naturalWidth<200)this.style.display='none'"/>
+            <span class="guide-video-tag">${escapeHtml(v.tag)}</span>
+            <strong>${escapeHtml(v.title)}</strong>
+            <span class="guide-video-channel"><i class="ri-youtube-line"></i> ${escapeHtml(v.channel)}</span>
+          </a>`; }).join("")}
+        </div>
+      </section>
+      <section class="guide-refs-docs">
+        <h3><i class="ri-book-open-line"></i> Documentation & Source</h3>
+        <div class="guide-refs-cats">
+        ${cats.map(cat => `<div class="guide-refs-cat">
+          <h4>${escapeHtml(cat)}</h4>
+          ${docs.filter(d => d.cat === cat).map(d => `<a class="guide-ref-link" href="${escapeHtml(d.url)}" target="_blank" rel="noreferrer"><i class="ri-external-link-line"></i> ${escapeHtml(d.title)}</a>`).join("")}
+        </div>`).join("")}
+        </div>
+      </section>
+    </div>`;
   }
 
   return { renderGuide };

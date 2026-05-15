@@ -137,8 +137,32 @@ test("guide view renders best-practice shell through injected dependencies", () 
     commandForPeer: () => "ss"
   }).renderGuide();
   assert.match(guide, /guide-shell/);
-  assert.match(guide, /Best practices/);
+  assert.match(guide, /Best Practices/);
   assert.match(guide, /LXC/);
+});
+
+test("guide references omit dead youtube resource cards", () => {
+  const state = { guideTab: "refs", prefs: { accessRole: "analyst", linuxProfile: "lxc" }, sockets: [] };
+  const guide = createGuideView({
+    state,
+    html,
+    icons,
+    escapeHtml,
+    isAnalystRole: () => true,
+    isLxcProfile: () => true,
+    envCommand: command => command,
+    linuxProfileLabel: () => "LXC",
+    accessRoleLabel: () => "Analyst",
+    ubuntuProfileLabel: () => "Ubuntu",
+    renderFields: () => "<section>fields</section>",
+    commandForPeer: () => "ss"
+  }).renderGuide();
+  assert.match(guide, /Video Resources/);
+  assert.match(guide, /Brendan Gregg - Linux Performance Tools/);
+  assert.match(guide, /Cloudflare - How TCP Sockets Work/);
+  assert.doesNotMatch(guide, /Van Jacobson - Networking, A Retrospective/);
+  assert.doesNotMatch(guide, /Netdev 0x14 - TCP and the Linux Kernel/);
+  assert.doesNotMatch(guide, /Linux tc and Traffic Control/);
 });
 
 test("modal view renders service aliases and delegates modal body", () => {
