@@ -2370,7 +2370,7 @@ function render() {
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
-          <button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace" style="${state.sockets.length === 0 ? "visibility:hidden;pointer-events:none" : ""}">${icons.resetWorkspace}<span>Reset workspace</span></button>
+          <button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace" style="${state.view === "ingest" && state.sourceName === "built-in sample" ? "visibility:hidden;pointer-events:none" : ""}">${icons.resetWorkspace}<span>Reset workspace</span></button>
           <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>
         </div>
       </header>
@@ -3284,13 +3284,13 @@ function renderJvmGcPanel() {
     <div class="panel-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px">
       <span style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap">JVM Stall / GC Correlation</span>
       ${hasPauses ? `<button class="jvm-clear-btn" data-action="clearJvmGcLog" title="Clear GC data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}
-      ${hasPauses ? `<div style="display:flex;gap:4px;margin:0 auto">
+      ${hasPauses ? `<span class="jvm-sep"></span><div style="display:flex;gap:4px;margin:0 auto">
         <button class="mini" data-chart-zoom="zoomIn" data-jvm-zoom title="Zoom in">${icons.zoomIn}</button>
         <button class="mini" data-chart-zoom="zoomOut" data-jvm-zoom title="Zoom out">${icons.zoomOut}</button>
         <button class="mini" data-chart-zoom="resetZoom" data-jvm-zoom title="Reset zoom">${icons.reset}</button>
         <button class="mini" data-chart-zoom="panLeft" data-jvm-zoom title="Pan left">${icons.arrowLeft}</button>
         <button class="mini" data-chart-zoom="panRight" data-jvm-zoom title="Pan right">${icons.arrowRight}</button>
-      </div>` : ""}
+      </div><span class="jvm-sep"></span>` : ""}
       <div class="bdp-controls" style="margin-left:auto">
         <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
         <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
@@ -3591,7 +3591,34 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     const bx = x(result.epochMs);
     const bw = Math.max(1, (result.pause.durationMs / span) * plotW);
     const color = pauseTypeColor(result.pause.type);
-    return `<rect x="${bx.toFixed(1)}" y="${pad.t}" width="${bw.toFixed(1)}" height="${plotH}" fill="${color}" opacity=".35"><title>GC(${result.pause.id}) ${escapeHtml(result.pause.type)} ${result.pause.durationMs.toFixed(1)}ms score=${result.score.toFixed(2)}</title></rect>`;
+    const hasAnnotation = result.pause.type === "Full" || result.pause.type === "Remark" || result.pause.type === "Cleanup";
+    return `<rect x="${bx.toFixed(1)}" y="${pad.t}" width="${bw.toFixed(1)}" height="${plotH}" fill="${color}" opacity=".35">${hasAnnotation ? "" : `<title>GC(${result.pause.id}) ${escapeHtml(result.pause.type)} ${result.pause.durationMs.toFixed(1)}ms score=${result.score.toFixed(2)}</title>`}</rect>`;
+  }).join("");
+  const annotations = results.filter(r => {
+    const t = r.pause?.type;
+    if ((t === "Full" || t === "Remark" || t === "Cleanup") && !jvmSeriesHidden("gc_full")) return true;
+    if (t === "Mixed" && !jvmSeriesHidden("gc_mixed")) return true;
+    if (t === "Young" && !jvmSeriesHidden("gc_young")) return true;
+    return false;
+  }).filter((r, i, arr) => arr.findIndex(x => x.pause.id === r.pause.id) === i).map(r => {
+    const ax = x(r.epochMs);
+    const color = r.pause.type === "Mixed" ? "#fbbf24" : r.pause.type === "Young" ? "#4ade80" : "#ef4444";
+    return { ax, color, label: `${r.pause.type} #${r.pause.id}` };
+  });
+  // Anti-overlap: assign levels based on horizontal proximity
+  const minGap = 50;
+  const levelHeight = 12;
+  const levels = [];
+  for (const a of annotations) {
+    let level = 0;
+    while (levels[level]?.some(prev => Math.abs(prev - a.ax) < minGap)) level++;
+    if (!levels[level]) levels[level] = [];
+    levels[level].push(a.ax);
+    a.level = level;
+  }
+  const annotationsSvg = annotations.map(a => {
+    const ay = pad.t - 4 + a.level * levelHeight;
+    return `<text x="${a.ax.toFixed(1)}" y="${ay}" text-anchor="middle" fill="${a.color}" font-size="9" font-weight="700">${escapeHtml(a.label)}</text>`;
   }).join("");
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * maxRecvQ);
@@ -3607,6 +3634,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     ${xTimeTicksSvg}
     ${yTicksSvg}
     ${bars}
+    ${annotationsSvg}
     ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="#7dd3fc" stroke-width="2.4"/>`}
     <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Time (${escapeHtml(resolvedTimeZone())})</text>
     <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Recv-Q (bytes)</text>

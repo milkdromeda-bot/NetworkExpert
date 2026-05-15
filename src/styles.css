@@ -5745,6 +5745,13 @@ th:focus-within .column-tooltip,
   border-color: rgba(255,92,119,.5);
   color: #ffb3c1;
 }
+.jvm-sep {
+  display: block;
+  width: 1px;
+  align-self: stretch;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,.2), transparent);
+  margin: 0 6px;
+}
 .jvm-clear-btn i { font-size: 12px; }
 .jvm-legend-item {
   position: relative;
