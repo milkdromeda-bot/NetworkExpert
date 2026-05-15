@@ -3284,7 +3284,7 @@ function renderJvmGcPanel() {
     <div class="panel-head">
       <div class="panel-title"><span>JVM Stall / GC Correlation</span></div>
       <div class="bdp-controls">
-        <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""}>Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""}>Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""}>Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""}>Critical</option></select></label>
+        <label><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
         <label><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
       </div>
     </div>
