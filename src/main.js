@@ -207,7 +207,6 @@ let state = {
   helpColumn: null,
   ssOptionHelpKey: "-i",
   showSsOptions: false,
-  showPreImportFilters: false,
   annotationDraft: buildAnnotationDraft({ sourceName: "built-in sample" }),
   annotationContext: null,
   ingestRawExpanded: SAMPLE.length <= INGEST_RAW_EAGER_LIMIT,
@@ -2827,7 +2826,7 @@ function renderIngestPage() {
   const best = ["-H", "-O", "-n", "-t", "-e", "-p", "-m", "-i", "--tos", "--cgroup", "--inet-sockopt", "-a", "-A"];
   const featuredOptions = SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1]));
   const selectedOption = selectedSsOption(featuredOptions, active);
-  const activePanel = state.showPreImportFilters ? "filter" : state.showSsOptions ? "capture" : null;
+  const activePanel = state.showSsOptions ? "capture" : null;
   const editorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
   return html`
     <section class="ingest-hero">
@@ -2846,16 +2845,15 @@ function renderIngestPage() {
       <div class="panel-body">
         <div class="ingest-toolbar">
           <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
-          <button data-action="pickFile"><i class="ri-folder-open-line"></i> Open file</button>
+          <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open file</button>
+          <span class="import-flow-note"><i class="ri-filter-3-line"></i> filters are offered after file selection</span>
           <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
-          <button data-action="togglePreImportFilters" class="${activePanel === "filter" ? "primary" : ""}"><i class="ri-filter-3-line"></i> Filters</button>
           <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> Capture</button>
           <span class="ingest-toolbar-spacer"></span>
           <button data-action="toggleWordWrap" class="${state.editorWordWrap ? "primary" : ""}" title="Toggle word wrap"><i class="ri-text-wrap"></i> Wrap</button>
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
           <button class="primary" data-action="parse"><i class="ri-play-line"></i> Analyze</button>
         </div>
-        ${activePanel === "filter" ? `<div class="ingest-expand-panel">${renderPreImportFilters()}</div>` : ""}
         ${activePanel === "capture" ? `<div class="ingest-expand-panel">
           <div class="capture-flow-card">
             <strong><i class="ri-route-line"></i> Collection first, parsing second</strong>
@@ -5296,14 +5294,18 @@ function renderModal() { return modalView().renderModal(); }
 function renderPreImportFilters() {
   const h = state.filterHistory;
   const f = normalizePreImportFilters();
+  const pendingName = state.pendingFile?.name || "";
   return `<div class="pref-grid">
     <article class="field-card">
+      ${pendingName ? `<div class="preimport-file-card">
+        <i class="ri-file-text-line" aria-hidden="true"></i>
+        <div><strong>${escapeHtml(pendingName)}</strong><span>Choose a full import, or narrow the capture while it is read.</span></div>
+      </div>` : ""}
       <strong>Optional import-time filters</strong>
-      <p class="hint">For very large captures, enable a preset or field filter here. Matching happens while the file is read, before the heavy final analysis keeps the raw timeline.</p>
+      <p class="hint">Use filters only for very large captures or targeted investigations. A full import keeps the complete raw timeline.</p>
       <div class="preimport-presets">
         ${PRE_IMPORT_PRESETS.map(preset => `<button type="button" data-preimport-preset="${preset.id}"><strong>${escapeHtml(preset.label)}</strong><span>${escapeHtml(preset.description)}</span></button>`).join("")}
       </div>
-      <label class="check"><input id="preImportEnabled" type="checkbox" ${f.enabled ? "checked" : ""}/> Enable pre-import filtering</label>
       <div class="preimport-grid">
         <label>Protocol<select id="preProtocol">
           <option value="">tcp + udp + other</option>
@@ -5325,9 +5327,9 @@ function renderPreImportFilters() {
       ${renderDatalist("histDstIp", h.map(x => x.dstIp))}
       ${renderDatalist("histSrcPort", h.map(x => x.srcPort))}
       ${renderDatalist("histDstPort", h.map(x => x.dstPort))}
-      <div class="toolbar">
-        <button class="primary" data-action="startImportAll">${icons.upload} Import all</button>
-        <button data-action="startImportWithFilters">${icons.play} Apply filters and import</button>
+      <div class="toolbar preimport-actions">
+        <button class="primary" data-action="startImportAll">${icons.upload} Import full file</button>
+        <button data-action="startImportWithFilters"><i class="ri-filter-3-line"></i> Import with filters</button>
         <button data-action="clearFilterHistory">${icons.clear} Clear history</button>
       </div>
     </article>
@@ -7951,10 +7953,6 @@ function bindEvents() {
       state.showSsOptions = !state.showSsOptions;
       renderKeepingWorkspacePosition();
     }
-    if (action === "togglePreImportFilters") {
-      state.showPreImportFilters = !state.showPreImportFilters;
-      renderKeepingWorkspacePosition();
-    }
     if (action === "toggleWordWrap") {
       state.editorWordWrap = !state.editorWordWrap;
       if (cmInstance) cmInstance.setOption("lineWrapping", state.editorWordWrap);
@@ -8210,7 +8208,7 @@ function bindEvents() {
     }
     if (action === "startImportWithFilters") {
       const nextFilters = {
-        enabled: Boolean(document.querySelector("#preImportEnabled")?.checked),
+        enabled: true,
         protocol: document.querySelector("#preProtocol")?.value || "",
         state: document.querySelector("#preState")?.value || "",
         srcIp: document.querySelector("#preSrcIp")?.value.trim() || "",
@@ -8222,10 +8220,18 @@ function bindEvents() {
       const hasFilterValue = hasPreImportFilterValue(nextFilters);
       nextFilters.enabled = hasFilterValue;
       state.preImportFilters = nextFilters;
-      if (!hasFilterValue) toast("Importing everything", "No pre-import filter was entered, so the full file will be parsed.");
+      if (!hasFilterValue) {
+        toast("No filter selected", "Use Import full file, or choose at least one preset or field filter.", "warn");
+        return;
+      }
       const file = state.pendingFile;
       state.pendingFile = null;
       state.modal = null;
+      if (!file) {
+        toast("Choose a file", "Select an ss capture before applying import-time filters.", "warn");
+        document.querySelector("#fileInput")?.click();
+        return;
+      }
       if (file) importFile(file).catch(error => {
         state.importStatus = null;
         toast("Import failed", error.message || "The selected file could not be read.", "danger");
@@ -8237,6 +8243,10 @@ function bindEvents() {
       const file = state.pendingFile;
       state.pendingFile = null;
       state.modal = null;
+      if (!file) {
+        document.querySelector("#fileInput")?.click();
+        return;
+      }
       if (file) importFile(file).catch(error => {
         state.importStatus = null;
         toast("Import failed", error.message || "The selected file could not be read.", "danger");

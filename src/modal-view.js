@@ -258,7 +258,7 @@ export function createModalView(context) {
     const modalTitle = state.modal === "columns" ? "Columns and order"
       : state.modal === "thresholds" ? "Threshold configuration"
         : state.modal === "layout" ? "Chart layout preferences"
-          : state.modal === "preImport" ? "Pre-import filters"
+          : state.modal === "preImport" ? "Import options"
             : state.modal === "columnHelp" ? "Column guide"
               : state.modal === "chartStats" ? `${metricLabel(state.statsMetric)} statistics`
                 : state.modal === "serviceAliases" ? "Service labels"

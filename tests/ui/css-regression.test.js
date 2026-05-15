@@ -38,6 +38,22 @@ test("import progress is shown in the ss stats header while loading", () => {
   assert.match(css, /\.import-status span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
 });
 
+test("file import flow has one clear filter entry point", () => {
+  assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open file<\/button>/);
+  assert.match(main, /class="import-flow-note"[\s\S]*filters are offered after file selection/);
+  assert.doesNotMatch(main, /data-action="togglePreImportFilters"/);
+  assert.doesNotMatch(main, /showPreImportFilters/);
+  assert.match(modalView, /state\.modal === "preImport" \? "Import options"/);
+  assert.match(main, /<button class="primary" data-action="startImportAll">[\s\S]*Import full file<\/button>/);
+  assert.match(main, /data-action="startImportWithFilters"[\s\S]*Import with filters<\/button>/);
+  assert.doesNotMatch(main, /id="preImportEnabled"/);
+  assert.match(main, /toast\("No filter selected", "Use Import full file, or choose at least one preset or field filter\.", "warn"\);/);
+  assert.match(main, /if \(!file\) \{\s*document\.querySelector\("#fileInput"\)\?\.click\(\);/s);
+  assert.match(css, /\.import-flow-note\s*\{[^}]*border-radius:\s*999px;[^}]*text-overflow:\s*ellipsis;/s);
+  assert.match(css, /\.preimport-file-card\s*\{[^}]*grid-template-columns:\s*34px minmax\(0,\s*1fr\);/s);
+  assert.match(css, /\.preimport-actions\s*\{[^}]*border-top:\s*1px solid rgba\(111,\s*134,\s*160,\s*\.18\);/s);
+});
+
 test("topbar anomaly pill uses a compact warning icon", () => {
   assert.match(main, /incidentWarning/);
   assert.doesNotMatch(main, /incidentCloud/);
@@ -235,7 +251,8 @@ test("chart statistics modal keeps the percentile curve to the right of a compac
 
 test("JVM stall charts are promoted above the table with metric-like controls", () => {
   assert.match(main, /hiddenJvmSeries:\s*new Set\(\)/);
-  assert.match(main, /<div class="jvm-chart-section">[\s\S]*data-chart-zoom="zoomIn" data-jvm-zoom[\s\S]*data-jvm-chart="recvq"[\s\S]*renderJvmLegend\("timeline"\)[\s\S]*data-jvm-chart="scatter"[\s\S]*renderJvmLegend\("scatter"\)[\s\S]*<div class="jvm-gc-results">/);
+  assert.match(main, /data-chart-zoom="zoomIn" data-jvm-zoom/);
+  assert.match(main, /<div class="jvm-chart-section">[\s\S]*data-jvm-chart="recvq"[\s\S]*renderJvmLegend\("timeline"\)[\s\S]*data-jvm-chart="scatter"[\s\S]*renderJvmLegend\("scatter"\)[\s\S]*<div class="jvm-gc-results">/);
   assert.match(main, /function jvmLegendSeries\(kind\)/);
   assert.match(main, /function renderJvmLegend\(kind\)/);
   assert.match(main, /data-jvm-series-key="\$\{escapeHtml\(item\.key\)\}"/);
@@ -243,7 +260,7 @@ test("JVM stall charts are promoted above the table with metric-like controls", 
   assert.match(main, /function drawJvmScatterChartInteractive\(svg, results\)/);
   assert.match(main, /function attachJvmTimelineInteractions\(svg, results, history/);
   assert.match(main, /function attachJvmScatterInteractions\(svg, points/);
-  assert.match(main, /event\.currentTarget\.hasAttribute\("data-jvm-zoom"\)[\s\S]*runJvmCorrelation\(\);[\s\S]*drawJvmCharts\(\);/);
+  assert.match(main, /event\.currentTarget\.hasAttribute\("data-jvm-zoom"\)[\s\S]*state\.jvmGc\.selectedEpoch = null;[\s\S]*drawJvmCharts\(\);/);
   assert.match(main, /document\.querySelectorAll\("\[data-jvm-series-key\]"\)\.forEach/);
   assert.match(css, /\.jvm-chart-section\s*\{[^}]*margin:\s*10px 0 12px;/s);
   assert.match(css, /\.jvm-chart-toolbar\s*\{[^}]*display:\s*flex;/s);
