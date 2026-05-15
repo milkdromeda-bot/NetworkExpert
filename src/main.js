@@ -3390,7 +3390,7 @@ function jvmLegendSeries(kind) {
   }
   return [
     { key: "recvq", label: "Recv-Q", color: "#7dd3fc", tip: "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough — a key slow consumer signal." },
-    { key: "gc_young", label: "Young GC", color: "#22d3ee", tip: "Minor/young generation collections. Usually short (1–20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
+    { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1–20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
     { key: "gc_mixed", label: "Mixed GC", color: "#fbbf24", tip: "G1 mixed collections evacuating both young and old regions. Typically longer than young GC and may indicate heap pressure building up." },
     { key: "gc_full", label: "Full / Remark", color: "#ef4444", tip: "Full GC, Remark, or Cleanup pauses. These are the longest and most disruptive. Full GC indicates heap exhaustion or fragmentation." },
     { key: "gc_safepoint", label: "Safepoint", color: "#a78bfa", tip: "JVM safepoint pauses not related to GC (e.g. deoptimization, biased locking revocation). Can still block application threads." }
@@ -3575,7 +3575,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   const y = value => pad.t + plotH - (value / maxRecvQ) * plotH;
   const line = history.map((sample, index) => `${index ? "L" : "M"}${x(sample.epochMs).toFixed(1)},${y(sample.recvQ || 0).toFixed(1)}`).join(" ");
   const pauseTypeColor = type => {
-    if (type === "Young") return "#22d3ee";
+    if (type === "Young") return "#4ade80";
     if (type === "Mixed") return "#fbbf24";
     if (type === "Full" || type === "Remark" || type === "Cleanup") return "#ef4444";
     return "#a78bfa"; // safepoint or other
@@ -3603,7 +3603,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="#7dd3fc" stroke-width="2.4"/>`}
     <text x="${pad.l}" y="17" fill="#edf4ff" font-size="12" font-weight="700">Recv-Q + GC pauses</text>
     <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Time (${escapeHtml(resolvedTimeZone())})</text>
-    <text x="14" y="${h / 2}" transform="rotate(-90 14 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Recv-Q (bytes)</text>
+    <text x="4" y="${h / 2}" transform="rotate(-90 4 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Recv-Q (bytes)</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
