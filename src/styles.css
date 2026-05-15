@@ -431,27 +431,40 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .app-tabs {
   display: inline-flex;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .04), transparent),
-    #070b11;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  background: rgba(7, 11, 17, .85);
+  backdrop-filter: blur(8px);
 }
 .app-tab {
-  min-height: 32px;
-  border: 0;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
   background: transparent;
-  color: var(--muted);
-  padding: 0 10px;
+  color: #8c9aab;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
   box-shadow: none;
+  transition: background .18s, color .18s, border-color .18s, box-shadow .18s;
+  cursor: pointer;
+}
+.app-tab i { font-size: 15px; }
+.app-tab:hover {
+  background: rgba(255,255,255,.05);
+  color: #c4d0de;
+  border-color: rgba(255,255,255,.06);
 }
 .app-tab.active {
-  background: linear-gradient(135deg, #162a41, #0d4e73);
-  color: var(--text);
-  box-shadow: 0 8px 20px rgba(13, 126, 181, .22);
+  background: linear-gradient(135deg, #0f3a5c, #0d5f8a);
+  color: #fff;
+  border-color: rgba(77,180,230,.35);
+  box-shadow: 0 2px 12px rgba(13,126,181,.25), inset 0 1px 0 rgba(255,255,255,.08);
 }
 .status-pill {
   display: inline-flex;
@@ -6714,8 +6727,8 @@ button::after {
   display: none;
 }
 
-button:hover,
-button:focus {
+button:hover:not(.app-tab),
+button:focus:not(.app-tab) {
   border-color: #6e6876;
   background: #3f3a45;
   box-shadow: none;
@@ -6728,7 +6741,6 @@ button:focus-visible {
 }
 
 button.primary,
-.app-tab.active,
 button.mega.primary {
   border-color: #2b8bd3;
   background: #1476bd;

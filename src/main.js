@@ -2362,15 +2362,15 @@ function render() {
         <div class="top-actions">
           <div class="app-tabs">
             ${[
-              ["ingest", "Import"],
-              ["analysis", "Analysis"],
-              ["charts", "Monitoring"],
-              ["guide", "Guide"]
-            ].map(([key, label]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}">${label}</button>`).join("")}
+              ["ingest", "Import", "ri-upload-2-line"],
+              ["analysis", "Analysis", "ri-stethoscope-line"],
+              ["charts", "Monitoring", "ri-line-chart-line"],
+              ["guide", "Guide", "ri-book-open-line"]
+            ].map(([key, label, icon]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}"><i class="${icon}"></i><span>${label}</span></button>`).join("")}
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
-          ${state.view !== "ingest" ? `<button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace">${icons.resetWorkspace}<span>Reset workspace</span></button>` : ""}
+          <button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace" style="${state.sockets.length === 0 ? "visibility:hidden;pointer-events:none" : ""}">${icons.resetWorkspace}<span>Reset workspace</span></button>
           <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>
         </div>
       </header>
