@@ -5495,8 +5495,34 @@ th:focus-within .column-tooltip,
   gap: 14px;
 }
 .pref-tabs {
-  padding: 0;
-  border-bottom-color: rgba(38, 50, 65, .95);
+  display: inline-flex;
+  gap: 3px;
+  width: max-content;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: rgba(7, 11, 17, .72);
+  overflow-x: auto;
+}
+.pref-tabs .tab {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  border-bottom: 1px solid transparent;
+}
+.pref-tabs .tab.active {
+  border-color: #2f6f9f;
+  border-bottom-color: #2f6f9f;
+  background: #1476bd;
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(13,126,181,.22), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.pref-tabs .tab.active:hover {
+  border-color: #4d8dbd;
+  border-bottom-color: #4d8dbd;
+  background: #176fae;
 }
 .pref-grid.professional {
   display: grid;

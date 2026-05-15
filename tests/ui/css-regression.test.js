@@ -179,6 +179,13 @@ test("modal headers stay visible while long preference dialogs scroll", () => {
   assert.match(css, /\.modal header \.icon\s*\{[^}]*flex:\s*0 0 auto;/s);
 });
 
+test("preferences active tab matches the primary blue selected state", () => {
+  assert.match(main, /<div class="tabs pref-tabs">/);
+  assert.match(css, /\.pref-tabs\s*\{[^}]*display:\s*inline-flex;[^}]*border:\s*1px solid rgba\(255,255,255,\.08\);[^}]*border-radius:\s*10px;/s);
+  assert.match(css, /\.pref-tabs \.tab\s*\{[^}]*min-height:\s*30px;[^}]*border-radius:\s*7px;/s);
+  assert.match(css, /\.pref-tabs \.tab\.active\s*\{[^}]*border-color:\s*#2f6f9f;[^}]*background:\s*#1476bd;[^}]*color:\s*#ffffff;/s);
+});
+
 test("analysis conversation stack keeps vertical gaps compact", () => {
   assert.match(css, /\.analysis-layout \.panel-body\s*\{[^}]*padding-block:\s*10px;/s);
   assert.match(css, /\.analysis-layout \.grid-controls-shell\s*\{[^}]*padding-bottom:\s*8px;/s);
