@@ -42,7 +42,10 @@ test("file import flow has one clear filter entry point", () => {
   assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open file<\/button>/);
   assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open file<\/button>\s*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>\s*<button data-action="sample10m"[\s\S]*Sample<\/button>/);
   assert.doesNotMatch(main, /<button data-action="toggleSsOptions"[^>]*>[\s\S]*Capture<\/button>/);
-  assert.match(main, /toast\("ss command updated", "The collection command builder was updated\. Existing pasted text is unchanged\."\);/);
+  assert.match(main, /data-action="copySsCommand"[\s\S]*Copy<\/button>/);
+  assert.match(main, /toast\("ss command copied", "Paste it on the target server to collect the ss evidence\."\);/);
+  assert.doesNotMatch(main, /data-action="applyCommand"/);
+  assert.doesNotMatch(main, /ss command updated/);
   assert.doesNotMatch(main, /Capture command updated/);
   assert.match(main, /let state = \{\s*raw:\s*""/);
   assert.match(main, /sourceName:\s*"empty workspace"/);
@@ -73,14 +76,18 @@ test("capture helper card aligns title and explanation cleanly", () => {
 
 test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /import \{ buildSsCollectionCommand, commandCoverage, toggleCommandOption \} from "\.\/ss-command\.js";/);
+  assert.match(main, /import \{ validateSsCommandConfig \} from "\.\/ss-command-validation\.js";/);
   assert.match(main, /ssCommandConfig:\s*defaultSsCommandConfig\(\)/);
   assert.match(main, /function defaultSsLogPath\(date = new Date\(\)\)[\s\S]*\/tmp\/networkexpert_ss_\$\{ssCommandTimestamp\(date\)\}\.log/);
   assert.match(main, /function renderSsCommandBuilder\(\)/);
   assert.match(main, /id="ssCmdTimestamp"[\s\S]*Timestamp each run/);
   assert.match(main, /id="ssCmdLoop"[\s\S]*Repeat command/);
-  assert.match(main, /id="ssCmdInterval"[\s\S]*seconds between runs/);
+  assert.match(main, /Interval \(s\)<\/span><input id="ssCmdInterval" type="text" inputmode="decimal"/);
   assert.match(main, /id="ssCmdSrcIp"[\s\S]*id="ssCmdSrcPort"[\s\S]*id="ssCmdDstIp"[\s\S]*id="ssCmdDstPort"/);
   assert.match(main, /placeholder="source address"/);
+  assert.match(main, /data-ss-field-msg="srcIp"/);
+  assert.match(main, /function updateSsCommandValidation\(validation\)/);
+  assert.match(main, /input\?\.setCustomValidity\(result\.valid === false \? result\.message : ""\);/);
   assert.doesNotMatch(main, /placeholder="192\.168\.145\.205"/);
   assert.match(main, /data-action="loadSsCommandEndpointExample"/);
   assert.doesNotMatch(main, /market-data example/);
@@ -89,11 +96,29 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /const teeRisk = Boolean\(c\.outputPath && c\.appendOutput !== false && c\.loop && interval <= 0\.05\);/);
   assert.match(main, /terminal output plus <code>tee<\/code> can become the bottleneck/);
   assert.match(main, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
-  assert.match(main, /state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
+  assert.match(main, /function syncSsCommandFromBuilder\(\{ updateWarning = true \} = \{\}\)/);
+  assert.match(main, /if \(validation\.valid\) \{[\s\S]*state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
+  assert.match(main, /toast\("Invalid ss command fields", first\?\.message \|\| "Fix the highlighted fields before copying\.", "danger"\);/);
+  assert.match(main, /document\.querySelectorAll\("\[id\^='ssCmd'\]"\)\.forEach\(input => \{/);
+  assert.match(main, /input\.addEventListener\(eventName, \(\) => syncSsCommandFromBuilder\(\)\);/);
+  assert.match(main, /document\.querySelector\("#commandInput"\)\?\.addEventListener\("input"/);
   assert.match(css, /\.ss-command-builder\s*\{[^}]*grid-template-columns:\s*minmax\(220px,\s*\.75fr\) minmax\(360px,\s*1\.35fr\) minmax\(240px,\s*\.9fr\);/s);
-  assert.match(css, /\.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/s);
+  assert.match(css, /\.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*minmax\(160px,\s*1fr\) 110px minmax\(160px,\s*1fr\) 110px;/s);
+  assert.match(css, /\.ss-command-group \.ss-interval-field\s*\{[^}]*grid-template-columns:\s*max-content minmax\(82px,\s*110px\) minmax\(0,\s*1fr\);/s);
+  assert.match(css, /\.ss-command-group label\.ss-field\.invalid input\s*\{[^}]*border-color:\s*rgba\(255,\s*107,\s*130,\s*\.88\);/s);
+  assert.match(css, /\.ingest-card-layout \.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) 110px;/s);
   assert.match(css, /\.ss-command-example\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*justify-self:\s*start;/s);
   assert.match(css, /\.ss-command-warning\s*\{[^}]*grid-template-columns:\s*18px minmax\(0,\s*1fr\);[^}]*border:\s*1px solid rgba\(246,\s*160,\s*79,\s*\.42\);/s);
+  assert.match(css, /\.ss-command-warning\.hidden\s*\{[^}]*display:\s*none;/s);
+});
+
+test("ss command opens beside the editor instead of pushing it below", () => {
+  assert.match(main, /<div class="ingest-card-layout">[\s\S]*<aside class="ingest-command-card">[\s\S]*<section class="ingest-editor-card">\$\{renderIngestEditor\(\)\}<\/section>/);
+  assert.match(main, /function renderIngestEditor\(\)/);
+  assert.match(css, /\.ingest-card-layout\s*\{[^}]*grid-template-columns:\s*minmax\(420px,\s*\.48fr\) minmax\(520px,\s*\.52fr\);[^}]*align-items:\s*start;/s);
+  assert.match(css, /\.ingest-command-card\s*\{[^}]*max-height:\s*clamp\(520px,\s*calc\(100vh - 245px\),\s*760px\);[^}]*overflow:\s*auto;/s);
+  assert.match(css, /\.ingest-editor-card\s*\{[^}]*padding:\s*10px;/s);
+  assert.match(css, /\.ingest-card-layout \.ss-command-builder,\s*\.ingest-card-layout \.ss-option-card-layout\s*\{[^}]*grid-template-columns:\s*1fr;/s);
 });
 
 test("topbar anomaly pill uses a compact warning icon", () => {

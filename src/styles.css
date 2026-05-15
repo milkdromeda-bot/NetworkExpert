@@ -923,12 +923,34 @@ button.mega i {
   margin-bottom: 12px;
 }
 .ingest-toolbar-spacer { flex: 1; }
+.ingest-card-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, .48fr) minmax(520px, .52fr);
+  gap: 12px;
+  align-items: start;
+}
+.ingest-command-card,
+.ingest-editor-card,
 .ingest-expand-panel {
-  padding: 12px;
-  margin-bottom: 12px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(255,255,255,.02);
+}
+.ingest-command-card {
+  display: grid;
+  gap: 10px;
+  max-height: clamp(520px, calc(100vh - 245px), 760px);
+  overflow: auto;
+  padding: 12px;
+  scrollbar-gutter: stable;
+}
+.ingest-editor-card {
+  padding: 10px;
+}
+.ingest-expand-panel {
+  padding: 12px;
+  margin-bottom: 12px;
   max-width: fit-content;
 }
 .ingest-grid > .panel {
@@ -1462,6 +1484,31 @@ button.mega i {
   min-width: 0;
   min-height: 34px;
 }
+.ss-command-group label.ss-field small {
+  min-height: 13px;
+  color: rgba(191, 205, 222, .68);
+}
+.ss-command-group label.ss-field.invalid input {
+  border-color: rgba(255, 107, 130, .88);
+  box-shadow: 0 0 0 2px rgba(255, 107, 130, .16);
+}
+.ss-command-group label.ss-field.invalid small {
+  color: #ffb6c3;
+}
+.ss-command-group label.ss-field.warning input {
+  border-color: rgba(246, 160, 79, .72);
+  box-shadow: 0 0 0 2px rgba(246, 160, 79, .12);
+}
+.ss-command-group label.ss-field.warning small {
+  color: #ffd6a8;
+}
+.ss-command-group .ss-interval-field {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: max-content minmax(82px, 110px) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+}
 .ss-command-group .check.inline {
   display: flex;
   align-items: center;
@@ -1479,12 +1526,11 @@ button.mega i {
   width: auto;
   min-height: auto;
 }
-.ss-command-group--mode label:last-child,
 .ss-command-group--output label:first-of-type {
   grid-column: 1 / -1;
 }
 .ss-command-group--filter {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(160px, 1fr) 110px minmax(160px, 1fr) 110px;
 }
 .ss-command-example {
   grid-column: 1 / -1;
@@ -1510,6 +1556,9 @@ button.mega i {
   font-size: 11px;
   line-height: 1.35;
 }
+.ss-command-warning.hidden {
+  display: none;
+}
 .ss-command-warning i {
   color: #f6a04f;
   font-size: 15px;
@@ -1517,7 +1566,28 @@ button.mega i {
 .ss-command-warning code {
   color: #fff0d8;
 }
+.ingest-card-layout .capture-flow-card,
+.ingest-card-layout .ss-command-builder {
+  margin-bottom: 0;
+}
+.ingest-card-layout .ss-command-builder,
+.ingest-card-layout .ss-option-card-layout {
+  grid-template-columns: 1fr;
+}
+.ingest-card-layout .ss-command-group--filter {
+  grid-template-columns: minmax(0, 1fr) 110px;
+}
+.ingest-card-layout .option-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ingest-card-layout .ss-option-detail-card {
+  min-height: auto;
+}
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.command-row input.ss-command-stale {
+  border-color: rgba(255, 107, 130, .64);
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 130, .18);
+}
 .ss-option-chip-wrap {
   display: inline-flex;
   outline: none;
@@ -6480,6 +6550,7 @@ svg.icon-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stro
   .service-map-head .expert-strip { grid-template-columns: 1fr; }
   .preimport-presets,
   .preimport-grid { grid-template-columns: 1fr; }
+  .ingest-card-layout,
   .ss-option-card-layout,
   .option-grid,
   .ss-command-builder,

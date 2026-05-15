@@ -19,6 +19,7 @@ import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
 import { alignTimestamps, correlateJvmStalls, DEFAULT_WINDOWS as JVM_DEFAULT_WINDOWS } from "./jvm-correlation.js";
 import { buildSsCollectionCommand, commandCoverage, toggleCommandOption } from "./ss-command.js";
+import { validateSsCommandConfig } from "./ss-command-validation.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
 import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "./evidence-pack.js";
 import { applyChartZoomOperation, clampZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "./chart-zoom.js";
@@ -777,26 +778,30 @@ function renderSsCommandBuilder() {
   const c = state.ssCommandConfig || {};
   const interval = parseUiIntervalSeconds(c.intervalSeconds);
   const teeRisk = Boolean(c.outputPath && c.appendOutput !== false && c.loop && interval <= 0.05);
+  const validation = validateSsCommandConfig(c);
+  const fieldClass = key => validation.fields[key]?.valid === false ? "ss-field invalid" : validation.fields[key]?.level === "warning" ? "ss-field warning" : "ss-field";
+  const fieldInvalid = key => validation.fields[key]?.valid === false ? ` aria-invalid="true"` : "";
+  const fieldMessage = key => escapeHtml(validation.fields[key]?.message || "");
   return `<div class="ss-command-builder">
     <section class="ss-command-group ss-command-group--mode">
       <strong>Collection mode</strong>
       <label class="check inline"><input id="ssCmdTimestamp" type="checkbox" ${c.timestamp !== false ? "checked" : ""}/> Timestamp each run</label>
       <label class="check inline"><input id="ssCmdLoop" type="checkbox" ${c.loop ? "checked" : ""}/> Repeat command</label>
-      <label><span>Interval</span><input id="ssCmdInterval" type="number" min="0.001" step="0.001" value="${escapeHtml(c.intervalSeconds || "1")}" /><small>seconds between runs, e.g. 0.01</small></label>
+      <label class="ss-interval-field ${fieldClass("intervalSeconds")}"><span>Interval (s)</span><input id="ssCmdInterval" type="text" inputmode="decimal" value="${escapeHtml(c.intervalSeconds || "1")}"${fieldInvalid("intervalSeconds")} /><small data-ss-field-msg="intervalSeconds">${fieldMessage("intervalSeconds") || "e.g. 0.01"}</small></label>
     </section>
     <section class="ss-command-group ss-command-group--filter">
       <strong>Socket filter</strong>
-      <label><span>Source IP</span><input id="ssCmdSrcIp" placeholder="source address" value="${escapeHtml(c.srcIp || "")}" /></label>
-      <label><span>Source port</span><input id="ssCmdSrcPort" placeholder="source port" value="${escapeHtml(c.srcPort || "")}" /></label>
-      <label><span>Destination IP</span><input id="ssCmdDstIp" placeholder="destination address" value="${escapeHtml(c.dstIp || "")}" /></label>
-      <label><span>Destination port</span><input id="ssCmdDstPort" placeholder="destination port" value="${escapeHtml(c.dstPort || "")}" /></label>
+      <label class="${fieldClass("srcIp")} ss-field--ip"><span>Source IP</span><input id="ssCmdSrcIp" spellcheck="false" placeholder="source address" value="${escapeHtml(c.srcIp || "")}"${fieldInvalid("srcIp")} /><small data-ss-field-msg="srcIp">${fieldMessage("srcIp")}</small></label>
+      <label class="${fieldClass("srcPort")} ss-field--port"><span>Source port</span><input id="ssCmdSrcPort" inputmode="numeric" placeholder="port" value="${escapeHtml(c.srcPort || "")}"${fieldInvalid("srcPort")} /><small data-ss-field-msg="srcPort">${fieldMessage("srcPort")}</small></label>
+      <label class="${fieldClass("dstIp")} ss-field--ip"><span>Destination IP</span><input id="ssCmdDstIp" spellcheck="false" placeholder="destination address" value="${escapeHtml(c.dstIp || "")}"${fieldInvalid("dstIp")} /><small data-ss-field-msg="dstIp">${fieldMessage("dstIp")}</small></label>
+      <label class="${fieldClass("dstPort")} ss-field--port"><span>Destination port</span><input id="ssCmdDstPort" inputmode="numeric" placeholder="port" value="${escapeHtml(c.dstPort || "")}"${fieldInvalid("dstPort")} /><small data-ss-field-msg="dstPort">${fieldMessage("dstPort")}</small></label>
       <button type="button" class="ss-command-example" data-action="loadSsCommandEndpointExample"><i class="ri-magic-line"></i> Fill endpoint example</button>
     </section>
     <section class="ss-command-group ss-command-group--output">
       <strong>Output</strong>
       <label><span>Log file</span><input id="ssCmdOutputPath" placeholder="${escapeHtml(defaultSsLogPath())}" value="${escapeHtml(c.outputPath || "")}" /></label>
       <label class="check inline"><input id="ssCmdAppend" type="checkbox" ${c.appendOutput !== false ? "checked" : ""}/> Append with tee -a</label>
-      ${teeRisk ? `<div class="ss-command-warning"><i class="ri-error-warning-line"></i><span>At ${escapeHtml(String(c.intervalSeconds))}s, terminal output plus <code>tee</code> can become the bottleneck. The recorder may not sustain the requested frequency; prefer local disk, tmpfs, a larger interval, or redirect only if precise cadence matters.</span></div>` : ""}
+      <div class="ss-command-warning ${teeRisk ? "" : "hidden"}" data-ss-command-warning><i class="ri-error-warning-line"></i><span>At <b data-ss-warning-interval>${escapeHtml(String(c.intervalSeconds || "1"))}</b>s, terminal output plus <code>tee</code> can become the bottleneck. The recorder may not sustain the requested frequency; prefer local disk, tmpfs, a larger interval, or redirect only if precise cadence matters.</span></div>
     </section>
   </div>`;
 }
@@ -813,6 +818,47 @@ function readSsCommandConfig() {
     outputPath: document.querySelector("#ssCmdOutputPath")?.value.trim() || "",
     appendOutput: Boolean(document.querySelector("#ssCmdAppend")?.checked)
   };
+}
+
+function updateSsCommandValidation(validation) {
+  const ids = {
+    intervalSeconds: "ssCmdInterval",
+    srcIp: "ssCmdSrcIp",
+    srcPort: "ssCmdSrcPort",
+    dstIp: "ssCmdDstIp",
+    dstPort: "ssCmdDstPort"
+  };
+  Object.entries(ids).forEach(([key, id]) => {
+    const result = validation.fields[key] || { valid: true, message: "" };
+    const input = document.querySelector(`#${id}`);
+    const label = input?.closest(".ss-field");
+    const message = document.querySelector(`[data-ss-field-msg="${key}"]`);
+    input?.setAttribute("aria-invalid", result.valid === false ? "true" : "false");
+    input?.setCustomValidity(result.valid === false ? result.message : "");
+    label?.classList.toggle("invalid", result.valid === false);
+    label?.classList.toggle("warning", result.valid !== false && result.level === "warning");
+    if (message) message.textContent = result.message || (key === "intervalSeconds" ? "e.g. 0.01" : "");
+  });
+  document.querySelector("#commandInput")?.classList.toggle("ss-command-stale", !validation.valid);
+}
+
+function syncSsCommandFromBuilder({ updateWarning = true } = {}) {
+  const commandInput = document.querySelector("#commandInput");
+  state.ssCommandConfig = readSsCommandConfig();
+  const validation = validateSsCommandConfig(state.ssCommandConfig);
+  updateSsCommandValidation(validation);
+  if (validation.valid) {
+    state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
+    if (commandInput) commandInput.value = state.command;
+  }
+  if (updateWarning) {
+    const interval = parseUiIntervalSeconds(state.ssCommandConfig.intervalSeconds);
+    const risky = Boolean(state.ssCommandConfig.outputPath && state.ssCommandConfig.appendOutput !== false && state.ssCommandConfig.loop && interval <= 0.05);
+    document.querySelector("[data-ss-command-warning]")?.classList.toggle("hidden", !risky);
+    const intervalNode = document.querySelector("[data-ss-warning-interval]");
+    if (intervalNode) intervalNode.textContent = state.ssCommandConfig.intervalSeconds || "1";
+  }
+  return { command: state.command, validation };
 }
 
 let _bdpPrecomputeTimer = 0;
@@ -2852,6 +2898,25 @@ function renderIngestRawPreview() {
   </div>`;
 }
 
+function renderIngestEditor() {
+  return shouldEagerRenderIngestRaw()
+    ? `<div class="cm-search-hints">
+        <span>Quick find:</span>
+        <button data-cm-search="ESTAB">ESTAB</button>
+        <button data-cm-search="CLOSE-WAIT">CLOSE-WAIT</button>
+        <button data-cm-search="TIME-WAIT">TIME-WAIT</button>
+        <button data-cm-search="backoff">backoff</button>
+        <button data-cm-search="retrans">retrans</button>
+        <button data-cm-search="skmem">skmem</button>
+        <button data-cm-search="rtt:">rtt:</button>
+        <button data-cm-search="rto:">rto:</button>
+        <button data-cm-search="cwnd:">cwnd:</button>
+        <button data-cm-search="drops">d[1-9]</button>
+      </div>
+      <div id="cmContainer" class="cm-container"></div>`
+    : renderIngestRawPreview();
+}
+
 function renderImportStatus() {
   if (!state.importStatus) return "";
   return `<div class="import-status" role="status" aria-live="polite">
@@ -2909,43 +2974,30 @@ function renderIngestPage() {
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
           <button class="primary" data-action="parse"><i class="ri-play-line"></i> Analyze</button>
         </div>
-        ${activePanel === "capture" ? `<div class="ingest-expand-panel">
-          <div class="capture-flow-card">
-            <i class="ri-route-line" aria-hidden="true"></i>
-            <div class="capture-flow-copy">
-              <strong>Collection first, parsing second</strong>
-              <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
+        ${activePanel === "capture" ? `<div class="ingest-card-layout">
+          <aside class="ingest-command-card">
+            <div class="capture-flow-card">
+              <i class="ri-route-line" aria-hidden="true"></i>
+              <div class="capture-flow-copy">
+                <strong>Collection first, parsing second</strong>
+                <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
+              </div>
             </div>
-          </div>
-          ${renderSsCommandBuilder()}
-          <div class="command-row">
-            <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
-            <button class="primary" data-action="applyCommand" title="Apply"><i class="ri-check-line"></i> Apply</button>
-          </div>
-          <div class="chips">${active.map(renderSsOptionChip).join("") || `<span class="chip">no option detected</span>`}</div>
-          <div class="ss-option-card-layout">
-            <div class="option-grid" aria-label="ss option toggles">
-              ${featuredOptions.map(option => renderSsOptionControl(option, coverage, selectedOption?.key)).join("")}
+            ${renderSsCommandBuilder()}
+            <div class="command-row">
+              <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
+              <button class="primary" data-action="copySsCommand" title="Copy command">${icons.copy} Copy</button>
             </div>
-            ${selectedOption ? renderSsOptionDetail(selectedOption) : ""}
-          </div>
-        </div>` : ""}
-        ${shouldEagerRenderIngestRaw()
-          ? `<div class="cm-search-hints">
-              <span>Quick find:</span>
-              <button data-cm-search="ESTAB">ESTAB</button>
-              <button data-cm-search="CLOSE-WAIT">CLOSE-WAIT</button>
-              <button data-cm-search="TIME-WAIT">TIME-WAIT</button>
-              <button data-cm-search="backoff">backoff</button>
-              <button data-cm-search="retrans">retrans</button>
-              <button data-cm-search="skmem">skmem</button>
-              <button data-cm-search="rtt:">rtt:</button>
-              <button data-cm-search="rto:">rto:</button>
-              <button data-cm-search="cwnd:">cwnd:</button>
-              <button data-cm-search="drops">d[1-9]</button>
+            <div class="chips">${active.map(renderSsOptionChip).join("") || `<span class="chip">no option detected</span>`}</div>
+            <div class="ss-option-card-layout">
+              <div class="option-grid" aria-label="ss option toggles">
+                ${featuredOptions.map(option => renderSsOptionControl(option, coverage, selectedOption?.key)).join("")}
+              </div>
+              ${selectedOption ? renderSsOptionDetail(selectedOption) : ""}
             </div>
-            <div id="cmContainer" class="cm-container"></div>`
-          : renderIngestRawPreview()}
+          </aside>
+          <section class="ingest-editor-card">${renderIngestEditor()}</section>
+        </div>` : renderIngestEditor()}
       </div>
     </section>
   `;
@@ -8002,12 +8054,19 @@ function bindEvents() {
       state.activeTab = "advisor";
       render();
     }
-    if (action === "applyCommand") {
-      const commandInput = document.querySelector("#commandInput");
-      state.ssCommandConfig = readSsCommandConfig();
-      state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
-      toast("ss command updated", "The collection command builder was updated. Existing pasted text is unchanged.");
-      renderKeepingWorkspacePosition();
+    if (action === "copySsCommand") {
+      const result = syncSsCommandFromBuilder();
+      if (!result.validation.valid) {
+        const first = result.validation.errors[0];
+        toast("Invalid ss command fields", first?.message || "Fix the highlighted fields before copying.", "danger");
+        return;
+      }
+      const ok = await copyTextToClipboard(result.command);
+      if (!ok) {
+        toast("Copy failed", "The ss command could not be copied by the browser.", "danger");
+        return;
+      }
+      toast("ss command copied", "Paste it on the target server to collect the ss evidence.");
     }
     if (action === "loadSsCommandEndpointExample") {
       const commandInput = document.querySelector("#commandInput");
@@ -9116,6 +9175,13 @@ function bindEvents() {
       state.command = toggleCommandOption(state.command, opt, event.currentTarget.checked);
       renderKeepingWorkspacePosition();
     });
+  });
+  document.querySelectorAll("[id^='ssCmd']").forEach(input => {
+    const eventName = input.type === "checkbox" ? "change" : "input";
+    input.addEventListener(eventName, () => syncSsCommandFromBuilder());
+  });
+  document.querySelector("#commandInput")?.addEventListener("input", event => {
+    state.command = event.currentTarget.value;
   });
   document.querySelectorAll("[data-ss-option-help]").forEach(button => {
     const showHelp = event => {

@@ -7,6 +7,7 @@ import { DASHBOARD_PRESETS, dashboardSnapshot, applyAnalysisTemplate, applyDashb
 import { parseSs, metricValue } from "../../src/parser.js";
 import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/search.js";
 import { buildSsCollectionCommand, commandCoverage, extractSsSegment, toggleCommandOption } from "../../src/ss-command.js";
+import { validateIntervalSeconds, validateIpAddress, validateSsCommandConfig, validateTcpUdpPort } from "../../src/ss-command-validation.js";
 import { withStableSocketIds } from "../../src/timeline.js";
 
 function socketFrom(line, bandwidth = {}) {
@@ -395,6 +396,35 @@ test("ss collection builder accepts comma decimal intervals", () => {
     appendOutput: true
   });
   assert.match(command, /sleep 0\.01; done \| tee -a '\/tmp\/networkexpert_ss_20260515_103715\.log'$/);
+});
+
+test("ss command validation accepts strict IPv4 IPv6 ports and decimal intervals", () => {
+  assert.equal(validateIpAddress("192.168.145.205").valid, true);
+  assert.equal(validateIpAddress("2001:db8::10").valid, true);
+  assert.equal(validateIpAddress("fe80::1%eth0").valid, true);
+  assert.equal(validateTcpUdpPort(":443").valid, true);
+  assert.equal(validateIntervalSeconds("0,01").valid, true);
+});
+
+test("ss command validation rejects malformed endpoint fields before copy", () => {
+  const result = validateSsCommandConfig({
+    intervalSeconds: "0",
+    srcIp: "szsz",
+    srcPort: "70000",
+    dstIp: "10.0.0.20",
+    dstPort: "443"
+  });
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.errors.map(error => error.field), ["intervalSeconds", "srcIp", "srcPort"]);
+  assert.match(result.fields.srcIp.message, /valid IPv4 or IPv6/);
+  assert.match(result.fields.srcPort.message, /between 1 and 65535/);
+});
+
+test("ss command validation warns but allows sub ten millisecond intervals", () => {
+  const result = validateIntervalSeconds("0.005");
+  assert.equal(result.valid, true);
+  assert.equal(result.level, "warning");
+  assert.match(result.message, /aggressive cadence/);
 });
 
 test("ss option coverage and toggles work on wrapped collection commands", () => {
