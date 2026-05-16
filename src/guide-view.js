@@ -233,6 +233,7 @@ export function createGuideView(context) {
     const cases = [
       {
         title: "1. Slow consumer or congested send path",
+        group: "investigation",
         summary: "Start here when Send-Q, skmem.t, or transmit memory grows. The key question is whether the peer is slow, the path is congested, or the local application is overproducing.",
         signals: ["Send-Q rising over time", "skmem.t or skmem.w near transmit limits", "TX bandwidth flat or falling", "RTO/backoff rising", "cwnd or pacing_rate collapsing"],
         decide: [
@@ -247,6 +248,7 @@ export function createGuideView(context) {
       },
       {
         title: "2. Local application not reading fast enough",
+        group: "investigation",
         summary: "Use this path when Recv-Q or receive socket memory grows. The likely owner is often the local process, runtime, scheduler, or worker pool.",
         signals: ["Recv-Q sustained above warning", "skmem.r or skmem.rb high", "RX bandwidth continues while application-level throughput stalls", "Drops appear after receive bursts", "One process or one local port dominates"],
         decide: [
@@ -261,6 +263,7 @@ export function createGuideView(context) {
       },
       {
         title: "3. Packet loss, jitter, or path instability",
+        group: "investigation",
         summary: "This path is for RTO spikes, RTT variance, retransmission timers, backoff, low cwnd, pacing collapse, or socket drops.",
         signals: ["RTO jumps above warning/danger", "RTT variance rises before timeout", "backoff non-zero", "retrans timer count grows", "cwnd drops sharply", "skmem.d non-zero"],
         decide: [
@@ -275,6 +278,7 @@ export function createGuideView(context) {
       },
       {
         title: "4. Socket buffer and memory pressure",
+        group: "investigation",
         summary: "Use this when skmem.r, skmem.t, rb/tb, w, bl, or d are high. The goal is to know whether buffers are absorbing a burst or masking a sustained bottleneck.",
         signals: ["skmem.r high with Recv-Q high", "skmem.t or skmem.w high with Send-Q high", "skmem.d increasing", "rb/tb close to configured limits", "Many sockets consuming memory at once"],
         decide: [
@@ -289,6 +293,7 @@ export function createGuideView(context) {
       },
       {
         title: "5. LXC/LXD namespace split: container symptom or host network problem?",
+        group: "investigation",
         summary: "In LXC/LXD, ss inside the container sees the container network namespace. Host bridge, veth, qdisc, NIC, and route evidence may live outside the container.",
         signals: ["Container sockets show queues but host counters show drops", "Only containers on one bridge are affected", "veth/bridge qdisc backlog grows", "Container route differs from host route", "Missing process or cgroup context"],
         decide: [
@@ -314,6 +319,7 @@ export function createGuideView(context) {
       },
       {
         title: "6. Root Cause Matrix and Confidence Scoring",
+        group: "intelligence",
         summary: "Use the Diagnosis tab to see the Root Cause Matrix — a single view showing all possible causes ranked by signal confidence. Each hypothesis includes what would confirm or reject it.",
         signals: ["Multiple competing hypotheses visible", "Ambiguous flag when two causes are close", "Confidence percentage per cause", "Present/absent signal count"],
         decide: [
@@ -328,6 +334,7 @@ export function createGuideView(context) {
       },
       {
         title: "7. Timeline Stories — causal narrative",
+        group: "intelligence",
         summary: "The Timeline tab detects causal patterns across snapshots and tells the story: what happened, in what order, and what it means. Toggle between Stories (narrative) and All Events (raw list).",
         signals: ["Send-Q grow → persist → FIN = peer stopped reading", "Recv-Q grow → drops = local overload", "RTO escalate → backoff high = path dead", "cwnd collapse → retrans = congestion event", "rwnd_limited >50% = sender throttled by receiver window"],
         decide: [
@@ -342,6 +349,7 @@ export function createGuideView(context) {
       },
       {
         title: "8. Before/After comparison — incident detection",
+        group: "intelligence",
         summary: "Load a healthy capture as baseline, then load the incident capture (or vice versa). The Compare tab shows exactly what changed: metrics that exploded, new peers, new anomalies, and an automatic verdict.",
         signals: ["Recv-Q or Send-Q delta >100KB", "New peers appeared", "persist timer appeared where absent before", "Drops grew from 0", "rcv_ssthresh dropped significantly"],
         decide: [
@@ -356,6 +364,7 @@ export function createGuideView(context) {
       },
       {
         title: "9. Integrated Playbooks",
+        group: "workflow",
         summary: "Each diagnostic hypothesis includes a contextual Playbook with commands for local, peer, and host sides, plus explicit warnings about what NOT to conclude and prudent mitigation steps.",
         signals: ["Playbook available on hypothesis cards in Diagnosis tab", "Commands pre-filled with actual PID, peer IP, interface", "Sections: Local, Peer, Host, Do NOT conclude, Mitigation"],
         decide: [
@@ -370,6 +379,7 @@ export function createGuideView(context) {
       },
       {
         title: "10. Exposed listeners and missing ownership",
+        group: "workflow",
         summary: "Use this when LISTEN sockets are wildcard-bound, unexpected, or missing process ownership. It is a security and operability check, not only a performance check.",
         signals: ["LISTEN on 0.0.0.0 or ::", "Unknown process field", "Unexpected public service port", "Many listeners in a container", "Port bound in the wrong namespace"],
         decide: [
@@ -383,7 +393,16 @@ export function createGuideView(context) {
         mitigation: "Bind explicitly where possible, document intentional wildcard listeners, and keep process attribution in routine collections."
       }
     ];
-    return `<div class="usecase-grid">${cases.map(item => `<article class="guide-card usecase-card">
+    const groups = [
+      { key: "investigation", label: "Investigation paths", icon: "ri-search-eye-line" },
+      { key: "intelligence", label: "Intelligence & analysis", icon: "ri-brain-line" },
+      { key: "workflow", label: "Workflow & operations", icon: "ri-route-line" }
+    ];
+    return `<div class="usecase-grouped">${groups.map((g, gi) => {
+      const items = cases.filter(c => c.group === g.key);
+      return `<details class="usecase-group" ${gi === 0 ? "open" : ""}>
+        <summary><i class="${g.icon}"></i> ${escapeHtml(g.label)} <span class="usecase-count">${items.length}</span></summary>
+        <div class="usecase-grid">${items.map(item => `<article class="guide-card usecase-card">
       <strong>${escapeHtml(item.title)}</strong>
       <p>${escapeHtml(item.summary)}</p>
       <div class="usecase-sections">
@@ -396,7 +415,9 @@ export function createGuideView(context) {
         <pre class="code">${escapeHtml(item.commands.join("\n"))}</pre>
       </details>
       <p class="mitigation"><i class="ri-shield-check-line"></i> ${escapeHtml(item.mitigation)}</p>
-    </article>`).join("")}</div>`;
+    </article>`).join("")}</div>
+      </details>`;
+    }).join("")}</div>`;
   }
   
   function renderGuideReferences() {

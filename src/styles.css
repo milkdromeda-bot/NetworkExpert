@@ -5434,6 +5434,38 @@ tr:hover, tr.selected { background: #101a27; }
   color: #ff9caf;
   background: rgba(255, 92, 119, .1);
 }
+.usecase-grouped {
+  display: grid;
+  gap: 12px;
+}
+.usecase-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #080d14;
+}
+.usecase-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text);
+}
+.usecase-group > summary i { font-size: 16px; color: rgba(112, 157, 255, .8); }
+.usecase-count {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(140, 160, 180, .1);
+  color: var(--soft);
+  font-weight: 500;
+}
+.usecase-group > .usecase-grid {
+  padding: 0 14px 14px;
+}
 .usecase-grid {
   display: grid;
   gap: 12px;
