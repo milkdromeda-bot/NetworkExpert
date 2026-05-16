@@ -3162,7 +3162,7 @@ function renderIngestPage() {
 }
 
 function renderAnalysisPage() {
-  const deepAnalysisOn = Boolean(state.prefs.deepAnalysis);
+  const deepAnalysisOn = true;
   const deepAnalysisTitle = deepAnalysisOn
     ? "Deep analysis is on. Click to pause the background advisor."
     : "Deep analysis is paused. Click to enable the background advisor.";
@@ -3178,18 +3178,6 @@ function renderAnalysisPage() {
         <div class="panel-head">
           <div class="panel-title">Detected sockets</div>
           <div class="toolbar">
-            <button
-              type="button"
-              data-action="toggleDeepAnalysis"
-              class="deep-analysis-toggle ${deepAnalysisOn ? "is-on" : "is-off"}"
-              role="switch"
-              aria-checked="${deepAnalysisOn ? "true" : "false"}"
-              title="${deepAnalysisTitle}"
-            >
-              <span class="deep-analysis-icon" aria-hidden="true">${icons.brain}</span>
-              <span class="deep-analysis-label"><strong>Deep analysis</strong><small>${deepAnalysisOn ? "On" : "Paused"}</small></span>
-              <span class="deep-analysis-switch" aria-hidden="true"><span></span></span>
-            </button>
             <button data-action="setBaseline" title="Use current parsed sockets as before baseline"><i class="ri-scales-3-line"></i> Set baseline</button>
             ${renderExportMenu("analysis")}
             <input id="searchInput" placeholder='Filter: state:ESTAB risk>=high port:443 process:nginx rtt>100' value="${escapeHtml(state.table.filters.text)}" />
