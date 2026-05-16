@@ -3993,6 +3993,109 @@ tr:hover, tr.selected { background: #101a27; }
   display: grid;
   gap: 10px;
 }
+
+/* Timeline Stories */
+.timeline-toggle {
+  display: flex;
+  gap: 2px;
+  background: rgba(140, 160, 180, .08);
+  border-radius: 6px;
+  padding: 3px;
+  width: fit-content;
+}
+.timeline-toggle button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.timeline-toggle button.active {
+  background: rgba(76, 222, 138, .15);
+  color: rgba(76, 222, 138, .95);
+}
+.timeline-toggle button:hover:not(.active) {
+  background: rgba(140, 160, 180, .1);
+}
+.timeline-stories-empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--soft);
+  text-align: center;
+}
+.timeline-stories-empty i { font-size: 28px; }
+.timeline-stories {
+  border: 1px solid rgba(76, 222, 138, .25);
+  border-left: 3px solid rgba(76, 222, 138, .7);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(76, 222, 138, .06), transparent 50%), #080d14;
+  padding: 14px;
+}
+.timeline-stories header {
+  margin-bottom: 12px;
+}
+.timeline-stories h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(76, 222, 138, .9);
+}
+.timeline-story {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.timeline-story:first-of-type { border-top: none; padding-top: 0; }
+.story-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.story-header strong {
+  font-size: 12px;
+  color: var(--text);
+}
+.story-completeness {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(76, 222, 138, .12);
+  color: rgba(76, 222, 138, .9);
+}
+.story-narrative {
+  display: grid;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(140, 160, 180, .2);
+}
+.story-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--soft);
+}
+.story-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(140, 160, 180, .5);
+  flex-shrink: 0;
+}
+.story-conclusion {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(76, 222, 138, .85);
+  padding-top: 4px;
+}
+
 .expert-item {
   display: grid;
   grid-template-columns: 82px minmax(0, 1fr) auto;

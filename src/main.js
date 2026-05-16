@@ -16,6 +16,7 @@ import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normali
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { buildRootCauseMatrix } from "./root-cause-matrix.js";
+import { detectTimelineStories } from "./timeline-stories.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeCaptureQuality } from "./capture-quality.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
@@ -219,6 +220,7 @@ let state = {
   view: "ingest",
   activeTab: "sockets",
   chartsTab: "charts",
+  timelineView: "stories",
   openStyleMenu: false,
   openSsEditorThemeMenu: false,
   editorWordWrap: false,
@@ -5497,24 +5499,57 @@ function renderTimeline() {
   if (!events.length) return `<div class="empty">No timeline event is available. Import timestamped snapshots for a stronger time-based view.</div>`;
   const first = events[0]?.epochMs || Date.now();
   const last = events[events.length - 1]?.epochMs || first;
+  const stories = detectTimelineStories(state.raw || "", state.sockets);
+  const view = state.timelineView || "stories";
   return `<div class="timeline-workbench">
     <div class="expert-strip">
       <article><span>Events</span><strong>${formatNumber(events.length)}</strong></article>
       <article><span>Window</span><strong>${formatNumber(Math.max(0, Math.round((last - first) / 1000)))}s</strong></article>
       <article><span>High/Critical</span><strong>${formatNumber(events.filter(event => riskRank(event.severity) >= 3).length)}</strong></article>
+      ${stories.length ? `<article><span>Stories</span><strong>${formatNumber(stories.length)}</strong></article>` : ""}
     </div>
-    <div class="timeline-list">
-      ${events.map(event => `<article class="timeline-event ${event.severity}">
-        <div class="timeline-pin"></div>
-        <div class="timeline-time"><strong>${escapeHtml(formatTimelineTime(event))}</strong><span>t+${formatTimelineOffset(event.t || 0)}s</span></div>
-        <div class="timeline-body">
-          <header><span class="risk ${event.severity}">${escapeHtml(event.severity)}</span><strong>${escapeHtml(event.title)}</strong><span class="metric-chip">${escapeHtml(event.metric)}</span></header>
-          <p>${escapeHtml(event.detail)}</p>
-        </div>
-        <footer>${event.socketId ? `<button data-jump="${escapeHtml(event.socketId)}">${icons.focus} Context</button>` : ""}</footer>
-      </article>`).join("")}
+    <div class="timeline-toggle">
+      <button class="${view === "stories" ? "active" : ""}" data-action="timelineView" data-value="stories"><i class="ri-book-open-line"></i> Stories</button>
+      <button class="${view === "events" ? "active" : ""}" data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> All events</button>
     </div>
+    ${view === "stories" ? renderTimelineStoriesView(stories) : renderTimelineEventsView(events)}
   </div>`;
+}
+
+function renderTimelineStoriesView(stories) {
+  if (!stories.length) return `<div class="timeline-stories-empty"><i class="ri-movie-2-line"></i><p>No causal pattern detected yet. Need more snapshots or stronger signals.</p></div>`;
+  return `<section class="timeline-stories">
+    ${stories.slice(0, 6).map(story => `<article class="timeline-story">
+      <div class="story-header">
+        <strong>${escapeHtml(story.title)}</strong>
+        <span class="story-completeness">${Math.round(story.completeness * 100)}% pattern match</span>
+      </div>
+      <div class="story-narrative">
+        ${story.narrative.map((line, i) => i === story.narrative.length - 1
+          ? `<div class="story-conclusion">${escapeHtml(line)}</div>`
+          : `<div class="story-step"><span class="story-dot"></span>${escapeHtml(line)}</div>`
+        ).join("")}
+      </div>
+    </article>`).join("")}
+  </section>`;
+}
+
+function renderTimelineEventsView(events) {
+  return `<div class="timeline-list">
+    ${events.map(event => `<article class="timeline-event ${event.severity}">
+      <div class="timeline-pin"></div>
+      <div class="timeline-time"><strong>${escapeHtml(formatTimelineTime(event))}</strong><span>t+${formatTimelineOffset(event.t || 0)}s</span></div>
+      <div class="timeline-body">
+        <header><span class="risk ${event.severity}">${escapeHtml(event.severity)}</span><strong>${escapeHtml(event.title)}</strong><span class="metric-chip">${escapeHtml(event.metric)}</span></header>
+        <p>${escapeHtml(event.detail)}</p>
+      </div>
+      <footer>${event.socketId ? `<button data-jump="${escapeHtml(event.socketId)}">${icons.focus} Context</button>` : ""}</footer>
+    </article>`).join("")}
+  </div>`;
+}
+
+function renderTimelineStories(stories) {
+  return renderTimelineStoriesView(stories);
 }
 
 function renderAlerting() {
@@ -8952,6 +8987,10 @@ function bindEvents() {
     if (action === "clearBaseline") {
       state.baseline = null;
       toast("Baseline cleared", "Before/after comparison is reset.");
+      render();
+    }
+    if (action === "timelineView") {
+      state.timelineView = event.currentTarget.dataset.value || "stories";
       render();
     }
     if (action === "copyAdvisorCommands") {
