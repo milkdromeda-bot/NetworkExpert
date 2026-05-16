@@ -3969,7 +3969,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     layer.setAttribute("visibility", "visible");
     layer.innerHTML = `
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
-      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${primaryColor}" font-size="10.5">${senderMode ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(primaryMetric, sample[primaryMetric] || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${jvmPauseColor(r.score)}" font-size="10.5">GC #${r.pause.id} ${r.pause.durationMs.toFixed(1)}ms score ${r.score.toFixed(2)}</text>
@@ -4058,7 +4058,7 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
     layer.innerHTML = `
       ${dragSel}
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
-      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", sample[state.jvmGc.mode === "sender" ? "sendQ" : "recvQ"] || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${pause ? jvmPauseColor(pause.score) : "#94a3b8"}" font-size="10.5">Nearest GC: ${pause ? escapeHtml(`#${pause.pause.id} ${pause.pause.durationMs.toFixed(1)}ms score ${pause.score.toFixed(2)}`) : "n/a"}</text>
@@ -4122,7 +4122,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffff88" stroke-width="1" stroke-dasharray="3 2"/>
       <line x1="${pad.l}" x2="${w - pad.r}" y1="${cy}" y2="${cy}" stroke="#ffffff55" stroke-width="1" stroke-dasharray="3 2"/>
       <circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="${jvmPauseColor(point.score)}" stroke-width="2"/>
-      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
@@ -4202,7 +4202,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffff88" stroke-width="1" stroke-dasharray="3 2"/>
       <line x1="${pad.l}" x2="${w - pad.r}" y1="${cy}" y2="${cy}" stroke="#ffffff55" stroke-width="1" stroke-dasharray="3 2"/>
       <circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="${jvmPauseColor(point.score)}" stroke-width="2"/>
-      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="rgba(10,16,24,.86)" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
@@ -9281,6 +9281,11 @@ function bindEvents() {
   document.querySelectorAll("[data-pref-tab]").forEach(btn => btn.addEventListener("click", event => {
     state.prefsTab = event.currentTarget.dataset.prefTab;
     render();
+  }));
+  document.querySelectorAll("#prefTooltipOpacity, #layoutTooltipOpacity").forEach(slider => slider.addEventListener("input", event => {
+    const val = Math.round(Number(event.target.value) * 100);
+    const small = event.target.closest("label")?.querySelector("small");
+    if (small) small.innerHTML = `<b>${val}%</b> opacity`;
   }));
   document.querySelectorAll("[data-topology-open]").forEach(btn => btn.addEventListener("click", event => {
     event.preventDefault();
