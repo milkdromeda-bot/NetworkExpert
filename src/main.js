@@ -4845,7 +4845,7 @@ function renderCaptureQualityReport() {
 
 function diagnosticHypotheses() {
   const rows = sortedFilteredSockets();
-  return buildDiagnosticHypotheses({
+  const hypotheses = buildDiagnosticHypotheses({
     sockets: rows.length ? rows : state.sockets,
     anomalies: state.anomalies,
     history: state.history,
@@ -4855,12 +4855,30 @@ function diagnosticHypotheses() {
       configuredLinkCapacityMbps: configuredLinkCapacityMbps()
     }
   }).slice(0, 8);
+  const quality = captureQualityReport();
+  const qualityScore = quality.score || 0;
+  if (qualityScore < 55) {
+    const cap = qualityScore < 35 ? 0.3 : 0.5;
+    for (const h of hypotheses) {
+      if (h.confidenceScore > cap) {
+        h.confidenceScore = cap;
+        h.confidenceCapped = true;
+        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% — capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% — capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
+      }
+    }
+  }
+  return hypotheses;
 }
 
 function renderDiagnosis() {
   const hypotheses = diagnosticHypotheses();
   const top = hypotheses[0];
   const matrix = buildRootCauseMatrix(state.sockets);
+  const qualityCap = (captureQualityReport().score || 0) < 55;
+  if (qualityCap) {
+    const cap = (captureQualityReport().score || 0) < 35 ? 0.3 : 0.5;
+    for (const c of matrix.causes) { if (c.confidence > cap) c.confidence = cap; }
+  }
   const view = state.diagnosisView || "matrix";
   return `<div class="diagnosis-shell">
     <section class="advisor-hero diagnosis-hero">
@@ -4910,7 +4928,7 @@ function renderDiagnosticHypothesis(item) {
         <span class="risk ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
         <strong>${escapeHtml(item.title)}</strong>
       </div>
-      <span class="confidence" title="${item.confidenceSignals} converging signal(s), ${item.confidenceCounters} counter-evidence(s)"><span class="confidence-bar" style="width:${Math.round((item.confidenceScore || 0) * 100)}%"></span>${Math.round((item.confidenceScore || 0) * 100)}% confidence</span>
+      <span class="confidence${item.confidenceCapped ? " capped" : ""}" title="${item.confidenceCapped ? escapeHtml(item.confidenceCapReason) : `${item.confidenceSignals} converging signal(s), ${item.confidenceCounters} counter-evidence(s)`}"><span class="confidence-bar" style="width:${Math.round((item.confidenceScore || 0) * 100)}%"></span>${Math.round((item.confidenceScore || 0) * 100)}% confidence${item.confidenceCapped ? " ⚠️ capped" : ""}</span>
     </header>
     <p>${escapeHtml(item.summary)}</p>
     <div class="evidence-row">

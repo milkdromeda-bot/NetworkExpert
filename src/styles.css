@@ -9197,6 +9197,8 @@ mark.guide-hl {
   transition: width .3s;
   z-index: -1;
 }
+.confidence.capped .confidence-bar { background: rgba(255, 209, 102, .15); }
+.confidence.capped { color: rgba(255, 209, 102, .9); }
 
 
 .diagnosis-actionable summary {
