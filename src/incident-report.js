@@ -51,7 +51,7 @@ h3{font-size:13px;margin:10px 0 6px;color:#8caab8}
 .ir-warn{color:#ffd166;font-size:12px;margin-top:8px}
 table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
 th,td{padding:6px 8px;border:1px solid ${light ? "#d0d8e0" : "#1e2d3d"};text-align:left}
-th{background:#0f1620;font-weight:600}
+th{background:${light ? "#e3eaf2" : "#0f1620"};font-weight:600;color:${light ? "#1a2533" : "#dde8f4"}}
 tr.high td:nth-child(2){color:#4cde8a}
 tr.med td:nth-child(2){color:#ffd166}
 tr.critical td{color:#ff5c77}

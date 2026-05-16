@@ -1397,13 +1397,15 @@ function chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime) {
     const boxX = Math.min(Math.max(x + 8, pad.l + 8), Math.max(pad.l + 8, w - pad.r - width - 6));
     const boxY = pad.t + 10 + (index % 3) * 26;
     const timeStr = item.resolvedEpochMs ? new Date(item.resolvedEpochMs).toISOString().slice(11, 23) : "";
+    const isLight = chartBgColor() === "#f0f3f7";
+    const lineColor = isLight ? "#1a5fb4" : color;
     return `
-      <g class="annotation-overlay-item" opacity=".8" pointer-events="none">
-        <line x1="${x}" x2="${x}" y1="${pad.t}" y2="${h - pad.b}" stroke="${color}" stroke-width="1.8" stroke-dasharray="6 4"/>
-        <circle cx="${x}" cy="${pad.t + 8}" r="4.5" fill="${color}"/>
-        <rect x="${boxX}" y="${boxY}" width="${width}" height="32" rx="6" fill="#081019" stroke="${color}"/>
-        <text x="${boxX + 8}" y="${boxY + 13}" fill="${color}" font-size="10" font-weight="800">${escapeHtml(label)}</text>
-        <text x="${boxX + 8}" y="${boxY + 26}" fill="${color}" font-size="9" opacity="0.7">${escapeHtml(timeStr)}</text>
+      <g class="annotation-overlay-item" opacity="${isLight ? 1 : .8}" pointer-events="none">
+        <line x1="${x}" x2="${x}" y1="${pad.t}" y2="${h - pad.b}" stroke="${lineColor}" stroke-width="1.8" stroke-dasharray="6 4"/>
+        <circle cx="${x}" cy="${pad.t + 8}" r="4.5" fill="${lineColor}"/>
+        <rect x="${boxX}" y="${boxY}" width="${width}" height="32" rx="6" fill="${isLight ? "#dce2ea" : "#081019"}" opacity=".7" stroke="${lineColor}"/>
+        <text x="${boxX + 8}" y="${boxY + 13}" fill="${isLight ? "#1a2533" : color}" font-size="10" font-weight="800">${escapeHtml(label)}</text>
+        <text x="${boxX + 8}" y="${boxY + 26}" fill="${isLight ? "#3d4f60" : color}" font-size="9" opacity="0.7">${escapeHtml(timeStr)}</text>
       </g>
     `;
   }).join("");
@@ -4018,8 +4020,8 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     const tooltipX = cx + tooltipW + 14 > w - pad.r ? cx - tooltipW - 14 : cx + 14;
     layer.setAttribute("visibility", "visible");
     layer.innerHTML = `
-      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
-      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="${chartBgColor() === `#f0f3f7` ? `#1a2533cc` : `#ffffffaa`}" stroke-width="1" stroke-dasharray="3 2"/>
+      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${primaryColor}" font-size="10.5">${senderMode ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(primaryMetric, sample[primaryMetric] || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${jvmPauseColor(r.score)}" font-size="10.5">GC #${r.pause.id} ${r.pause.durationMs.toFixed(1)}ms score ${r.score.toFixed(2)}</text>
@@ -4107,8 +4109,8 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
     layer.setAttribute("visibility", "visible");
     layer.innerHTML = `
       ${dragSel}
-      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
-      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="${chartBgColor() === `#f0f3f7` ? `#1a2533cc` : `#ffffffaa`}" stroke-width="1" stroke-dasharray="3 2"/>
+      <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", sample[state.jvmGc.mode === "sender" ? "sendQ" : "recvQ"] || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${pause ? jvmPauseColor(pause.score) : "#94a3b8"}" font-size="10.5">Nearest GC: ${pause ? escapeHtml(`#${pause.pause.id} ${pause.pause.durationMs.toFixed(1)}ms score ${pause.score.toFixed(2)}`) : "n/a"}</text>
@@ -4172,7 +4174,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffff88" stroke-width="1" stroke-dasharray="3 2"/>
       <line x1="${pad.l}" x2="${w - pad.r}" y1="${cy}" y2="${cy}" stroke="#ffffff55" stroke-width="1" stroke-dasharray="3 2"/>
       <circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="${jvmPauseColor(point.score)}" stroke-width="2"/>
-      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Î”${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
@@ -4252,7 +4254,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffff88" stroke-width="1" stroke-dasharray="3 2"/>
       <line x1="${pad.l}" x2="${w - pad.r}" y1="${cy}" y2="${cy}" stroke="#ffffff55" stroke-width="1" stroke-dasharray="3 2"/>
       <circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="${jvmPauseColor(point.score)}" stroke-width="2"/>
-      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Î”${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
@@ -7184,7 +7186,7 @@ function renderChartThresholdOverlay(items, pad, w, h) {
       const textY = above ? label.lineY - 8 : label.lineY + 15;
       return `<g>
         <line x1="${pad.l}" x2="${w - pad.r}" y1="${label.lineY}" y2="${label.lineY}" stroke="${label.color}" stroke-dasharray="${label.dash}" opacity=".45"/>
-        <rect x="${pillX}" y="${pillY}" width="${textWidth}" height="15" rx="7.5" fill="#070b14" opacity=".85"/>
+        <rect x="${pillX}" y="${pillY}" width="${textWidth}" height="15" rx="7.5" fill="${chartBgColor()}" opacity=".85"/>
         <rect x="${pillX}" y="${pillY}" width="${textWidth}" height="15" rx="7.5" fill="${label.color}" opacity=".25"/>
         <text x="${pillX + 7}" y="${textY}" fill="${label.color}" font-size="9.5" font-weight="600" opacity=".95">${escapeHtml(label.label)}</text>
       </g>`;
@@ -7525,7 +7527,7 @@ function attachBdpCrosshair(svg, data, series, xFn, yFn, pad, w, h, kind, format
     const tooltipY = pad.t + 30;
     crosshairG.setAttribute("visibility", "visible");
     crosshairG.innerHTML = `
-      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="${chartBgColor() === `#f0f3f7` ? `#1a2533cc` : `#ffffffaa`}" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="${tooltipH}" rx="4" fill="rgba(10,16,24,.8)" stroke="#52657a"/>
       <text x="${tooltipX + 8}" y="${tooltipY + 14}" fill="#8cc8e8" font-size="10" font-weight="700">${escapeHtml(time)}</text>
       ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "â€”"}</text>`).join("")}
@@ -7698,7 +7700,7 @@ function attachChartInteractions(svg) {
     const tooltipX = Math.max(b.left + 6, Math.min(x + 12, b.right - width - 6));
     const tooltipY = b.top + 28;
     return `
-      <rect x="${tooltipX}" y="${tooltipY}" width="${width}" height="${height}" rx="8" fill="#0b1018" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
+      <rect x="${tooltipX}" y="${tooltipY}" width="${width}" height="${height}" rx="8" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
       <text x="${tooltipX + 10}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="700">${escapeHtml(timeLabel(row.t || 0, row.epochMs))}</text>
       ${showSeverity ? `<text x="${tooltipX + 142}" y="${tooltipY + 18}" fill="${thresholdColor(metric, value)}" font-size="10" font-weight="800">${escapeHtml(severity.toUpperCase())}</text>` : ""}
       ${items.map((item, itemIndex) => `<circle cx="${tooltipX + 12}" cy="${tooltipY + 34 + itemIndex * lineH}" r="${subtle ? 2.6 : 3.2}" fill="${item.color}"/><text x="${tooltipX + 20}" y="${tooltipY + 38 + itemIndex * lineH}" fill="#dde8f4" font-size="10.5">${escapeHtml(item.label)}: ${escapeHtml(item.value)}</text>`).join("")}
@@ -10517,6 +10519,24 @@ function bindEvents() {
 }
 
 // === DELEGATED EVENT HANDLING (installed once, never re-attached) ===
+document.addEventListener("keydown", event => {
+  if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA" || event.target.isContentEditable) return;
+  if (event.key === "Escape") {
+    if (state.onboarding >= 0) { state.onboarding = -1; localStorage.setItem("networkExpertOnboarded", "1"); render(); return; }
+    if (state.modal) { state.modal = null; render(); return; }
+    if (state.drawer) { state.drawer = null; render(); return; }
+  }
+  if (event.ctrlKey || event.metaKey) {
+    const num = parseInt(event.key);
+    if (num >= 1 && num <= 9) {
+      const tabs = ["quality", "diagnosis", "advisor", "templates", "map", "conversations", "timeline", "alerts", "compare"];
+      if (tabs[num - 1]) { event.preventDefault(); state.activeTab = tabs[num - 1]; state.view = "analysis"; render(); }
+    }
+    if (event.key === "e") { event.preventDefault(); state.view = "ingest"; render(); }
+    if (event.key === "m") { event.preventDefault(); state.view = "charts"; state.chartsTab = "charts"; render(); }
+  }
+});
+
 document.querySelector("#app").addEventListener("click", event => {
   const target = event.target.closest("[data-view]");
   if (target) { state.view = target.dataset.view; render(); return; }
