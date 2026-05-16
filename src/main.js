@@ -5,7 +5,7 @@ import { importSocketFile } from "./importer.js?v=20260425-2";
 import { socketMatchesAdvancedQuery } from "./search.js";
 import { defaultAlertRules, evaluateAlertRules as evaluateAlertRuleEvents, loadAlertAcks, loadAlertRules, saveAlertAcks as persistAlertAcks, saveAlertRules as persistAlertRules } from "./alerts.js";
 import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTemplateProfile, applyDashboardPreset as applyDashboardPresetProfile, applyDashboardProfile as applySavedDashboardProfile, dashboardSnapshot as createDashboardSnapshot } from "./profiles.js";
-import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot } from "./compare.js";
+import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot, buildBaselineNarrative } from "./compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "./ip-intel.js";
 import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots as parseTimestampedSnapshots, socketIdentityKey, socketKey, timestampBlocks as splitTimestampBlocks, withStableSocketIds } from "./timeline.js";
 import { detectMicroburstWindow } from "./microburst.js";
@@ -5639,6 +5639,32 @@ function renderAlerting() {
   </div>`;
 }
 
+function renderBaselineNarrative(comparison) {
+  const narrative = buildBaselineNarrative(comparison, state.baseline?.anomalies || [], state.anomalies);
+  if (!narrative) return "";
+  return `<section class="baseline-narrative">
+    <div class="baseline-verdict ${narrative.changes.length ? "changed" : "stable"}">
+      <i class="${narrative.changes.length ? "ri-alarm-warning-line" : "ri-checkbox-circle-line"}"></i>
+      <strong>${escapeHtml(narrative.verdict)}</strong>
+    </div>
+    <div class="baseline-columns">
+      ${narrative.changes.length ? `<div class="baseline-col changes">
+        <h5><i class="ri-arrow-up-circle-line"></i> What changed</h5>
+        <ul>${narrative.changes.map(c => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
+      </div>` : ""}
+      ${narrative.stable.length ? `<div class="baseline-col stable">
+        <h5><i class="ri-checkbox-circle-line"></i> What stayed healthy</h5>
+        <ul>${narrative.stable.map(s => `<li>${escapeHtml(s)}</li>`).join("")}</ul>
+      </div>` : ""}
+      ${narrative.newAnomalies.length ? `<div class="baseline-col anomalies">
+        <h5><i class="ri-error-warning-line"></i> New anomalies (${narrative.newAnomalies.length})</h5>
+        <ul>${narrative.newAnomalies.map(a => `<li><span class="risk ${a.severity}">${a.severity}</span> ${escapeHtml(a.title || a.metric)}</li>`).join("")}</ul>
+        ${narrative.preExistingAnomalies ? `<small>${narrative.preExistingAnomalies} anomaly(ies) already existed in baseline</small>` : ""}
+      </div>` : ""}
+    </div>
+  </section>`;
+}
+
 function renderComparison() {
   const comparison = buildComparison();
   if (!comparison) {
@@ -5666,6 +5692,7 @@ function renderComparison() {
       <article><span>New/Gone</span><strong>${formatNumber(s.added)} / ${formatNumber(s.removed)}</strong></article>
       <article><span>Worse/Better</span><strong>${formatNumber(s.worsened)} / ${formatNumber(s.improved)}</strong></article>
     </div>
+    ${renderBaselineNarrative(comparison)}
     <div class="table-wrap"><table>
       <thead><tr><th>Status</th><th>Flow</th><th>Risk</th><th>Send-Q delta</th><th>Recv-Q delta</th><th>RTT delta</th><th>RTO delta</th><th>Drops delta</th><th>TX delta</th><th>RX delta</th></tr></thead>
       <tbody>${rows.map(row => {
