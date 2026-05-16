@@ -3553,9 +3553,13 @@ tr:hover, tr.selected { background: #101a27; }
   gap: 12px;
 }
 .diagnosis-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(320px, 1fr));
-  gap: 12px;
+  columns: 2;
+  column-gap: 12px;
+  column-fill: balance;
+}
+.diagnosis-grid > .advisor-card {
+  break-inside: avoid;
+  margin-bottom: 12px;
 }
 .diagnosis-card .advisor-columns li {
   overflow-wrap: anywhere;
@@ -3723,6 +3727,42 @@ tr:hover, tr.selected { background: #101a27; }
 .diagnosis-confidence-detail {
   background: linear-gradient(135deg, rgba(76, 222, 138, .06), transparent 56%), #060a10;
 }
+
+/* Playbook */
+.diagnosis-playbook {
+  background: linear-gradient(135deg, rgba(112, 157, 255, .06), transparent 56%), #060a10;
+}
+.diagnosis-playbook summary {
+  font-weight: 600;
+  color: rgba(112, 157, 255, .9);
+}
+.playbook-content {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.playbook-section h5 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--soft);
+}
+.playbook-section pre {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.playbook-section.warn h5 { color: rgba(255, 209, 102, .9); }
+.playbook-section.safe h5 { color: rgba(76, 222, 138, .9); }
+.playbook-section ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--soft);
+}
+.playbook-section li { margin: 4px 0; }
 .confidence-confirm-reject {
   display: grid;
   gap: 8px;

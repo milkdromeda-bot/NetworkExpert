@@ -17,6 +17,7 @@ import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-sum
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { buildRootCauseMatrix } from "./root-cause-matrix.js";
 import { detectTimelineStories } from "./timeline-stories.js";
+import { playbookForHypothesis, resolvePlaybook } from "./playbooks.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeCaptureQuality } from "./capture-quality.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
@@ -221,6 +222,7 @@ let state = {
   activeTab: "sockets",
   chartsTab: "charts",
   timelineView: "stories",
+  diagnosisView: "matrix",
   openStyleMenu: false,
   openSsEditorThemeMenu: false,
   editorWordWrap: false,
@@ -4859,6 +4861,7 @@ function renderDiagnosis() {
   const hypotheses = diagnosticHypotheses();
   const top = hypotheses[0];
   const matrix = buildRootCauseMatrix(state.sockets);
+  const view = state.diagnosisView || "matrix";
   return `<div class="diagnosis-shell">
     <section class="advisor-hero diagnosis-hero">
       <div>
@@ -4871,10 +4874,11 @@ function renderDiagnosis() {
         <small>hypothesis(es)</small>
       </div>
     </section>
-    ${matrix.causes.length ? renderRootCauseMatrix(matrix) : ""}
-    <div class="diagnosis-grid">
-      ${hypotheses.map(renderDiagnosticHypothesis).join("")}
+    <div class="timeline-toggle">
+      <button class="${view === "matrix" ? "active" : ""}" data-action="diagnosisView" data-value="matrix"><i class="ri-grid-line"></i> Root Cause Matrix</button>
+      <button class="${view === "hypotheses" ? "active" : ""}" data-action="diagnosisView" data-value="hypotheses"><i class="ri-file-list-3-line"></i> Hypotheses</button>
     </div>
+    ${view === "matrix" ? (matrix.causes.length ? renderRootCauseMatrix(matrix) : "<div class=\"empty\">No socket data to build the matrix.</div>") : `<div class="diagnosis-grid">${hypotheses.map(renderDiagnosticHypothesis).join("")}</div>`}
   </div>`;
 }
 
@@ -4945,10 +4949,44 @@ function renderDiagnosticHypothesis(item) {
         ${item.confidenceDetail.missing?.length ? `<div><b><i class="ri-question-line"></i> Missing evidence:</b> ${item.confidenceDetail.missing.map(m => escapeHtml(m)).join("; ")}</div>` : ""}
       </div>
     </details>` : ""}
+    ${renderDiagnosticPlaybook(item)}
     <footer>
       ${item.topSocketId ? `<button data-jump="${escapeHtml(item.topSocketId)}">${icons.focus} Show context row</button>` : ""}
     </footer>
   </article>`;
+}
+
+function renderDiagnosticPlaybook(item) {
+  const pb = playbookForHypothesis(item.id);
+  if (!pb) return "";
+  const topSocket = state.sockets.find(s => s.id === item.topSocketId);
+  const resolved = resolvePlaybook(pb, topSocket);
+  if (!resolved) return "";
+  return `<details class="diagnosis-playbook">
+    <summary><i class="ri-route-line"></i> Playbook: ${escapeHtml(resolved.title)}</summary>
+    <div class="playbook-content">
+      <div class="playbook-section">
+        <h5><i class="ri-computer-line"></i> Local (receiver/sender)</h5>
+        <pre class="code">${escapeHtml(resolved.local.join("\n"))}</pre>
+      </div>
+      <div class="playbook-section">
+        <h5><i class="ri-remote-control-line"></i> Peer side</h5>
+        <pre class="code">${escapeHtml(resolved.peer.join("\n"))}</pre>
+      </div>
+      <div class="playbook-section">
+        <h5><i class="ri-server-line"></i> Host / infra</h5>
+        <pre class="code">${escapeHtml(resolved.host.join("\n"))}</pre>
+      </div>
+      <div class="playbook-section warn">
+        <h5><i class="ri-error-warning-line"></i> Do NOT conclude</h5>
+        <ul>${resolved.doNotConclude.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul>
+      </div>
+      <div class="playbook-section safe">
+        <h5><i class="ri-shield-check-line"></i> Prudent mitigation</h5>
+        <ul>${resolved.mitigation.map(m => `<li>${escapeHtml(m)}</li>`).join("")}</ul>
+      </div>
+    </div>
+  </details>`;
 }
 
 function renderAdvisor() {
@@ -8991,6 +9029,10 @@ function bindEvents() {
     }
     if (action === "timelineView") {
       state.timelineView = event.currentTarget.dataset.value || "stories";
+      render();
+    }
+    if (action === "diagnosisView") {
+      state.diagnosisView = event.currentTarget.dataset.value || "matrix";
       render();
     }
     if (action === "copyAdvisorCommands") {
