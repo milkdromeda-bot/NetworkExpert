@@ -133,3 +133,73 @@ test("capture quality handles empty workspace without throwing", () => {
   assert.equal(report.warnings.some(item => item.includes("No capture text")), true);
   assert.match(report.recommendedCommand, /ss -HOntepmi --tos --cgroup --inet-sockopt/);
 });
+
+test("capture quality detects counter resets between snapshots", () => {
+  const raw = [
+    fullSnapshot("2026-05-15T10:37:15,000+00:00", 5000),
+    fullSnapshot("2026-05-15T10:37:16,000+00:00", 2000),
+    fullSnapshot("2026-05-15T10:37:17,000+00:00", 3000)
+  ].join("\n");
+  const report = analyzeCaptureQuality({ raw, command: FULL_COMMAND });
+
+  assert.equal(report.dataIntegrity.some(i => i.type === "counter-reset"), true);
+  assert.equal(report.warnings.some(w => w.includes("counter reset")), true);
+  assert.equal(report.recommendations.some(r => r.includes("Counter resets")), true);
+});
+
+test("capture quality detects socket identity changes", () => {
+  const snap1 = `2026-05-15T10:37:15,000+00:00
+tcp ESTAB 0 0 10.0.0.10:50000 10.0.0.20:443 users:(("java",pid=42,fd=7)) timer:(keepalive,116min,0) uid:1002 ino:12345 sk:abc cgroup:/user.slice skmem:(r0,rb4225792,t0,tb870400,f1280,w0,o0,bl0,d0) ts sack cubic wscale:7,7 rto:201 rtt:0.051/0.009 mss:1448 cwnd:10 bytes_sent:1000 bytes_received:1000 segs_out:100 segs_in:100 send 2271372549bps delivery_rate 827428568bps rcv_space:245059 rcv_ssthresh:1171997`;
+  const snap2 = `2026-05-15T10:37:16,000+00:00
+tcp ESTAB 0 0 10.0.0.10:50000 10.0.0.20:443 users:(("java",pid=42,fd=7)) timer:(keepalive,116min,0) uid:1002 ino:12345 sk:def cgroup:/user.slice skmem:(r0,rb4225792,t0,tb870400,f1280,w0,o0,bl0,d0) ts sack cubic wscale:7,7 rto:201 rtt:0.051/0.009 mss:1448 cwnd:10 bytes_sent:1500 bytes_received:1500 segs_out:150 segs_in:150 send 2271372549bps delivery_rate 827428568bps rcv_space:245059 rcv_ssthresh:1171997`;
+  const snap3 = `2026-05-15T10:37:17,000+00:00
+tcp ESTAB 0 0 10.0.0.10:50000 10.0.0.20:443 users:(("java",pid=42,fd=7)) timer:(keepalive,116min,0) uid:1002 ino:12345 sk:def cgroup:/user.slice skmem:(r0,rb4225792,t0,tb870400,f1280,w0,o0,bl0,d0) ts sack cubic wscale:7,7 rto:201 rtt:0.051/0.009 mss:1448 cwnd:10 bytes_sent:2000 bytes_received:2000 segs_out:200 segs_in:200 send 2271372549bps delivery_rate 827428568bps rcv_space:245059 rcv_ssthresh:1171997`;
+  const raw = [snap1, snap2, snap3].join("\n");
+  const report = analyzeCaptureQuality({ raw, command: FULL_COMMAND });
+
+  assert.equal(report.dataIntegrity.some(i => i.type === "identity-change"), true);
+  assert.equal(report.warnings.some(w => w.includes("identity change")), true);
+});
+
+test("capture quality detects timestamp gaps", () => {
+  const raw = [
+    fullSnapshot("2026-05-15T10:37:15,000+00:00", 1000),
+    fullSnapshot("2026-05-15T10:37:16,000+00:00", 2000),
+    fullSnapshot("2026-05-15T10:37:30,000+00:00", 3000),
+    fullSnapshot("2026-05-15T10:37:31,000+00:00", 4000)
+  ].join("\n");
+  const report = analyzeCaptureQuality({ raw, command: FULL_COMMAND });
+
+  assert.equal(report.dataIntegrity.some(i => i.type === "timestamp-gap"), true);
+  assert.equal(report.warnings.some(w => w.includes("timestamp gap")), true);
+});
+
+test("capture quality warns about sub-100ms sampling without ms precision", () => {
+  const raw = [
+    fullSnapshot("2026-05-15T10:37:15+00:00", 1000),
+    fullSnapshot("2026-05-15T10:37:15+00:00", 2000),
+    fullSnapshot("2026-05-15T10:37:15+00:00", 3000)
+  ].join("\n");
+  const report = analyzeCaptureQuality({ raw, command: "while true; do date --iso-8601=seconds; ss -HOntepmi; sleep 0.05; done" });
+
+  assert.equal(Array.isArray(report.dataIntegrity), true);
+});
+
+test("capture quality exposes dataIntegrity array even when clean", () => {
+  const report = analyzeCaptureQuality({ raw: fullCapture(), command: FULL_COMMAND });
+
+  assert.equal(Array.isArray(report.dataIntegrity), true);
+  assert.equal(report.dataIntegrity.length, 0);
+});
+
+test("capture quality penalizes score for high-severity integrity issues", () => {
+  const raw = [
+    fullSnapshot("2026-05-15T10:37:15,000+00:00", 5000),
+    fullSnapshot("2026-05-15T10:37:16,000+00:00", 2000),
+    fullSnapshot("2026-05-15T10:37:17,000+00:00", 3000)
+  ].join("\n");
+  const cleanReport = analyzeCaptureQuality({ raw: fullCapture(), command: FULL_COMMAND });
+  const dirtyReport = analyzeCaptureQuality({ raw, command: FULL_COMMAND });
+
+  assert.equal(dirtyReport.score < cleanReport.score, true);
+});

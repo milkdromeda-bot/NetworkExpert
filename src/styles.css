@@ -3651,6 +3651,113 @@ tr:hover, tr.selected { background: #101a27; }
   margin: 5px 0;
   overflow-wrap: anywhere;
 }
+
+/* Root Cause Matrix */
+.root-cause-matrix {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #080d14;
+  padding: 14px;
+}
+.root-cause-matrix header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.root-cause-matrix h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.matrix-grid {
+  display: grid;
+  gap: 6px;
+}
+.matrix-cell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #0a1018;
+  overflow: hidden;
+}
+.matrix-cell.top {
+  border-left: 3px solid rgba(76, 222, 138, .8);
+}
+.matrix-bar {
+  position: absolute;
+  inset: 0;
+  background: rgba(76, 222, 138, .08);
+  pointer-events: none;
+  transition: width .3s ease;
+}
+.matrix-cell.medium .matrix-bar { background: rgba(255, 209, 102, .08); }
+.matrix-cell.low .matrix-bar { background: rgba(140, 160, 180, .05); }
+.matrix-cell strong {
+  position: relative;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.matrix-pct {
+  position: relative;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(76, 222, 138, .9);
+}
+.matrix-cell.medium .matrix-pct { color: rgba(255, 209, 102, .9); }
+.matrix-cell.low .matrix-pct { color: var(--soft); }
+.matrix-cell small {
+  position: relative;
+  font-size: 11px;
+  color: var(--soft);
+}
+
+/* Confidence confirm/reject */
+.diagnosis-confidence-detail {
+  background: linear-gradient(135deg, rgba(76, 222, 138, .06), transparent 56%), #060a10;
+}
+.confidence-confirm-reject {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--soft);
+}
+.confidence-confirm-reject b {
+  color: var(--text);
+  font-weight: 500;
+}
+.confidence-confirm-reject i {
+  font-size: 13px;
+  vertical-align: -1px;
+}
+
+/* Data integrity in capture quality */
+.capture-quality-list.data-integrity h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.capture-quality-list.data-integrity li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.capture-quality-list.data-integrity li.high { color: rgba(255, 92, 119, .9); }
+.capture-quality-list.data-integrity li.medium { color: rgba(255, 209, 102, .9); }
+.capture-quality-list.data-integrity li.low { color: var(--soft); }
+
 .advisor-empty {
   min-height: 260px;
   display: grid;

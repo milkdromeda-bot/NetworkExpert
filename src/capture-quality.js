@@ -239,7 +239,98 @@ function detectFeatures({ raw, command, sockets, snapshots, blocks, intervalsMs,
   };
 }
 
-function buildMessages({ score, grade, featureCards, stats, raw, snapshots, command }) {
+function detectCounterResets(snapshots) {
+  const resets = [];
+  for (let i = 1; i < snapshots.length; i++) {
+    const prev = snapshots[i - 1].sockets || [];
+    const curr = snapshots[i].sockets || [];
+    for (const socket of curr) {
+      const sk = socket.details?.values?.sk;
+      const ino = socket.details?.values?.ino;
+      if (!sk && !ino) continue;
+      const match = prev.find(p => (sk && p.details?.values?.sk === sk) || (ino && p.details?.values?.ino === ino));
+      if (!match) continue;
+      for (const field of COUNTER_FIELDS) {
+        const prevVal = Number(match.details?.values?.[field] || 0);
+        const currVal = Number(socket.details?.values?.[field] || 0);
+        if (prevVal > 0 && currVal < prevVal) {
+          resets.push({ snapshot: i, field, prev: prevVal, curr: currVal, sk: sk || ino });
+          break;
+        }
+      }
+    }
+  }
+  return resets;
+}
+
+function detectIdentityChanges(snapshots) {
+  const changes = [];
+  for (let i = 1; i < snapshots.length; i++) {
+    const prev = snapshots[i - 1].sockets || [];
+    const curr = snapshots[i].sockets || [];
+    const prevByAddr = new Map(prev.map(s => [`${s.local}|${s.peer}`, s]));
+    for (const socket of curr) {
+      const key = `${socket.local}|${socket.peer}`;
+      const match = prevByAddr.get(key);
+      if (!match) continue;
+      const prevSk = match.details?.values?.sk;
+      const currSk = socket.details?.values?.sk;
+      if (prevSk && currSk && prevSk !== currSk) {
+        changes.push({ snapshot: i, addr: key, prevSk, currSk });
+      }
+    }
+  }
+  return changes;
+}
+
+function detectTimestampIrregularities(intervalsMs) {
+  if (intervalsMs.length < 2) return { gaps: [], duplicates: 0, jitter: 0 };
+  const med = median(intervalsMs);
+  const gaps = [];
+  let duplicates = 0;
+  const deviations = [];
+  for (let i = 0; i < intervalsMs.length; i++) {
+    const interval = intervalsMs[i];
+    if (interval === 0) { duplicates++; continue; }
+    if (med > 0) {
+      const ratio = interval / med;
+      deviations.push(Math.abs(ratio - 1));
+      if (ratio > 3) gaps.push({ index: i + 1, intervalMs: interval, expectedMs: med });
+    }
+  }
+  const jitter = deviations.length ? average(deviations) : 0;
+  return { gaps, duplicates, jitter };
+}
+
+function buildDataIntegrityWarnings(snapshots, intervalsMs, stats) {
+  const warnings = [];
+  const counterResets = detectCounterResets(snapshots);
+  const identityChanges = detectIdentityChanges(snapshots);
+  const irregularities = detectTimestampIrregularities(intervalsMs);
+
+  if (counterResets.length) {
+    warnings.push({ type: "counter-reset", severity: "high", message: `${counterResets.length} counter reset(s) detected across snapshots — socket may have been recreated or kernel recycled the sk.`, details: counterResets.slice(0, 3) });
+  }
+  if (identityChanges.length) {
+    warnings.push({ type: "identity-change", severity: "high", message: `${identityChanges.length} socket identity change(s) detected (same addr:port, different sk) — connection was likely recycled.`, details: identityChanges.slice(0, 3) });
+  }
+  if (irregularities.gaps.length) {
+    warnings.push({ type: "timestamp-gap", severity: "medium", message: `${irregularities.gaps.length} timestamp gap(s) >3x median interval — possible collection stall or system load spike.`, details: irregularities.gaps.slice(0, 3) });
+  }
+  if (irregularities.duplicates > 0) {
+    warnings.push({ type: "duplicate-timestamp", severity: "low", message: `${irregularities.duplicates} duplicate timestamp(s) — sub-second precision may be missing.`, details: [] });
+  }
+  if (irregularities.jitter > 0.5) {
+    warnings.push({ type: "high-jitter", severity: "medium", message: `Timestamp jitter is ${(irregularities.jitter * 100).toFixed(0)}% of median interval — cadence is unreliable for rate calculations.`, details: [] });
+  }
+  if (stats.medianIntervalMs > 0 && stats.medianIntervalMs < 100 && !stats.highPrecisionTimestamps) {
+    warnings.push({ type: "no-ms-precision", severity: "high", message: "Sub-100ms sampling without millisecond timestamps — intervals cannot be measured accurately.", details: [] });
+  }
+
+  return warnings;
+}
+
+function buildMessages({ score, grade, featureCards, stats, raw, snapshots, command, dataIntegrity }) {
   const strengths = [];
   const warnings = [];
   const missing = [];
@@ -250,6 +341,10 @@ function buildMessages({ score, grade, featureCards, stats, raw, snapshots, comm
     if (card.status === "ok") strengths.push(`${card.label}: ${card.detail}`);
     if (card.status === "partial") warnings.push(`${card.label}: ${card.detail}`);
     if (card.status === "missing") missing.push(`${card.label}: ${card.detail}`);
+  }
+
+  for (const issue of dataIntegrity) {
+    warnings.push(issue.message);
   }
 
   if (!raw.trim()) {
@@ -270,6 +365,12 @@ function buildMessages({ score, grade, featureCards, stats, raw, snapshots, comm
     warnings.push("Very short interval with tee can distort cadence or become the recorder bottleneck.");
     recommendations.push("For 0.05s or faster captures, validate disk/terminal overhead or redirect to a fast local file.");
   }
+  if (dataIntegrity.some(i => i.type === "counter-reset")) {
+    recommendations.push("Counter resets suggest socket recycling — correlate with connection lifecycle before trusting delta calculations.");
+  }
+  if (dataIntegrity.some(i => i.type === "no-ms-precision")) {
+    recommendations.push("Use date --iso-8601=ns for sub-second captures to get accurate interval measurements.");
+  }
   if (score >= 85) recommendations.push("This capture is strong enough for timeline, chart, and diagnostic correlation. Keep the same collection pattern for incident runs.");
   if (grade === "usable") recommendations.push("Keep diagnostics cautious: use the report to identify which missing evidence blocks a firmer conclusion.");
 
@@ -286,9 +387,11 @@ export function analyzeCaptureQuality({ raw = "", sockets = [], sourceName = "",
   const durationMs = epochs.length >= 2 ? epochs[epochs.length - 1] - epochs[0] : 0;
   const detected = detectFeatures({ raw: text, command, sockets: parsedSockets, snapshots, blocks, intervalsMs, durationMs });
   const featureCards = buildFeatureCards({ features: detected.features, commandSignals: detected.commandSignals, stats: detected.stats });
-  const score = Math.max(0, Math.min(100, featureCards.reduce((sum, card) => sum + card.points, 0)));
+  const dataIntegrity = buildDataIntegrityWarnings(snapshots, intervalsMs, detected.stats);
+  const integrityPenalty = Math.min(15, dataIntegrity.filter(i => i.severity === "high").length * 5 + dataIntegrity.filter(i => i.severity === "medium").length * 2);
+  const score = Math.max(0, Math.min(100, featureCards.reduce((sum, card) => sum + card.points, 0) - integrityPenalty));
   const grade = qualityGrade(score);
-  const messages = buildMessages({ score, grade, featureCards, stats: detected.stats, raw: text, snapshots, command });
+  const messages = buildMessages({ score, grade, featureCards, stats: detected.stats, raw: text, snapshots, command, dataIntegrity });
   const socketCounts = detected.socketCounts;
   const activeSocketRows = snapshots.length ? socketCounts.reduce((sum, count) => sum + count, 0) : parsedSockets.length;
   const observedRateRows = detected.rows.filter(socket => metricValue(socket, "delivery_rate") || metricValue(socket, "pacing_rate") || metricValue(socket, "send"));
@@ -319,6 +422,7 @@ export function analyzeCaptureQuality({ raw = "", sockets = [], sourceName = "",
       observedRateRows: observedRateRows.length
     },
     featureCards,
+    dataIntegrity,
     strengths: messages.strengths,
     warnings: messages.warnings,
     missing: messages.missing,

@@ -207,6 +207,9 @@ function makeHypothesis({
   sockets = [],
   evidence = [],
   counterEvidence = [],
+  missingEvidence = [],
+  wouldConfirm = "",
+  wouldReject = "",
   learnMore = [],
   commands = []
 }) {
@@ -214,10 +217,20 @@ function makeHypothesis({
   const peers = unique(sockets.map(socket => socket.peer), 5);
   const locals = unique(sockets.map(socket => socket.local), 5);
   const processes = unique(sockets.map(processName), 5);
-  const signalCount = evidence.filter(Boolean).length;
-  const counterCount = counterEvidence.filter(Boolean).length;
+  const strong = evidence.filter(Boolean);
+  const contra = counterEvidence.filter(Boolean);
+  const missing = missingEvidence.filter(Boolean);
+  const signalCount = strong.length;
+  const counterCount = contra.length;
+  const missingCount = missing.length;
   const baseConf = CONFIDENCE_SCORE[confidence] || 1;
-  const numericConfidence = Math.max(0, Math.min(1, (baseConf / 3) * 0.5 + Math.min(1, signalCount / 5) * 0.35 + (sockets.length > 0 ? 0.15 : 0) - counterCount * 0.12));
+  const numericConfidence = Math.max(0, Math.min(1,
+    (baseConf / 3) * 0.5
+    + Math.min(1, signalCount / 5) * 0.35
+    + (sockets.length > 0 ? 0.15 : 0)
+    - counterCount * 0.12
+    - missingCount * 0.05
+  ));
   return {
     id,
     title,
@@ -225,14 +238,22 @@ function makeHypothesis({
     severity,
     confidence,
     confidenceScore: Math.round(numericConfidence * 100) / 100,
+    confidenceDetail: {
+      strong,
+      weak: strong.length <= 2 ? strong : [],
+      contra,
+      missing,
+      wouldConfirm: wouldConfirm || defaultWouldConfirm(id),
+      wouldReject: wouldReject || defaultWouldReject(id)
+    },
     confidenceSignals: signalCount,
     confidenceCounters: counterCount,
     summary,
-    evidence: unique(evidence, 8),
-    counterEvidence: unique(counterEvidence, 8),
+    evidence: unique(strong, 8),
+    counterEvidence: unique(contra, 8),
     learnMore: unique(learnMore, 10),
     commands: unique(commands, 8),
-    actionableCommands: computeActionableCommands(id, sockets, evidence),
+    actionableCommands: computeActionableCommands(id, sockets, strong),
     affectedSocketIds,
     count: affectedSocketIds.length,
     topSocketId: affectedSocketIds[0] || null,
@@ -241,6 +262,44 @@ function makeHypothesis({
     processes,
     score: severityScore(severity) * 100 + confidenceScore(confidence) * 20 + Math.min(19, affectedSocketIds.length)
   };
+}
+
+function defaultWouldConfirm(id) {
+  const map = {
+    "local-receive-window-collapse": "tcpdump showing Zero Window from local side + strace showing blocked read/epoll in the process",
+    "local-app-not-reading": "pidstat/strace showing the process is blocked or GC log showing long pause during Recv-Q growth",
+    "zero-window-or-slow-consumer": "pcap with tcp.analysis.zero_window from the peer + peer-side process evidence of slow consumption",
+    "peer-slow-consumer-or-egress": "Send-Q growth correlating with peer-side Recv-Q growth or pcap showing delayed ACKs",
+    "path-congestion-or-loss": "mtr showing packet loss at a specific hop + nstat TcpRetransSegs growing",
+    "peer-dead-or-blackhole": "No response to probes for >30s + mtr showing 100% loss at destination",
+    "socket-memory-pressure": "skmem.d growing across snapshots + softnet_stat showing drops",
+    "tcp-backoff-watch": "Backoff increasing across snapshots while retrans counter grows",
+    "tcp-window-scale-context": "SYN/SYN-ACK capture showing negotiated wscale + BDP calculation showing window is the bottleneck",
+    "tcp-receive-ssthresh-trend": "rcv_ssthresh falling while Recv-Q grows and process shows slow consumption",
+    "bdp-window-limited-throughput": "Configured link capacity + window math proving throughput cannot exceed window/RTT",
+    "close-wait-leak": "lsof showing the process holding CLOSE-WAIT sockets without closing them",
+    "network-congestion-pattern": "nstat showing growing retransmissions + mtr showing loss at intermediate hop"
+  };
+  return map[id] || "Additional timestamped snapshots showing the pattern persists or worsens";
+}
+
+function defaultWouldReject(id) {
+  const map = {
+    "local-receive-window-collapse": "Process consuming at full speed with no GC/block + Recv-Q draining between snapshots",
+    "local-app-not-reading": "Recv-Q draining to zero between snapshots + process CPU/IO normal",
+    "zero-window-or-slow-consumer": "pcap showing no Zero Window + rwnd_limited disappearing in next snapshot",
+    "peer-slow-consumer-or-egress": "Send-Q draining between snapshots + no retransmission growth",
+    "path-congestion-or-loss": "mtr showing 0% loss + RTT stable + cwnd growing normally",
+    "peer-dead-or-blackhole": "Peer responding to probes + connection recovering",
+    "socket-memory-pressure": "skmem.d stable across snapshots (historical drops, not active)",
+    "tcp-backoff-watch": "Backoff returning to 0 in next snapshot + connection recovering",
+    "tcp-window-scale-context": "BDP calculation showing window is not the bottleneck + throughput matching expected rate",
+    "tcp-receive-ssthresh-trend": "rcv_ssthresh stable or growing + no receive pressure",
+    "bdp-window-limited-throughput": "Throughput well below window/RTT limit + congestion signals present",
+    "close-wait-leak": "CLOSE-WAIT count stable and small + normal connection lifecycle",
+    "network-congestion-pattern": "nstat retrans stable + RTT stable + cwnd normal"
+  };
+  return map[id] || "Pattern disappearing in subsequent snapshots or contradicted by packet capture";
 }
 
 export function buildDiagnosticHypotheses({

@@ -15,6 +15,7 @@ import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource
 import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "./topology.js";
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
+import { buildRootCauseMatrix } from "./root-cause-matrix.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeCaptureQuality } from "./capture-quality.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
@@ -4814,6 +4815,10 @@ function renderCaptureQualityReport() {
       <div class="capture-quality-side">
         ${renderCaptureQualityList("Warnings", report.warnings, "No capture-quality warning detected.", "warnings")}
         ${renderCaptureQualityList("Missing evidence", report.missing, "No important evidence gap detected.", "missing")}
+        ${report.dataIntegrity?.length ? `<section class="capture-quality-list data-integrity">
+          <h4><i class="ri-shield-check-line"></i> Data integrity</h4>
+          <ul>${report.dataIntegrity.map(issue => `<li class="${escapeHtml(issue.severity)}"><span class="risk ${escapeHtml(issue.severity)}">${escapeHtml(issue.severity)}</span> ${escapeHtml(issue.message)}</li>`).join("")}</ul>
+        </section>` : ""}
       </div>
     </section>
 
@@ -4851,6 +4856,7 @@ function diagnosticHypotheses() {
 function renderDiagnosis() {
   const hypotheses = diagnosticHypotheses();
   const top = hypotheses[0];
+  const matrix = buildRootCauseMatrix(state.sockets);
   return `<div class="diagnosis-shell">
     <section class="advisor-hero diagnosis-hero">
       <div>
@@ -4863,10 +4869,32 @@ function renderDiagnosis() {
         <small>hypothesis(es)</small>
       </div>
     </section>
+    ${matrix.causes.length ? renderRootCauseMatrix(matrix) : ""}
     <div class="diagnosis-grid">
       ${hypotheses.map(renderDiagnosticHypothesis).join("")}
     </div>
   </div>`;
+}
+
+function renderRootCauseMatrix(matrix) {
+  return `<section class="root-cause-matrix">
+    <header>
+      <h4><i class="ri-grid-line"></i> Root Cause Matrix</h4>
+      ${matrix.ambiguous ? `<span class="risk medium">Ambiguous — multiple causes compete</span>` : ""}
+    </header>
+    <div class="matrix-grid">
+      ${matrix.causes.map(cause => {
+        const pct = Math.round(cause.confidence * 100);
+        const level = pct >= 60 ? "high" : pct >= 30 ? "medium" : "low";
+        return `<div class="matrix-cell ${level}${matrix.topCause?.id === cause.id ? " top" : ""}">
+          <div class="matrix-bar" style="width:${pct}%"></div>
+          <strong>${escapeHtml(cause.label)}</strong>
+          <span class="matrix-pct">${pct}%</span>
+          <small>${cause.signalCount}/${cause.totalSignals} signals</small>
+        </div>`;
+      }).join("")}
+    </div>
+  </section>`;
 }
 
 function renderDiagnosticHypothesis(item) {
@@ -4906,6 +4934,14 @@ function renderDiagnosticHypothesis(item) {
     ${item.learnMore?.length ? `<details class="diagnosis-learn-more">
       <summary><i class="ri-book-open-line"></i> Learn more</summary>
       <ul>${item.learnMore.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>
+    </details>` : ""}
+    ${item.confidenceDetail ? `<details class="diagnosis-confidence-detail">
+      <summary><i class="ri-scales-3-line"></i> What would confirm or reject</summary>
+      <div class="confidence-confirm-reject">
+        <div><b><i class="ri-checkbox-circle-line"></i> Would confirm:</b> ${escapeHtml(item.confidenceDetail.wouldConfirm)}</div>
+        <div><b><i class="ri-close-circle-line"></i> Would reject:</b> ${escapeHtml(item.confidenceDetail.wouldReject)}</div>
+        ${item.confidenceDetail.missing?.length ? `<div><b><i class="ri-question-line"></i> Missing evidence:</b> ${item.confidenceDetail.missing.map(m => escapeHtml(m)).join("; ")}</div>` : ""}
+      </div>
     </details>` : ""}
     <footer>
       ${item.topSocketId ? `<button data-jump="${escapeHtml(item.topSocketId)}">${icons.focus} Show context row</button>` : ""}
