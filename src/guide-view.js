@@ -348,7 +348,22 @@ export function createGuideView(context) {
         mitigation: "Stories are pattern-based, not proof. Always validate with packet captures or application-level evidence before acting."
       },
       {
-        title: "8. Before/After comparison — incident detection",
+        title: "8. Multi-socket correlation — common cause detection",
+        group: "intelligence",
+        summary: "Detects when multiple sockets share the same symptom simultaneously, grouped by PID or peer. This identifies a common cause and orients the diagnostic: same PID + different peers → process/JVM suspect; same peer + multiple PIDs → peer or path suspect.",
+        signals: ["N sockets enter persist at the same snapshot", "Recv-Q jumps on all sockets of one PID", "Send-Q grows to all connections toward one peer", "Drops appear on multiple sockets simultaneously"],
+        decide: [
+          "Same PID + different peers + RTT stable + no retrans: strongly suggests process-level issue (GC, deadlock, event loop).",
+          "Same peer + multiple PIDs: could be peer application, peer kernel, or network path to that peer.",
+          "Same host + multiple processes: suspect host/NIC/bridge/qdisc/CPU steal, not individual processes.",
+          "Partial ratio (50-80%): some connections affected — check thread pool saturation or partial resource exhaustion."
+        ],
+        next: ["Check the Timeline Stories tab for group events (orange border).", "Correlate the timestamp with GC logs or application logs.", "Use the Playbook for the matching hypothesis."],
+        commands: [envCommand("ss -tinpm state established | egrep 'persist|Recv-Q'"), envCommand("jstack <pid>"), envCommand("jstat -gcutil <pid> 1000 5")],
+        mitigation: "If process-wide freeze is confirmed, focus on JVM/application tuning, not network tuning. The network is a victim, not the cause."
+      },
+      {
+        title: "9. Before/After comparison — incident detection",
         group: "intelligence",
         summary: "Load a healthy capture as baseline, then load the incident capture (or vice versa). The Compare tab shows exactly what changed: metrics that exploded, new peers, new anomalies, and an automatic verdict.",
         signals: ["Recv-Q or Send-Q delta >100KB", "New peers appeared", "persist timer appeared where absent before", "Drops grew from 0", "rcv_ssthresh dropped significantly"],
@@ -363,7 +378,7 @@ export function createGuideView(context) {
         mitigation: "Always compare with the same ss options and similar duration. A 5-second capture vs a 60-second baseline will produce misleading deltas."
       },
       {
-        title: "9. Integrated Playbooks",
+        title: "10. Integrated Playbooks",
         group: "workflow",
         summary: "Each diagnostic hypothesis includes a contextual Playbook with commands for local, peer, and host sides, plus explicit warnings about what NOT to conclude and prudent mitigation steps.",
         signals: ["Playbook available on hypothesis cards in Diagnosis tab", "Commands pre-filled with actual PID, peer IP, interface", "Sections: Local, Peer, Host, Do NOT conclude, Mitigation"],
@@ -378,7 +393,7 @@ export function createGuideView(context) {
         mitigation: "Playbooks guide investigation, not resolution. Always validate before applying tuning suggestions."
       },
       {
-        title: "10. Exposed listeners and missing ownership",
+        title: "11. Exposed listeners and missing ownership",
         group: "workflow",
         summary: "Use this when LISTEN sockets are wildcard-bound, unexpected, or missing process ownership. It is a security and operability check, not only a performance check.",
         signals: ["LISTEN on 0.0.0.0 or ::", "Unknown process field", "Unexpected public service port", "Many listeners in a container", "Port bound in the wrong namespace"],
