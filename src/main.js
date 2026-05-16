@@ -1,4 +1,4 @@
-import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateIncidentDemoSample, generateMicroburstSample, generateSlowConsumerSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
+﻿import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateIncidentDemoSample, generateMicroburstSample, generateSlowConsumerSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
 import { metricValue, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { importSocketFile } from "./importer.js?v=20260425-2";
@@ -174,6 +174,7 @@ function tableDefaults() {
 
 
 const initialPrefs = loadPrefs();
+if (initialPrefs.theme === "light") document.documentElement.setAttribute("data-theme", "light");
 
 let state = {
   raw: "",
@@ -2636,6 +2637,7 @@ function render() {
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
           ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
+          <button class="icon" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><i class="${state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line"}"></i></button>
           <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>
         </div>
       </header>
@@ -3117,10 +3119,10 @@ function renderIngestPage() {
           <span class="demo-btn-wrap">
             <button data-action="sampleIncidentDemo" class="demo-btn"><i class="ri-fire-line"></i> See it in action</button>
             <div class="demo-tooltip">
-              <strong>🔥 JVM GC Stall Incident</strong>
+              <strong>ðŸ”¥ JVM GC Stall Incident</strong>
               <ul>
                 <li><i class="ri-cpu-line"></i> 5 sockets from <code>java:2155462</code></li>
-                <li><i class="ri-timer-line"></i> Normal → onset → full stall → recovery</li>
+                <li><i class="ri-timer-line"></i> Normal â†’ onset â†’ full stall â†’ recovery</li>
                 <li><i class="ri-alarm-warning-line"></i> persist, backoff, drops, Recv-Q explosion</li>
                 <li><i class="ri-grid-line"></i> Multi-socket correlation fires</li>
                 <li><i class="ri-movie-2-line"></i> Stories, matrix, rate alerts all trigger</li>
@@ -3548,14 +3550,14 @@ function renderJvmGcPanel() {
       </div><span class="jvm-sep"></span>` : ""}
       <div class="bdp-controls" style="margin-left:auto">
         <label><span>Mode</span><select id="jvmCorrelationMode"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (local GC)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (remote GC)</option></select></label>
-        <label style="margin-left:10px"><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
+        <label style="margin-left:10px"><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">â— Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">â— Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">â— Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">â— Critical</option></select></label>
         <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
         <label style="margin-left:10px"><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
       </div>
     </div>
     <div class="panel-body">
       ${!hasPauses ? `<div class="jvm-gc-import">
-        <p><strong>Import GC / safepoint log</strong> — Java 17+ Unified Logging format. Large files (50 MB+) are streamed and parsed without freezing.</p>
+        <p><strong>Import GC / safepoint log</strong> â€” Java 17+ Unified Logging format. Large files (50 MB+) are streamed and parsed without freezing.</p>
         <div style="display:flex;gap:12px;margin-top:8px;align-items:center;flex-wrap:wrap">
           <label class="bdp-controls" style="margin:0"><span>SS capture is from</span><select id="jvmCorrelationModeImport"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (GC is local)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (GC is remote)</option></select></label>
           <button class="primary" data-action="pickJvmGcFile">Load & parse file</button>
@@ -3578,21 +3580,21 @@ function renderJvmGcPanel() {
         </details>
       </div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
-          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
+          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 â€“ 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 â€“ 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 â€“ 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 â€“ 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 â€“ 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
           <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} total</strong>
           <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}</em>
-          <span style="margin-left:auto;font-size:11px;color:var(--soft)">${summary?.recommendations?.map(r => `<b style="color:${r.severity === "critical" ? "#ff5c77" : r.severity === "warning" ? "#ffd166" : "#39d6d6"}">${escapeHtml(r.severity)}</b> ${escapeHtml(r.text)}`).join(" · ") || ""}</span>
+          <span style="margin-left:auto;font-size:11px;color:var(--soft)">${summary?.recommendations?.map(r => `<b style="color:${r.severity === "critical" ? "#ff5c77" : r.severity === "warning" ? "#ffd166" : "#39d6d6"}">${escapeHtml(r.severity)}</b> ${escapeHtml(r.text)}`).join(" Â· ") || ""}</span>
         </div>
         ${gc.cpuCorrelation?.summary ? `<div class="bdp-context-line info" style="margin-top:8px">
           <i class="ri-cpu-line" style="font-size:16px;color:#a78bfa"></i>
           <strong>CPU correlation: ${gc.cpuCorrelation.summary.correlatedCount} GC pause(s) with CPU scheduling issues</strong>
-          <em>Max wait: ${gc.cpuCorrelation.summary.maxWaitObserved.toFixed(1)}% · Saturation events: ${gc.cpuCorrelation.summary.cpuSaturationEvents} · High cswch: ${gc.cpuCorrelation.summary.highContextSwitchEvents}</em>
+          <em>Max wait: ${gc.cpuCorrelation.summary.maxWaitObserved.toFixed(1)}% Â· Saturation events: ${gc.cpuCorrelation.summary.cpuSaturationEvents} Â· High cswch: ${gc.cpuCorrelation.summary.highContextSwitchEvents}</em>
         </div>` : ""}
         ${gc.nstat ? `<div class="bdp-context-line info" style="margin-top:4px">
           <i class="ri-bar-chart-line" style="font-size:16px;color:#7dd3fc"></i>
           <strong>nstat counters</strong>
-          <em>Retrans: ${gc.nstat.retransSegs} · Timeouts: ${gc.nstat.timeouts} · ListenDrops: ${gc.nstat.listenDrops} · MemPressure: ${gc.nstat.tcpMemoryPressures} · RcvPruned: ${gc.nstat.rcvPruned}</em>
+          <em>Retrans: ${gc.nstat.retransSegs} Â· Timeouts: ${gc.nstat.timeouts} Â· ListenDrops: ${gc.nstat.listenDrops} Â· MemPressure: ${gc.nstat.tcpMemoryPressures} Â· RcvPruned: ${gc.nstat.rcvPruned}</em>
         </div>` : ""}
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
@@ -3602,7 +3604,7 @@ function renderJvmGcPanel() {
               ${renderJvmLegend("timeline")}
             </article>
             <article>
-              <div class="bdp-chart-title"><strong>Pause duration vs Δ${gc.mode === "sender" ? "Send-Q" : "Recv-Q"}</strong><span>scatter</span></div>
+              <div class="bdp-chart-title"><strong>Pause duration vs Î”${gc.mode === "sender" ? "Send-Q" : "Recv-Q"}</strong><span>scatter</span></div>
               <svg class="chart bdp-chart" data-jvm-chart="scatter" role="img" aria-label="GC pause scatter plot"></svg>
               ${renderJvmLegend("scatter")}
             </article>
@@ -3649,14 +3651,14 @@ function renderJvmGcPanel() {
 function jvmLegendSeries(kind) {
   if (kind === "scatter") {
     return [
-      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24", tip: "GC pauses with correlation score 0.20–0.50. Temporal overlap with TCP symptoms but moderate confidence." },
+      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24", tip: "GC pauses with correlation score 0.20â€“0.50. Temporal overlap with TCP symptoms but moderate confidence." },
       { key: "scatter_high", label: "High score pauses", color: "#ef4444", tip: "GC pauses with correlation score > 0.50. Strong evidence of JVM-induced slow consumer behavior." },
       { key: "scatter_low", label: "Low score pauses", color: "#7dd3fc", tip: "GC pauses with correlation score < 0.20. Pause detected but no significant TCP impact observed." }
     ];
   }
   return [
-    { key: "recvq", label: state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q", color: state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc", tip: state.jvmGc.mode === "sender" ? "TCP send queue depth in bytes. Rises when the remote receiver cannot drain data — indicates the remote GC stall is blocking ACKs." : "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough — a key slow consumer signal." },
-    { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1–20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
+    { key: "recvq", label: state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q", color: state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc", tip: state.jvmGc.mode === "sender" ? "TCP send queue depth in bytes. Rises when the remote receiver cannot drain data â€” indicates the remote GC stall is blocking ACKs." : "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough â€” a key slow consumer signal." },
+    { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1â€“20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
     { key: "gc_mixed", label: "Mixed GC", color: "#fbbf24", tip: "G1 mixed collections evacuating both young and old regions. Typically longer than young GC and may indicate heap pressure building up." },
     { key: "gc_full", label: "Full / Remark", color: "#ef4444", tip: "Full GC, Remark, or Cleanup pauses. These are the longest and most disruptive. Full GC indicates heap exhaustion or fragmentation." },
     { key: "gc_safepoint", label: "Safepoint", color: "#a78bfa", tip: "JVM safepoint pauses not related to GC (e.g. deoptimization, biased locking revocation). Can still block application threads." }
@@ -3949,8 +3951,8 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   const stateChangesSvg = stateChanges.map(sc => {
     const sx = x(sc.epochMs);
     return `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${pad.t}" y2="${pad.t + plotH}" stroke="#e879f9" stroke-width="1.5" stroke-dasharray="4 2"/>` +
-      `<rect x="${sx.toFixed(1) - 1}" y="${pad.t + plotH - 16}" width="${(sc.from + " → " + sc.to).length * 5 + 10}" height="14" rx="3" fill="rgba(10,16,24,.85)"/>` +
-      `<text x="${(Number(sx.toFixed(1)) + 4)}" y="${pad.t + plotH - 6}" fill="#e879f9" font-size="8" font-weight="600">${escapeHtml(sc.from)} → ${escapeHtml(sc.to)}</text>`;
+      `<rect x="${sx.toFixed(1) - 1}" y="${pad.t + plotH - 16}" width="${(sc.from + " â†’ " + sc.to).length * 5 + 10}" height="14" rx="3" fill="rgba(10,16,24,.85)"/>` +
+      `<text x="${(Number(sx.toFixed(1)) + 4)}" y="${pad.t + plotH - 6}" fill="#e879f9" font-size="8" font-weight="600">${escapeHtml(sc.from)} â†’ ${escapeHtml(sc.to)}</text>`;
   }).join("");
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * maxPrimary);
@@ -3962,7 +3964,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   });
   const xTimeTicksSvg = xTimeTicks.map(t => `<line x1="${t.px}" x2="${t.px}" y1="${pad.t}" y2="${h - pad.b}" stroke="#1a2636"/><text x="${t.px}" y="${h - pad.b + 14}" text-anchor="middle" fill="#8c9aab" font-size="10">${escapeHtml(t.label)}</text>`).join("");
   svg.innerHTML = `
-    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="${chartBgColor()}"/>
     ${xTimeTicksSvg}
     ${yTicksSvg}
     ${bars}
@@ -4027,7 +4029,7 @@ function drawJvmScatterChartInteractive(svg, results) {
   });
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   if (!points.length) {
-    svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" fill="#050910"/><text x="24" y="42" fill="#c4d0de" font-size="12">No visible correlated data points.</text>`;
+    svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" fill="${chartBgColor()}"/><text x="24" y="42" fill="#c4d0de" font-size="12">No visible correlated data points.</text>`;
     return;
   }
   const maxDuration = Math.max(1, ...points.map(point => point.durationMs));
@@ -4040,12 +4042,12 @@ function drawJvmScatterChartInteractive(svg, results) {
   const yTicksSvg = yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#1a2636"/><text x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="10">${formatMetricValue("recvQ", v)}</text>`).join("");
   const dots = points.map(point => `<circle cx="${x(point.durationMs).toFixed(1)}" cy="${y(point.delta).toFixed(1)}" r="4" fill="${jvmPauseColor(point.score)}" opacity=".82"><title>${point.durationMs.toFixed(1)}ms -> Delta Recv-Q ${point.delta}</title></circle>`).join("");
   svg.innerHTML = `
-    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="#050910"/>
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="${chartBgColor()}"/>
     ${xTicksSvg}
     ${yTicksSvg}
     ${dots}
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#8c9aab" font-size="11">Pause duration (ms)</text>
-    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">ΔRecv-Q (bytes)</text>
+    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Î”Recv-Q (bytes)</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
@@ -4148,7 +4150,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Î”${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
     // Sync to timeline chart
@@ -4175,7 +4177,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       return !best || d < best.d ? { item, d } : best;
     }, null)?.item;
     if (!point || !point.epochMs) return;
-    // Zoom timeline to ±5s around this pause
+    // Zoom timeline to Â±5s around this pause
     const history = visibleHistory().filter(s => s.epochMs);
     if (!history.length) return;
     const t0 = history[0].epochMs, t1 = history[history.length - 1].epochMs;
@@ -4228,7 +4230,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="#0b1018" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Î”${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
   };
@@ -4881,7 +4883,7 @@ function diagnosticHypotheses() {
       if (h.confidenceScore > cap) {
         h.confidenceScore = cap;
         h.confidenceCapped = true;
-        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% — capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% — capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
+        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% â€” capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% â€” capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
       }
     }
   }
@@ -4915,7 +4917,7 @@ function renderDiagnosis() {
         const formatted = text
           .replace(/(\d+:\d+:\d+\s*UTC)/g, "<b>$1</b>")
           .replace(/(\d+\.?\d*[KMG]B\/s)/g, "<b>$1</b>")
-          .replace(/(\d+[KMG]B\s*→\s*\d+\.?\d*[KMG]B)/g, "<b>$1</b>")
+          .replace(/(\d+[KMG]B\s*â†’\s*\d+\.?\d*[KMG]B)/g, "<b>$1</b>")
           .replace(/(java:\d+|nginx:\d+)/g, "<b>$1</b>")
           .replace(/(\d+%)/g, "<b>$1</b>")
           .replace(/(ambiguous|More evidence needed)/g, "<i>$1</i>")
@@ -4939,7 +4941,7 @@ function renderRootCauseMatrix(matrix) {
   return `<section class="root-cause-matrix">
     <header>
       <h4><i class="ri-grid-line"></i> Root Cause Matrix</h4>
-      ${matrix.ambiguous ? `<span class="risk medium">Ambiguous — multiple causes compete</span>` : ""}
+      ${matrix.ambiguous ? `<span class="risk medium">Ambiguous â€” multiple causes compete</span>` : ""}
     </header>
     <div class="matrix-grid">
       <div class="matrix-header"><span>Confidence</span><span>Signals</span><span>Probable cause</span></div>
@@ -4964,7 +4966,7 @@ function renderDiagnosticHypothesis(item) {
         <span class="risk ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
         <strong>${escapeHtml(item.title)}</strong>
       </div>
-      <span class="confidence${item.confidenceCapped ? " capped" : ""}" title="${item.confidenceCapped ? escapeHtml(item.confidenceCapReason) : `${item.confidenceSignals} converging signal(s), ${item.confidenceCounters} counter-evidence(s)`}"><span class="confidence-bar" style="width:${Math.round((item.confidenceScore || 0) * 100)}%"></span>${Math.round((item.confidenceScore || 0) * 100)}% confidence${item.confidenceCapped ? " ⚠️ capped" : ""}</span>
+      <span class="confidence${item.confidenceCapped ? " capped" : ""}" title="${item.confidenceCapped ? escapeHtml(item.confidenceCapReason) : `${item.confidenceSignals} converging signal(s), ${item.confidenceCounters} counter-evidence(s)`}"><span class="confidence-bar" style="width:${Math.round((item.confidenceScore || 0) * 100)}%"></span>${Math.round((item.confidenceScore || 0) * 100)}% confidence${item.confidenceCapped ? " âš ï¸ capped" : ""}</span>
     </header>
     <p>${escapeHtml(item.summary)}</p>
     <div class="evidence-row">
@@ -5527,7 +5529,10 @@ function renderServiceMap() {
           }).join("")}
           ${lanes.flatMap(lane => lane.nodes.map(node => {
             const p = positions[node.id];
-            const fill = node.risk === "critical" ? "#4b1420" : node.risk === "high" ? "#3b220b" : node.risk === "medium" ? "#2b270b" : "#071d24";
+            const isDark = !document.documentElement.hasAttribute("data-theme") || document.documentElement.getAttribute("data-theme") === "dark";
+            const fill = isDark
+              ? (node.risk === "critical" ? "#1a0a10" : node.risk === "high" ? "#1a1008" : node.risk === "medium" ? "#161408" : "#0a1520")
+              : (node.risk === "critical" ? "#fef2f2" : node.risk === "high" ? "#fff7ed" : node.risk === "medium" ? "#fefce8" : "#f0f9ff");
             const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
             const subtitle = nodeSubtitle(node);
             return `<g class="map-node ${node.endpoint ? "has-edit" : ""}">
@@ -5628,17 +5633,17 @@ function renderTimelineStoriesView(stories) {
         const prev = isBytes ? `${Math.round(a.prevValue / 1024)} KB` : String(a.prevValue);
         const curr = isBytes ? `${Math.round(a.currValue / 1024)} KB` : String(a.currValue);
         const dt = a.dtMs >= 1000 ? `${(a.dtMs / 1000).toFixed(1)}s` : `${Math.round(a.dtMs)} ms`;
-        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain — peer or path cannot keep up."
-          : a.metric === "recvQ" ? "Data arriving faster than the app reads — local process may be stalled."
-          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly — app not consuming."
-          : a.metric === "skmem.d" ? "Packets being dropped — buffer overflow."
-          : a.metric === "rto" ? "Retransmission timeout escalating — path or peer unresponsive."
-          : a.metric === "backoff" ? "TCP retry backoff jumped — prolonged wait before next probe."
+        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain â€” peer or path cannot keep up."
+          : a.metric === "recvQ" ? "Data arriving faster than the app reads â€” local process may be stalled."
+          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly â€” app not consuming."
+          : a.metric === "skmem.d" ? "Packets being dropped â€” buffer overflow."
+          : a.metric === "rto" ? "Retransmission timeout escalating â€” path or peer unresponsive."
+          : a.metric === "backoff" ? "TCP retry backoff jumped â€” prolonged wait before next probe."
           : "";
         const time = a.epochMs ? new Date(a.epochMs).toISOString().slice(11, 23) + " UTC" : "";
-        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)} — <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} → ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
+        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)} â€” <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} â†’ ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
       }).join("")}
-      ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts → All Events</button></div>` : ""}
+      ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts â†’ All Events</button></div>` : ""}
     </div>` : ""}
     ${groupEvents.length ? `<div class="multi-socket-events">
       ${groupEvents.slice(0, 2).map(event => `<article class="timeline-story group-event">
@@ -5766,9 +5771,9 @@ function renderComparison() {
     return `<div class="compare-empty">
       <i class="ri-scales-3-line"></i>
       <strong>Before / After comparison</strong>
-      <p>Detect exactly what changed between two captures — in either direction.</p>
+      <p>Detect exactly what changed between two captures â€” in either direction.</p>
       <div class="compare-steps">
-        <div class="compare-step"><span>1</span><b>Load your first capture</b><small>Either the healthy state or the incident — order doesn't matter</small></div>
+        <div class="compare-step"><span>1</span><b>Load your first capture</b><small>Either the healthy state or the incident â€” order doesn't matter</small></div>
         <div class="compare-step"><span>2</span><b>Set as baseline</b><small>Click one of the buttons below to mark it</small></div>
         <div class="compare-step"><span>3</span><b>Load the second capture</b><small>The diff will show what changed between the two</small></div>
       </div>
@@ -5784,8 +5789,8 @@ function renderComparison() {
   return `<div class="compare-workbench">
     <div class="compare-header">
       <div>
-        <span class="tooltip-kicker">${state.baseline.role === "incident" ? "Incident → After fix" : "Healthy → Incident"}</span>
-        <h3>${escapeHtml(state.baseline.sourceName)} → ${escapeHtml(state.sourceName)}</h3>
+        <span class="tooltip-kicker">${state.baseline.role === "incident" ? "Incident â†’ After fix" : "Healthy â†’ Incident"}</span>
+        <h3>${escapeHtml(state.baseline.sourceName)} â†’ ${escapeHtml(state.sourceName)}</h3>
         <p>Baseline captured ${escapeHtml(new Date(state.baseline.createdAt).toLocaleString(resolvedNumberLocale()))}</p>
       </div>
       <div class="toolbar"><button data-action="setBaseline"><i class="ri-scales-3-line"></i> Replace baseline</button><button data-action="clearBaseline">${icons.clear} Clear baseline</button></div>
@@ -6618,7 +6623,7 @@ function renderPercentileDistribution(metric, stats) {
   ];
   const yTicks = [0, .25, .5, .75, 1].map(f => min + f * span);
   return `<svg class="percentile-chart" data-percentile-chart="1" data-chart-width="${w}" data-chart-height="${h}" data-pad-left="${pad.l}" data-pad-right="${pad.r}" data-pad-top="${pad.t}" data-pad-bottom="${pad.b}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(metricLabel(metric))} percentile distribution">
-      <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
+      <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="${chartBgColor()}"/>
       ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, value)}</text>`).join("")}
       ${[0, 25, 50, 75, 90, 99, 100].map(p => `<line x1="${x(p)}" x2="${x(p)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(p)}" y="${h - 20}" text-anchor="middle" fill="#8c9aab" font-size="11">${p === 100 ? "P100" : `P${p}`}</text>`).join("")}
       <path d="${path}" fill="none" stroke="${metricColor(metric)}" stroke-width="3"/>
@@ -6758,6 +6763,10 @@ function preserveExtremesDownsample(rows, metric, budget) {
     picked.set(maxIndex, rows[maxIndex]);
   }
   return [...picked.entries()].sort((a, b) => a[0] - b[0]).slice(0, budget).map(([, row]) => row);
+}
+
+function chartBgColor() {
+  return document.documentElement.getAttribute("data-theme") === "light" ? "#f0f3f7" : "#050910";
 }
 
 function chartXMinorTicks(data, pad, w, h, firstTime, lastTime) {
@@ -7235,7 +7244,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   svg.dataset.renderStyle = style;
   svg.innerHTML = `
     <defs><linearGradient id="areaFill-${metric.replace(/\W/g, "")}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${stroke}" stop-opacity=".48"/><stop offset="1" stop-color="${stroke}" stop-opacity="0"/></linearGradient></defs>
-    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
+    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="${chartBgColor()}"/>
     ${yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, v)}</text>`).join("")}
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${tick.label}</text>`).join("")}
     ${microburstBand}
@@ -7328,7 +7337,7 @@ function drawCorrelation() {
   const xTicks = [0, .25, .5, .75, 1].map(f => f * maxX);
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.innerHTML = `
-    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
+    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="${chartBgColor()}"/>
     ${yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(state.correlation.y, v)}</text>`).join("")}
     ${xTicks.map(v => `<line x1="${x(v)}" x2="${x(v)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(v)}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${formatMetricValue(state.correlation.x, v)}</text>`).join("")}
     ${xs.map((value, i) => `<circle cx="${x(value)}" cy="${y(ys[i])}" r="1" fill="${thresholdColor(state.correlation.y, ys[i])}" opacity=".9"><title>${metricLabel(state.correlation.x)}=${formatMetricValue(state.correlation.x, value)}, ${metricLabel(state.correlation.y)}=${formatMetricValue(state.correlation.y, ys[i])}</title></circle>`).join("")}
@@ -7431,7 +7440,7 @@ function drawBdpWindowChart(svg, analysis, kind) {
   const series = bdpChartSeries(analysis, kind).filter(item => bdpSeriesValues(data, item).length);
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   if (!data.length || !series.length) {
-    svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" fill="#050910"/><text x="24" y="40" fill="#c4d0de" font-size="13">Not enough timestamped samples for this BDP chart.</text>`;
+    svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" fill="${chartBgColor()}"/><text x="24" y="40" fill="#c4d0de" font-size="13">Not enough timestamped samples for this BDP chart.</text>`;
     return;
   }
   const values = series.filter(item => !state.hiddenBdpSeries.has(item.key)).flatMap(item => bdpSeriesValues(data, item));
@@ -7455,7 +7464,7 @@ function drawBdpWindowChart(svg, analysis, kind) {
   });
   const yLabel = kind === "bdp" ? "Bytes / window" : "Throughput (Mbps)";
   svg.innerHTML = `
-    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="#050910"/>
+    <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="${chartBgColor()}"/>
     ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${escapeHtml(formatY(value))}</text>`).join("")}
     ${xTicks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${tick.x}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${escapeHtml(tick.label)}</text>`).join("")}
     ${series.filter(item => !state.hiddenBdpSeries.has(item.key)).map(item => bdpPath(data, item, x, y)).join("")}
@@ -7494,7 +7503,7 @@ function attachBdpCrosshair(svg, data, series, xFn, yFn, pad, w, h, kind, format
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="${tooltipH}" rx="4" fill="rgba(10,16,24,.8)" stroke="#52657a"/>
       <text x="${tooltipX + 8}" y="${tooltipY + 14}" fill="#8cc8e8" font-size="10" font-weight="700">${escapeHtml(time)}</text>
-      ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "—"}</text>`).join("")}
+      ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "â€”"}</text>`).join("")}
     `;
   }
   svg._bdpShowCrosshair = showCrosshairAtIndex;
@@ -7863,7 +7872,7 @@ function buildJiraReport() {
   if (hypotheses.length) {
     lines.push(`h2. Diagnostic Hypotheses`);
     for (const h of hypotheses) {
-      lines.push(`h3. ${h.severity.toUpperCase()} — ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
+      lines.push(`h3. ${h.severity.toUpperCase()} â€” ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
       lines.push(h.summary);
       if (h.evidence.length) {
         lines.push(`*Evidence:*`);
@@ -8678,7 +8687,7 @@ function exportIncidentReportHtml() {
   const pb = topHyp ? resolvePlaybook(playbookForHypothesis(topHyp.id), state.sockets.find(s => s.id === topHyp.topSocketId)) : null;
   const narrativeData = state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null;
   const summaryText = buildAiSummary({ matrix: matrixData, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, captureQuality: quality, hypotheses: hyps, comparison: narrativeData });
-  const html = generateIncidentReport({ sourceName: state.sourceName, captureQuality: quality, matrix: matrixData, hypotheses: hyps, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, playbook: pb, comparison: narrativeData, aiSummary: summaryText });
+  const html = generateIncidentReport({ sourceName: state.sourceName, captureQuality: quality, matrix: matrixData, hypotheses: hyps, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, playbook: pb, comparison: narrativeData, aiSummary: summaryText, theme: state.prefs.theme || "dark" });
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -9052,7 +9061,7 @@ function bindEvents() {
       state.showSsOptions = false;
       setZoom(0, 1);
       markAnalysisDirty({ raw: true });
-      toast("🔥 Incident demo loaded", "Press Analyze to see stories, matrix, and multi-socket correlation in action.");
+      toast("ðŸ”¥ Incident demo loaded", "Press Analyze to see stories, matrix, and multi-socket correlation in action.");
       render();
     }
     if (action === "sample10m") {
@@ -9251,6 +9260,12 @@ function bindEvents() {
         const card = document.querySelector(`[data-chart-card="${metric}"]`);
         if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
       });
+    }
+    if (action === "toggleTheme") {
+      state.prefs.theme = state.prefs.theme === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", state.prefs.theme);
+      savePrefs();
+      render();
     }
     if (action === "storyJumpToChart") {
       const epoch = Number(event.currentTarget.dataset.epoch);

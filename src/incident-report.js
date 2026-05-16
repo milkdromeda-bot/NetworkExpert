@@ -1,6 +1,7 @@
-export function buildIncidentReportHtml({ sourceName, captureQuality, matrix, hypotheses, stories, multiSocket, rateAlerts, playbook, comparison, aiSummary, timestamp }) {
+export function buildIncidentReportHtml({ sourceName, captureQuality, matrix, hypotheses, stories, multiSocket, rateAlerts, playbook, comparison, aiSummary, timestamp, theme }) {
   const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const now = timestamp || new Date().toISOString();
+  const light = theme === "light";
 
   const verdictSection = comparison?.verdict
     ? `<section class="ir-section"><h2>Verdict</h2><p class="ir-verdict">${esc(comparison.verdict)}</p>
@@ -40,16 +41,16 @@ export function buildIncidentReportHtml({ sourceName, captureQuality, matrix, hy
 <head><meta charset="utf-8"><title>Incident Report — ${esc(sourceName)} — ${now.slice(0, 10)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0f16;color:#dde8f4;padding:32px;max-width:960px;margin:0 auto;line-height:1.6}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:${light ? "#f4f6f9" : "#0a0f16"};color:${light ? "#1a2533" : "#dde8f4"};padding:32px;max-width:960px;margin:0 auto;line-height:1.6}
 h1{font-size:20px;margin-bottom:4px}
-h2{font-size:15px;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid #1e2d3d}
+h2{font-size:15px;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid ${light ? "#d0d8e0" : "#1e2d3d"}}
 h3{font-size:13px;margin:10px 0 6px;color:#8caab8}
 .ir-meta{color:#8c9aab;font-size:12px;margin-bottom:24px}
-.ir-section{margin-bottom:24px;padding:16px;border:1px solid #1e2d3d;border-radius:8px;background:#080d14}
+.ir-section{margin-bottom:24px;padding:16px;border:1px solid ${light ? "#d0d8e0" : "#1e2d3d"};border-radius:8px;background:${light ? "#fff" : "#080d14"}}
 .ir-verdict{font-size:14px;font-weight:700;color:#4cde8a;padding:10px;background:rgba(76,222,138,.08);border-radius:6px}
 .ir-warn{color:#ffd166;font-size:12px;margin-top:8px}
 table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
-th,td{padding:6px 8px;border:1px solid #1e2d3d;text-align:left}
+th,td{padding:6px 8px;border:1px solid ${light ? "#d0d8e0" : "#1e2d3d"};text-align:left}
 th{background:#0f1620;font-weight:600}
 tr.high td:nth-child(2){color:#4cde8a}
 tr.med td:nth-child(2){color:#ffd166}
@@ -60,7 +61,7 @@ tr.critical td{color:#ff5c77}
 .ir-story .critical{color:#ff5c77;font-weight:600}
 .ir-group{margin:8px 0;padding:8px;border-left:3px solid #ff9f43;background:rgba(255,159,67,.03);border-radius:0 6px 6px 0}
 .ir-conclusion{color:#ff9f43;font-weight:600;font-size:12px}
-.ir-hyp{margin:10px 0;padding:10px;border:1px solid #1e2d3d;border-radius:6px}
+.ir-hyp{margin:10px 0;padding:10px;border:1px solid ${light ? "#d0d8e0" : "#1e2d3d"};border-radius:6px}
 .ir-hyp ul{padding-left:24px}
 .ir-hyp li{margin:4px 0}
 .ir-hyp.critical{border-left:3px solid #ff5c77}
