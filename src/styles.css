@@ -4167,8 +4167,9 @@ tr:hover, tr.selected { background: #101a27; }
 .rate-alert {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
   border-radius: 6px;
   font-size: 12px;
   color: var(--soft);
@@ -4179,7 +4180,12 @@ tr:hover, tr.selected { background: #101a27; }
 .rate-alert.high { border-left: 3px solid rgba(255, 159, 67, .8); }
 .rate-alert.medium { border-left: 3px solid rgba(255, 209, 102, .7); }
 .rate-value { font-weight: 700; color: var(--text); font-family: "JetBrains Mono", monospace; }
+.rate-time { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--soft); }
 .rate-alert small { color: var(--soft); opacity: .7; }
+.rate-explain { font-size: 11px; color: var(--soft); font-style: italic; }
+.rate-more { margin-top: 4px; }
+.rate-more button { font-size: 11px; color: rgba(112, 157, 255, .8); background: none; border: none; cursor: pointer; padding: 0; }
+.rate-more button:hover { color: rgba(112, 157, 255, 1); }
 
 .expert-item {
   display: grid;

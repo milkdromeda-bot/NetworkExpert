@@ -4,9 +4,9 @@ import { metricValue } from "./parser.js";
 const RATE_METRICS = [
   { key: "recvQ", label: "Recv-Q", unit: "bytes", dangerRate: 200000 },
   { key: "sendQ", label: "Send-Q", unit: "bytes", dangerRate: 200000 },
-  { key: "skmem.d", label: "Drops", unit: "drops", dangerRate: 5 },
+  { key: "skmem.d", label: "Drops", unit: "drops", dangerDelta: 5, discrete: true },
   { key: "rto", label: "RTO", unit: "ms", dangerRate: 2000 },
-  { key: "backoff", label: "Backoff", unit: "level", dangerRate: 3 },
+  { key: "backoff", label: "Backoff", unit: "level", dangerDelta: 3, discrete: true },
   { key: "skmem.r", label: "skmem.r", unit: "bytes", dangerRate: 500000 }
 ];
 
@@ -56,26 +56,47 @@ export function detectRateOfChange(raw = "", thresholds = {}) {
         const delta = currVal - prevVal;
         if (delta <= 0) continue;
 
-        const rate = delta / dtSec;
-        const dangerRate = thresholds[metric.key]?.dangerRate || metric.dangerRate;
-
-        if (rate >= dangerRate) {
-          alerts.push({
-            metric: metric.key,
-            label: metric.label,
-            socketKey: key,
-            socket,
-            process: processLabel(socket),
-            peer: socket.peer || "",
-            epochMs: curr.epochMs,
-            prevValue: prevVal,
-            currValue: currVal,
-            delta,
-            dtMs,
-            rate,
-            rateFormatted: formatRate(rate, metric.unit),
-            severity: rate >= dangerRate * 3 ? "critical" : rate >= dangerRate * 1.5 ? "high" : "medium"
-          });
+        if (metric.discrete) {
+          const dangerDelta = thresholds[metric.key]?.dangerDelta || metric.dangerDelta;
+          if (delta >= dangerDelta) {
+            alerts.push({
+              metric: metric.key,
+              label: metric.label,
+              socketKey: key,
+              socket,
+              process: processLabel(socket),
+              peer: socket.peer || "",
+              epochMs: curr.epochMs,
+              prevValue: prevVal,
+              currValue: currVal,
+              delta,
+              dtMs,
+              rate: delta,
+              rateFormatted: `+${delta} ${metric.unit}`,
+              severity: delta >= dangerDelta * 3 ? "critical" : delta >= dangerDelta * 1.5 ? "high" : "medium"
+            });
+          }
+        } else {
+          const rate = delta / dtSec;
+          const dangerRate = thresholds[metric.key]?.dangerRate || metric.dangerRate;
+          if (rate >= dangerRate) {
+            alerts.push({
+              metric: metric.key,
+              label: metric.label,
+              socketKey: key,
+              socket,
+              process: processLabel(socket),
+              peer: socket.peer || "",
+              epochMs: curr.epochMs,
+              prevValue: prevVal,
+              currValue: currVal,
+              delta,
+              dtMs,
+              rate,
+              rateFormatted: formatRate(rate, metric.unit),
+              severity: rate >= dangerRate * 3 ? "critical" : rate >= dangerRate * 1.5 ? "high" : "medium"
+            });
+          }
         }
       }
     }

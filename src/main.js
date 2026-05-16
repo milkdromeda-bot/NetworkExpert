@@ -5593,7 +5593,8 @@ function storyStepMetric(key) {
 function renderTimelineStoriesView(stories) {
   if (!stories.length && !state._multiSocketEvents?.length) return `<div class="timeline-stories-empty"><i class="ri-movie-2-line"></i><p>No causal pattern detected yet. Need more snapshots or stronger signals.</p></div>`;
   const groupEvents = state._multiSocketEvents || [];
-  const rateAlerts = (state._rateAlerts || []).slice(0, 5);
+  const rateAlerts = (state._rateAlerts || []).slice(0, 3);
+  const rateTotal = (state._rateAlerts || []).length;
   return `<section class="timeline-stories">
     ${rateAlerts.length ? `<div class="rate-alerts">
       ${rateAlerts.map(a => {
@@ -5601,8 +5602,17 @@ function renderTimelineStoriesView(stories) {
         const prev = isBytes ? `${Math.round(a.prevValue / 1024)} KB` : String(a.prevValue);
         const curr = isBytes ? `${Math.round(a.currValue / 1024)} KB` : String(a.currValue);
         const dt = a.dtMs >= 1000 ? `${(a.dtMs / 1000).toFixed(1)}s` : `${Math.round(a.dtMs)} ms`;
-        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span> <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)} — <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} → ${curr} in ${dt})</small></div>`;
+        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain — peer or path cannot keep up."
+          : a.metric === "recvQ" ? "Data arriving faster than the app reads — local process may be stalled."
+          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly — app not consuming."
+          : a.metric === "skmem.d" ? "Packets being dropped — buffer overflow."
+          : a.metric === "rto" ? "Retransmission timeout escalating — path or peer unresponsive."
+          : a.metric === "backoff" ? "TCP retry backoff jumped — prolonged wait before next probe."
+          : "";
+        const time = a.epochMs ? new Date(a.epochMs).toISOString().slice(11, 23) + " UTC" : "";
+        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)} — <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} → ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
       }).join("")}
+      ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts → All Events</button></div>` : ""}
     </div>` : ""}
     ${groupEvents.length ? `<div class="multi-socket-events">
       ${groupEvents.slice(0, 4).map(event => `<article class="timeline-story group-event">
