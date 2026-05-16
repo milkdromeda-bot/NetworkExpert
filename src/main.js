@@ -19,6 +19,7 @@ import { buildRootCauseMatrix } from "./root-cause-matrix.js";
 import { detectTimelineStories } from "./timeline-stories.js";
 import { detectMultiSocketCorrelation } from "./multi-socket-correlation.js";
 import { detectRateOfChange } from "./rate-of-change.js";
+import { buildIncidentReportHtml as generateIncidentReport } from "./incident-report.js";
 import { playbookForHypothesis, resolvePlaybook } from "./playbooks.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeCaptureQuality } from "./capture-quality.js";
@@ -766,6 +767,7 @@ function renderExportMenu(scope = "analysis") {
     <div class="row-menu export-menu ${open ? "open" : ""}" ${pos}>
       <button data-action="saveCharts"><i class="ri-image-line"></i><span>Export PNG</span><small>Save visible charts as image</small></button>
       <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>PDF report</span><small>Readable incident snapshot</small></button>
+      <button data-export-action="incident-html"><i class="ri-file-code-line"></i><span>Incident Report HTML</span><small>Standalone post-mortem with stories, matrix, playbook</small></button>
       <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><small>PDF, CSV, JSON and chart PNGs</small></button>
       <button data-export-action="jira"><i class="ri-clipboard-line"></i><span>Copy Jira report</span><small>Wiki markup for ticket</small></button>
     </div>
@@ -8636,6 +8638,27 @@ async function exportEvidencePack() {
   downloadBlob(blob, `${safeName}-evidence-pack.zip`);
   toast("Evidence pack exported", "ZIP downloaded with PDF report, HTML report, anomalies, sockets, timeline, annotations, and chart PNGs.");
 }
+function exportIncidentReportHtml() {
+  const quality = captureQualityReport();
+  const hyps = diagnosticHypotheses();
+  const matrixData = buildRootCauseMatrix(state.sockets);
+  const storiesData = detectTimelineStories(state.raw || "", state.sockets);
+  const multiData = detectMultiSocketCorrelation(state.raw || "");
+  const rateData = detectRateOfChange(state.raw || "");
+  const topHyp = hyps[0];
+  const pb = topHyp ? resolvePlaybook(playbookForHypothesis(topHyp.id), state.sockets.find(s => s.id === topHyp.topSocketId)) : null;
+  const narrativeData = state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null;
+  const html = generateIncidentReport({ sourceName: state.sourceName, captureQuality: quality, matrix: matrixData, hypotheses: hyps, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, playbook: pb, comparison: narrativeData });
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `incident-report-${state.sourceName.replace(/[^a-z0-9]/gi, "_")}-${new Date().toISOString().slice(0, 10)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast("Report exported", "Standalone HTML incident report downloaded.");
+}
+
 function openIncidentReport() {
   if (!state.sockets.length) {
     toast("No data to export", "Import or parse a capture before generating an incident report.", "warn");
@@ -9837,6 +9860,7 @@ function bindEvents() {
     state.openExportMenu = null;
     state.openExportMenuPos = null;
     if (action === "pdf") openIncidentReport();
+    if (action === "incident-html") exportIncidentReportHtml();
     if (action === "pack") exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger"));
     if (action === "jira") { copyTextToClipboard(buildJiraReport()); toast("Jira report copied", "Paste into a Jira ticket description or comment."); }
   }));
