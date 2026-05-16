@@ -313,7 +313,63 @@ export function createGuideView(context) {
         mitigation: "Avoid container-only tuning when host-side veth/bridge/NIC evidence points elsewhere. Escalate with both namespaces in the evidence bundle."
       },
       {
-        title: "6. Exposed listeners and missing ownership",
+        title: "6. Root Cause Matrix and Confidence Scoring",
+        summary: "Use the Diagnosis tab to see the Root Cause Matrix — a single view showing all possible causes ranked by signal confidence. Each hypothesis includes what would confirm or reject it.",
+        signals: ["Multiple competing hypotheses visible", "Ambiguous flag when two causes are close", "Confidence percentage per cause", "Present/absent signal count"],
+        decide: [
+          "Top cause >60% with no ambiguity: focus investigation on that hypothesis first.",
+          "Ambiguous flag active: collect more evidence before choosing a path — use the 'What would confirm/reject' section.",
+          "All causes <30%: the capture may lack critical fields — check Capture Quality tab first.",
+          "Multiple causes >50%: they may be correlated (e.g., slow consumer causes buffer pressure). Read both playbooks."
+        ],
+        next: ["Open the Hypotheses toggle to see detailed evidence cards.", "Expand 'What would confirm or reject' on the top hypothesis.", "Follow the Playbook for the top cause."],
+        commands: [envCommand("ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all")],
+        mitigation: "Never act on a single hypothesis without checking counter-evidence. The matrix shows competing explanations — use it to avoid premature conclusions."
+      },
+      {
+        title: "7. Timeline Stories — causal narrative",
+        summary: "The Timeline tab detects causal patterns across snapshots and tells the story: what happened, in what order, and what it means. Toggle between Stories (narrative) and All Events (raw list).",
+        signals: ["Send-Q grow → persist → FIN = peer stopped reading", "Recv-Q grow → drops = local overload", "RTO escalate → backoff high = path dead", "cwnd collapse → retrans = congestion event", "rwnd_limited >50% = sender throttled by receiver window"],
+        decide: [
+          "Story at 100% match: high confidence — the full causal chain was observed.",
+          "Story at 60-80%: partial match — some steps are missing, collect more snapshots.",
+          "No stories detected: capture may be too short or too few snapshots. Need ≥3 timestamped samples.",
+          "Multiple stories on same socket: read them in chronological order — they may be phases of the same incident."
+        ],
+        next: ["Check the timestamps in the narrative against application logs or GC logs.", "Use the Playbook from the matching hypothesis.", "If no story matches, switch to All Events for the raw chronological view."],
+        commands: [envCommand("while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep 1; done | tee -a /tmp/capture.log")],
+        mitigation: "Stories are pattern-based, not proof. Always validate with packet captures or application-level evidence before acting."
+      },
+      {
+        title: "8. Before/After comparison — incident detection",
+        summary: "Load a healthy capture as baseline, then load the incident capture (or vice versa). The Compare tab shows exactly what changed: metrics that exploded, new peers, new anomalies, and an automatic verdict.",
+        signals: ["Recv-Q or Send-Q delta >100KB", "New peers appeared", "persist timer appeared where absent before", "Drops grew from 0", "rcv_ssthresh dropped significantly"],
+        decide: [
+          "Verdict says 'Slow consumer onset' + RTT stable: the network is fine, fix the application.",
+          "Verdict says 'Network degradation' + RTT/retrans grew: investigate the path with mtr/traceroute.",
+          "Verdict says 'Buffer exhaustion' + drops grew: the receiver is overwhelmed — check process and buffers.",
+          "No significant change: the incident may not be visible in ss — check application logs, GC, or packet captures."
+        ],
+        next: ["Use the bidirectional workflow: 'This is healthy' or 'This is the incident' depending on which capture you loaded first.", "After comparison, jump to the Diagnosis tab for the detailed hypothesis on the incident capture.", "Export the comparison as part of your post-mortem evidence."],
+        commands: [envCommand("# Collect baseline during normal operation"), envCommand("while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep 1; done | tee -a /tmp/baseline.log"), envCommand("# Collect during incident with same command"), envCommand("while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep 1; done | tee -a /tmp/incident.log")],
+        mitigation: "Always compare with the same ss options and similar duration. A 5-second capture vs a 60-second baseline will produce misleading deltas."
+      },
+      {
+        title: "9. Integrated Playbooks",
+        summary: "Each diagnostic hypothesis includes a contextual Playbook with commands for local, peer, and host sides, plus explicit warnings about what NOT to conclude and prudent mitigation steps.",
+        signals: ["Playbook available on hypothesis cards in Diagnosis tab", "Commands pre-filled with actual PID, peer IP, interface", "Sections: Local, Peer, Host, Do NOT conclude, Mitigation"],
+        decide: [
+          "Playbook shows local commands with PID: run them on the machine where the capture was taken.",
+          "Playbook shows peer commands: you need access to the remote side or ask the peer team.",
+          "Do NOT conclude section warns against a common mistake: read it before acting.",
+          "Mitigation is marked 'prudent': it is safe to try but may not fix the root cause."
+        ],
+        next: ["Copy commands from the Playbook and run them during the incident window.", "Correlate Playbook output with the Timeline stories.", "If the Playbook suggests GC/thread investigation, import the GC log in the JVM tab."],
+        commands: [envCommand("# Playbook commands are auto-generated from your capture context"), envCommand("# Example: pidstat -druwt -p <detected-pid> 1 5")],
+        mitigation: "Playbooks guide investigation, not resolution. Always validate before applying tuning suggestions."
+      },
+      {
+        title: "10. Exposed listeners and missing ownership",
         summary: "Use this when LISTEN sockets are wildcard-bound, unexpected, or missing process ownership. It is a security and operability check, not only a performance check.",
         signals: ["LISTEN on 0.0.0.0 or ::", "Unknown process field", "Unexpected public service port", "Many listeners in a container", "Port bound in the wrong namespace"],
         decide: [
