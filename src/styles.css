@@ -76,7 +76,8 @@
 [data-theme="light"] .capture-quality-feature,
 [data-theme="light"] .capture-quality-list { background: #f8fafc !important; }
 [data-theme="light"] pre.code,
-[data-theme="light"] .code { background: #f0f3f7 !important; color: #1a2533 !important; }
+[data-theme="light"] .code,
+[data-theme="light"] pre { background: #f0f3f7 !important; color: #1a2533 !important; }
 [data-theme="light"] .story-narrative { border-left-color: #d0d8e0; }
 [data-theme="light"] .app-header { border-bottom: 1px solid var(--line); }
 [data-theme="light"] button { color: var(--text); }
@@ -132,6 +133,7 @@
 [data-theme="light"] .modal-content, [data-theme="light"] .modal-body, [data-theme="light"] .prefs-panel, [data-theme="light"] .drawer-content { background: #fff !important; }
 [data-theme="light"] input[type="checkbox"], [data-theme="light"] input[type="radio"] { accent-color: #1a73e8; }
 [data-theme="light"] .status-pill { background: #e8ecf1 !important; border-color: #d0d8e0 !important; color: #1a2533 !important; }
+[data-theme="light"] .status-pill svg, [data-theme="light"] .status-pill path, [data-theme="light"] .incident-warning-icon { fill: #c42b3e !important; color: #c42b3e !important; }
 [data-theme="light"] code, [data-theme="light"] mark, [data-theme="light"] kbd { background: #e8ecf1 !important; color: #1a2533 !important; }
 [data-theme="light"] svg { background: #f0f3f7 !important; }
 [data-theme="light"] svg text { fill: #3d4f60 !important; }
@@ -9772,6 +9774,8 @@ mark.guide-hl {
 [data-theme="light"] .analysis-tab.active *,
 [data-theme="light"] .app-tab.active,
 [data-theme="light"] .app-tab.active *,
+[data-theme="light"] .charts-sub-tab.active,
+[data-theme="light"] .charts-sub-tab.active *,
 [data-theme="light"] .pill-toggle button.active,
 [data-theme="light"] .pill-toggle button.active *,
 [data-theme="light"] .pref-tabs .tab.active,
@@ -9784,6 +9788,7 @@ mark.guide-hl {
 [data-theme="light"] .tab.active,
 [data-theme="light"] .analysis-tab.active,
 [data-theme="light"] .app-tab.active,
+[data-theme="light"] .charts-sub-tab.active,
 [data-theme="light"] .pill-toggle button.active,
 [data-theme="light"] .pref-tabs .tab.active,
 [data-theme="light"] button.primary {
