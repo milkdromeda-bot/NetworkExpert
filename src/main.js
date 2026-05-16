@@ -175,6 +175,7 @@ function tableDefaults() {
 
 const initialPrefs = loadPrefs();
 if (initialPrefs.theme === "light") document.documentElement.setAttribute("data-theme", "light");
+const showOnboarding = !localStorage.getItem("networkExpertOnboarded");
 
 let state = {
   raw: "",
@@ -229,6 +230,7 @@ let state = {
   timelineView: "stories",
   diagnosisView: "matrix",
   expandedChart: null,
+  onboarding: showOnboarding ? 0 : -1,
   openStyleMenu: false,
   openSsEditorThemeMenu: false,
   editorWordWrap: false,
@@ -2597,6 +2599,28 @@ const _busyEl = document.getElementById("busyOverlay");
 function _showBusy() { _busyEl.classList.add("visible"); _busyEl.offsetHeight; }
 function _hideBusy() { _busyEl.classList.remove("visible"); }
 
+function renderOnboarding() {
+  const steps = [
+    { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo. Timestamped captures with <code>date --iso-8601=ns</code> unlock timeline and stories." },
+    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> — the tool builds a Root Cause Matrix, causal stories, velocity alerts, and multi-socket correlation. An AI summary tells you what happened in plain language." },
+    { icon: "ri-route-line", title: "Act with confidence", desc: "Each hypothesis includes a <b>Playbook</b> with commands for local, peer, and host. Compare before/after captures. Export a full incident report in one click." }
+  ];
+  const step = steps[state.onboarding] || steps[0];
+  const isLast = state.onboarding >= steps.length - 1;
+  return `<div class="onboarding-overlay">
+    <div class="onboarding-card">
+      <div class="onboarding-progress">${steps.map((_, i) => `<span class="${i <= state.onboarding ? "active" : ""}"></span>`).join("")}</div>
+      <div class="onboarding-icon"><i class="${step.icon}"></i></div>
+      <h2>${step.title}</h2>
+      <p>${step.desc}</p>
+      <div class="onboarding-actions">
+        <button data-action="skipOnboarding" class="onboarding-skip">Skip</button>
+        <button data-action="${isLast ? "finishOnboarding" : "nextOnboarding"}" class="primary">${isLast ? "Get started" : "Next"}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function render() {
   _showBusy();
   hideAppServiceTooltip();
@@ -2605,6 +2629,7 @@ function render() {
   updateAnomalyAlertState();
   const app = document.querySelector("#app");
   app.innerHTML = html`
+    ${state.onboarding >= 0 ? renderOnboarding() : ""}
     <div class="app-shell view-${state.view}">
       <header class="topbar">
         <div class="title">
@@ -9265,6 +9290,15 @@ function bindEvents() {
       state.prefs.theme = state.prefs.theme === "light" ? "dark" : "light";
       document.documentElement.setAttribute("data-theme", state.prefs.theme);
       savePrefs();
+      render();
+    }
+    if (action === "nextOnboarding") {
+      state.onboarding += 1;
+      render();
+    }
+    if (action === "skipOnboarding" || action === "finishOnboarding") {
+      state.onboarding = -1;
+      localStorage.setItem("networkExpertOnboarded", "1");
       render();
     }
     if (action === "storyJumpToChart") {
