@@ -157,14 +157,16 @@ button.danger:hover {
     #172433;
   color: #f4f9ff;
 }
-.reset-workspace-button {
-  max-width: 190px;
+.reset-workspace-btn {
+  color: var(--soft) !important;
+  opacity: .6;
+  transition: opacity .15s, color .15s, background .15s;
 }
-.reset-workspace-button span,
-.clear-input-button span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.reset-workspace-btn:hover {
+  opacity: 1 !important;
+  color: #fff !important;
+  background: rgba(255, 92, 119, .85) !important;
+  border-radius: 5px;
 }
 textarea, input, select {
   width: 100%;

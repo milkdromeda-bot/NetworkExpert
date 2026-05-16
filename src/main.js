@@ -2634,7 +2634,7 @@ function render() {
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
-          <button class="danger reset-workspace-button" data-action="requestResetWorkspace" title="Reset imported data, filters, charts, and current analysis" aria-label="Reset workspace" style="${state.view === "ingest" && state.sourceName === "built-in sample" ? "visibility:hidden;pointer-events:none" : ""}">${icons.resetWorkspace}<span>Reset workspace</span></button>
+          ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
           <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>
         </div>
       </header>
