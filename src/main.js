@@ -16,6 +16,7 @@ import { deleteTopologyGroup, endpointHost, layoutTopologyLanePositions, normali
 import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-summary.js";
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
+import { analyzeCaptureQuality } from "./capture-quality.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
 import { alignTimestamps, correlateJvmStalls, DEFAULT_WINDOWS as JVM_DEFAULT_WINDOWS } from "./jvm-correlation.js";
 import { parsePidstat, parseNstat, correlateCpuWithStalls, extractTcpCounters } from "./pidstat-parser.js";
@@ -985,6 +986,14 @@ function chartMetricList() {
 }
 
 const ANALYSIS_TAB_GUIDE = [
+  {
+    id: "quality",
+    label: "quality",
+    short: "Capture Quality Report for collection readiness, missing ss evidence, and safer next commands.",
+    use: "Use first when conclusions feel weak or a capture may be incomplete.",
+    shows: "Timestamp coverage, cadence, ss option coverage, parsed evidence, missing context, and recommended collection command.",
+    next: "Fix missing evidence, collect again if needed, then continue with Diagnosis, Timeline, Sockets, and Charts."
+  },
   {
     id: "diagnosis",
     label: "diagnosis",
@@ -4700,6 +4709,7 @@ function bindColumnHelpTooltips() {
 }
 
 function renderActiveTab() {
+  if (state.activeTab === "quality") return renderCaptureQualityReport();
   if (state.activeTab === "diagnosis") return renderDiagnosis();
   if (state.activeTab === "advisor") return renderAdvisor();
   if (state.activeTab === "templates") return renderAnalysisTemplates();
@@ -4713,6 +4723,115 @@ function renderActiveTab() {
   if (state.activeTab === "anomalies") return renderAnomalies(state.anomalies.filter(a => severityVisible(a.severity)));
   if (state.activeTab === "fields") return renderFields();
   return renderSocketTable();
+}
+
+function captureQualityReport() {
+  return analyzeCaptureQuality({
+    raw: state.raw,
+    sockets: state.sockets,
+    sourceName: state.sourceName,
+    command: state.command
+  });
+}
+
+function formatQualityDuration(ms) {
+  const numeric = Number(ms || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "n/a";
+  if (numeric < 1000) return `${formatNumber(Math.round(numeric))} ms`;
+  if (numeric < 60_000) return `${numberFormatterWith(1, 1).format(numeric / 1000)} s`;
+  return `${numberFormatterWith(1, 1).format(numeric / 60_000)} min`;
+}
+
+function renderCaptureQualityMetric(label, value, hint = "") {
+  return `<article>
+    <span>${escapeHtml(label)}</span>
+    <strong>${escapeHtml(value)}</strong>
+    ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+  </article>`;
+}
+
+function renderCaptureQualityFeature(card) {
+  const icon = card.status === "ok" ? "ri-checkbox-circle-line" : card.status === "partial" ? "ri-error-warning-line" : "ri-close-circle-line";
+  return `<article class="capture-quality-feature ${escapeHtml(card.status)}">
+    <i class="${icon}" aria-hidden="true"></i>
+    <div>
+      <strong>${escapeHtml(card.label)}</strong>
+      <p>${escapeHtml(card.detail)}</p>
+      <small>${escapeHtml(`${card.points}/${card.weight} pts${card.commandDetected ? " - command/evidence detected" : ""}`)}</small>
+    </div>
+  </article>`;
+}
+
+function renderCaptureQualityList(title, items, empty, className = "") {
+  return `<section class="capture-quality-list ${escapeHtml(className)}">
+    <h4>${escapeHtml(title)}</h4>
+    ${items.length ? `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p>${escapeHtml(empty)}</p>`}
+  </section>`;
+}
+
+function renderCaptureQualityReport() {
+  const report = captureQualityReport();
+  const m = report.metrics;
+  const okFeatures = report.featureCards.filter(card => card.status === "ok").length;
+  const weakFeatures = report.featureCards.filter(card => card.status === "missing").length;
+  const cadenceHint = m.intervalCount ? `min ${formatQualityDuration(m.minIntervalMs)}, max ${formatQualityDuration(m.maxIntervalMs)}` : "Need repeated timestamps";
+  return `<div class="capture-quality-shell">
+    <section class="capture-quality-hero ${escapeHtml(report.grade)}">
+      <div>
+        <span class="tooltip-kicker">Capture Quality Report</span>
+        <h3>${escapeHtml(report.grade)} evidence readiness</h3>
+        <p>${escapeHtml(report.summary)}</p>
+        <div class="capture-quality-source">
+          <span><i class="ri-file-search-line"></i> ${escapeHtml(report.sourceName)}</span>
+          <span><i class="ri-checkbox-circle-line"></i> ${formatNumber(okFeatures)} ready</span>
+          <span><i class="ri-error-warning-line"></i> ${formatNumber(weakFeatures)} missing</span>
+        </div>
+      </div>
+      <div class="capture-quality-score" aria-label="Capture quality score ${report.score} out of 100">
+        <strong>${formatNumber(report.score)}</strong>
+        <small>/100</small>
+      </div>
+    </section>
+
+    <section class="capture-quality-metrics">
+      ${renderCaptureQualityMetric("Snapshots", formatNumber(m.snapshotCount), `${formatNumber(m.timestampBlockCount)} timestamp block(s)`)}
+      ${renderCaptureQualityMetric("Duration", formatQualityDuration(m.durationMs), "timestamp window")}
+      ${renderCaptureQualityMetric("Cadence", formatQualityDuration(m.medianIntervalMs), cadenceHint)}
+      ${renderCaptureQualityMetric("Parsed sockets", formatNumber(m.parsedSocketCount), `${formatNumber(m.activeSocketRows)} row(s) across snapshots`)}
+      ${renderCaptureQualityMetric("Rows with rates", formatNumber(m.observedRateRows), "delivery/pacing/send evidence")}
+    </section>
+
+    <section class="capture-quality-grid">
+      <div class="capture-quality-panel">
+        <header>
+          <strong>Evidence coverage</strong>
+          <span>what this capture can support</span>
+        </header>
+        <div class="capture-quality-feature-grid">
+          ${report.featureCards.map(renderCaptureQualityFeature).join("")}
+        </div>
+      </div>
+      <div class="capture-quality-side">
+        ${renderCaptureQualityList("Warnings", report.warnings, "No capture-quality warning detected.", "warnings")}
+        ${renderCaptureQualityList("Missing evidence", report.missing, "No important evidence gap detected.", "missing")}
+      </div>
+    </section>
+
+    <section class="capture-quality-recommendations">
+      <div>
+        <h4>Recommended next collection</h4>
+        <p>Use this when the current capture is weak, too short, or missing expert fields. Keep the interval realistic for the host and storage path.</p>
+      </div>
+      <pre class="code">${escapeHtml(report.recommendedCommand)}</pre>
+      <button class="primary" type="button" data-action="copyQualityCommand">${icons.copy} Copy recommended command</button>
+    </section>
+
+    <section class="capture-quality-bottom">
+      ${renderCaptureQualityList("Strengths", report.strengths.slice(0, 6), "No strong capture signal yet.", "strengths")}
+      ${renderCaptureQualityList("Practical recommendations", report.recommendations, "The current capture pattern is already strong.", "recommendations")}
+      ${renderCaptureQualityList("Interpretation limits", report.limits, "No limits listed.", "limits")}
+    </section>
+  </div>`;
 }
 
 function diagnosticHypotheses() {
@@ -8576,6 +8695,15 @@ function bindEvents() {
         return;
       }
       toast("ss command copied", "Paste it on the target server to collect the ss evidence.");
+    }
+    if (action === "copyQualityCommand") {
+      const report = captureQualityReport();
+      const ok = await copyTextToClipboard(report.recommendedCommand);
+      if (!ok) {
+        toast("Copy failed", "The recommended capture command could not be copied by the browser.", "danger");
+        return;
+      }
+      toast("Capture command copied", "Paste it on the target server to collect stronger ss evidence.");
     }
     if (action === "loadSsCommandEndpointExample") {
       const commandInput = document.querySelector("#commandInput");

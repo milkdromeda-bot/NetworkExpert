@@ -323,7 +323,7 @@ test("analysis tabs expose short guidance and a single detailed view guide", () 
   assert.match(css, /\.analysis-view-guide-button\s*\{[^}]*white-space:\s*nowrap;/s);
   assert.match(css, /\.analysis-view-guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(230px,\s*1fr\)\);/s);
   assert.match(css, /\.analysis-view-guide-card\s*\{[^}]*padding:\s*0 10px 10px;[^}]*overflow:\s*hidden;/s);
-  assert.match(css, /\.analysis-view-guide-card header\s*\{[^}]*margin:\s*0 -10px 2px;[^}]*border-bottom:\s*1px solid rgba\(67,\s*78,\s*96,\s*\.72\);/s);
+  assert.match(css, /\.analysis-view-guide-card header\s*\{[^}]*min-height:\s*46px;[^}]*max-height:\s*46px;[^}]*margin:\s*0 -10px 2px;[^}]*border-bottom:\s*1px solid rgba\(67,\s*78,\s*96,\s*\.72\);/s);
   assert.match(css, /\.analysis-view-guide-card header\s*\{[^}]*background:[^}]*linear-gradient\(90deg,\s*rgba\(93,\s*183,\s*255,\s*\.16\)/s);
   assert.match(css, /\.modal\.analysisViewGuide\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 30px\)\);/s);
 });
@@ -485,4 +485,25 @@ test("dashboard preset selection keeps the picker responsive", () => {
   assert.match(css, /\.dashboard-preset-menu,\s*\.dashboard-preset-menu\.open\s*\{[^}]*backdrop-filter:\s*none;[^}]*contain:\s*paint;/s);
   assert.match(css, /\.dashboard-preset-option:hover:not\(\.selected\),\s*\.dashboard-preset-option:focus-visible:not\(\.selected\)/);
   assert.match(css, /\.dashboard-preset-option\.selected::after\s*\{/);
+});
+
+test("analysis exposes a dedicated capture quality report tab", () => {
+  const captureQuality = readFileSync(new URL("../../src/capture-quality.js", import.meta.url), "utf8");
+
+  assert.match(main, /import \{ analyzeCaptureQuality \} from "\.\/capture-quality\.js";/);
+  assert.match(main, /id:\s*"quality"[\s\S]*label:\s*"quality"[\s\S]*Capture Quality Report/);
+  assert.match(main, /if \(state\.activeTab === "quality"\) return renderCaptureQualityReport\(\);/);
+  assert.match(main, /function captureQualityReport\(\)/);
+  assert.match(main, /function renderCaptureQualityReport\(\)/);
+  assert.match(main, /data-action="copyQualityCommand"/);
+  assert.match(main, /toast\("Capture command copied", "Paste it on the target server to collect stronger ss evidence\."\);/);
+  assert.match(captureQuality, /export function analyzeCaptureQuality/);
+  assert.match(captureQuality, /Timestamped snapshots/);
+  assert.match(captureQuality, /Socket memory \(-m\)/);
+  assert.match(captureQuality, /TCP internals \(-i\)/);
+  assert.match(captureQuality, /Very short interval with tee can distort cadence/);
+  assert.match(css, /\.capture-quality-shell\s*\{/);
+  assert.match(css, /\.capture-quality-hero\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/s);
+  assert.match(css, /\.capture-quality-feature-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(260px,\s*1fr\)\);/s);
+  assert.match(css, /\.capture-quality-recommendations\s*\{[^}]*grid-template-columns:\s*minmax\(240px,\s*\.55fr\) minmax\(0,\s*1fr\) auto;/s);
 });
