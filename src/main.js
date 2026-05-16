@@ -17,6 +17,8 @@ import { buildExecutiveSummary, pickExecutiveFocusSocket } from "./executive-sum
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { buildRootCauseMatrix } from "./root-cause-matrix.js";
 import { detectTimelineStories } from "./timeline-stories.js";
+import { detectMultiSocketCorrelation } from "./multi-socket-correlation.js";
+import { detectRateOfChange } from "./rate-of-change.js";
 import { playbookForHypothesis, resolvePlaybook } from "./playbooks.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeCaptureQuality } from "./capture-quality.js";
@@ -5565,6 +5567,8 @@ function renderTimeline() {
   const first = events[0]?.epochMs || Date.now();
   const last = events[events.length - 1]?.epochMs || first;
   const stories = detectTimelineStories(state.raw || "", state.sockets);
+  state._multiSocketEvents = detectMultiSocketCorrelation(state.raw || "");
+  state._rateAlerts = detectRateOfChange(state.raw || "");
   const view = state.timelineView || "stories";
   return `<div class="timeline-workbench">
     <div class="expert-strip">
@@ -5587,8 +5591,31 @@ function storyStepMetric(key) {
 }
 
 function renderTimelineStoriesView(stories) {
-  if (!stories.length) return `<div class="timeline-stories-empty"><i class="ri-movie-2-line"></i><p>No causal pattern detected yet. Need more snapshots or stronger signals.</p></div>`;
+  if (!stories.length && !state._multiSocketEvents?.length) return `<div class="timeline-stories-empty"><i class="ri-movie-2-line"></i><p>No causal pattern detected yet. Need more snapshots or stronger signals.</p></div>`;
+  const groupEvents = state._multiSocketEvents || [];
+  const rateAlerts = (state._rateAlerts || []).slice(0, 5);
   return `<section class="timeline-stories">
+    ${rateAlerts.length ? `<div class="rate-alerts">
+      ${rateAlerts.map(a => {
+        const isBytes = a.metric === "recvQ" || a.metric === "sendQ" || a.metric === "skmem.r";
+        const prev = isBytes ? `${Math.round(a.prevValue / 1024)} KB` : String(a.prevValue);
+        const curr = isBytes ? `${Math.round(a.currValue / 1024)} KB` : String(a.currValue);
+        const dt = a.dtMs >= 1000 ? `${(a.dtMs / 1000).toFixed(1)}s` : `${Math.round(a.dtMs)} ms`;
+        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span> <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)} — <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} → ${curr} in ${dt})</small></div>`;
+      }).join("")}
+    </div>` : ""}
+    ${groupEvents.length ? `<div class="multi-socket-events">
+      ${groupEvents.slice(0, 4).map(event => `<article class="timeline-story group-event">
+        <div class="story-header">
+          <strong>${escapeHtml(event.narrative.title)}</strong>
+          <span class="story-completeness">${event.socketCount} sockets</span>
+        </div>
+        <div class="story-narrative">
+          <div class="story-step"><span class="story-dot group-dot"></span><span class="story-text">${escapeHtml(event.narrative.line)}</span></div>
+          <div class="story-conclusion">${escapeHtml(event.narrative.conclusion)}</div>
+        </div>
+      </article>`).join("")}
+    </div>` : ""}
     ${stories.slice(0, 6).map(story => `<article class="timeline-story">
       <div class="story-header">
         <strong>${escapeHtml(story.title)}</strong>
@@ -5597,7 +5624,7 @@ function renderTimelineStoriesView(stories) {
       <div class="story-narrative">
         ${story.narrative.map((line, i) => i === story.narrative.length - 1
           ? `<div class="story-conclusion">${escapeHtml(line)}</div>`
-          : `<div class="story-step"><button class="story-jump" data-action="storyJumpToChart" data-epoch="${story.matchedSteps[i]?.epochMs || ""}" data-metric="${storyStepMetric(story.matchedSteps[i]?.key || "")}" data-label="${escapeHtml(story.matchedSteps[i]?.label || "")}" title="Zoom chart to this moment"><i class="ri-line-chart-line"></i></button><span class="story-dot"></span><span class="story-text">${escapeHtml(line)}</span></div>`
+          : `<div class="story-step${i === story.narrative.length - 2 ? " story-step-critical" : ""}"><button class="story-jump" data-action="storyJumpToChart" data-epoch="${story.matchedSteps[i]?.epochMs || ""}" data-metric="${storyStepMetric(story.matchedSteps[i]?.key || "")}" data-label="${escapeHtml(story.matchedSteps[i]?.label || "")}" title="Zoom chart to this moment"><i class="ri-line-chart-line"></i></button><span class="story-dot"></span><span class="story-text">${escapeHtml(line)}</span></div>`
         ).join("")}
       </div>
     </article>`).join("")}
