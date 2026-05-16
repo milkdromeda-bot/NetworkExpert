@@ -5996,6 +5996,17 @@ tr:hover, tr.selected { background: #101a27; }
   flex-basis: 100%;
   min-width: 100%;
 }
+.chart-grid > .chart-card.chart-expanded {
+  flex-basis: 100% !important;
+  min-width: 100% !important;
+  order: -1;
+}
+.chart-card.chart-expanded .chart-card-body {
+  min-height: 420px;
+}
+.chart-card.chart-expanded svg.chart {
+  min-height: 380px;
+}
 .chart-grid > .chart-card:only-child .small-chart {
   height: 430px;
 }

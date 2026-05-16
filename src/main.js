@@ -223,6 +223,7 @@ let state = {
   chartsTab: "charts",
   timelineView: "stories",
   diagnosisView: "matrix",
+  expandedChart: null,
   openStyleMenu: false,
   openSsEditorThemeMenu: false,
   editorWordWrap: false,
@@ -1387,12 +1388,14 @@ function chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime) {
     const width = Math.min(176, Math.max(72, label.length * 7 + 20));
     const boxX = Math.min(Math.max(x + 8, pad.l + 8), Math.max(pad.l + 8, w - pad.r - width - 6));
     const boxY = pad.t + 10 + (index % 3) * 26;
+    const timeStr = item.resolvedEpochMs ? new Date(item.resolvedEpochMs).toISOString().slice(11, 23) : "";
     return `
       <g class="annotation-overlay-item" opacity=".8" pointer-events="none">
         <line x1="${x}" x2="${x}" y1="${pad.t}" y2="${h - pad.b}" stroke="${color}" stroke-width="1.8" stroke-dasharray="6 4"/>
         <circle cx="${x}" cy="${pad.t + 8}" r="4.5" fill="${color}"/>
-        <rect x="${boxX}" y="${boxY}" width="${width}" height="20" rx="6" fill="#081019" stroke="${color}"/>
-        <text x="${boxX + 8}" y="${boxY + 14}" fill="${color}" font-size="11" font-weight="800">${escapeHtml(label)}</text>
+        <rect x="${boxX}" y="${boxY}" width="${width}" height="32" rx="6" fill="#081019" stroke="${color}"/>
+        <text x="${boxX + 8}" y="${boxY + 13}" fill="${color}" font-size="10" font-weight="800">${escapeHtml(label)}</text>
+        <text x="${boxX + 8}" y="${boxY + 26}" fill="${color}" font-size="9" opacity="0.7">${escapeHtml(timeStr)}</text>
       </g>
     `;
   }).join("");
@@ -3244,7 +3247,7 @@ function renderChartsPage() {
       </div>
     </section>
     <section class="chart-grid cols-${columns} density-${layout.density}">
-      ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}" data-chart-card="${m}">
+      ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}${state.expandedChart === m ? " chart-expanded" : ""}" data-chart-card="${m}">
         ${state.storyMarkerPct != null && (!state.storyMarkerMetric || state.storyMarkerMetric === m) ? `<div class="story-marker-overlay" style="padding-left:${state.storyMarkerPct}%"><div class="story-marker-line"><span class="story-marker-label">${escapeHtml(state.storyMarkerTime || "")} ${escapeHtml((state.storyMarkerLabel || "").slice(0, 20))}</span></div></div>` : ""}
         <div class="panel-head">
           <div class="panel-title chart-title-wrap">
@@ -3252,6 +3255,7 @@ function renderChartsPage() {
             ${renderChartMetricTooltip(m)}
           </div>
           <div class="col-tools chart-card-tools">
+            <button class="mini" data-action="expandChart" data-metric="${m}" title="${state.expandedChart === m ? "Collapse" : "Expand"}"><i class="${state.expandedChart === m ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}"></i></button>
             <button class="mini" data-chart-zoom="zoomIn" data-chart-zoom-metric="${m}" title="Zoom in">${icons.zoomIn}</button>
             <button class="mini" data-chart-zoom="zoomOut" data-chart-zoom-metric="${m}" title="Zoom out">${icons.zoomOut}</button>
             <button class="mini" data-chart-zoom="resetZoom" data-chart-zoom-metric="${m}" title="Reset zoom">${icons.reset}</button>
@@ -3887,7 +3891,8 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   }
   const annotationsSvg = annotations.map(a => {
     const ay = pad.t - 4 + a.level * levelHeight;
-    return `<text x="${a.ax.toFixed(1)}" y="${ay}" text-anchor="middle" fill="${a.color}" font-size="9" font-weight="700">${escapeHtml(a.label)}</text>`;
+    const timeStr = a.epochMs ? new Date(a.epochMs).toISOString().slice(11, 23) : "";
+    return `<text x="${a.ax.toFixed(1)}" y="${ay}" text-anchor="middle" fill="${a.color}" font-size="9" font-weight="700">${escapeHtml(a.label)}</text>${timeStr ? `<text x="${a.ax.toFixed(1)}" y="${ay + 10}" text-anchor="middle" fill="${a.color}" font-size="8" opacity="0.7">${timeStr}</text>` : ""}`;
   }).join("");
   // Detect Send-Q plateaus > 0 lasting more than 3 seconds
   let plateauAnnotations = "";
@@ -6692,16 +6697,36 @@ function preserveExtremesDownsample(rows, metric, budget) {
   return [...picked.entries()].sort((a, b) => a[0] - b[0]).slice(0, budget).map(([, row]) => row);
 }
 
+function chartXMinorTicks(data, pad, w, h, firstTime, lastTime) {
+  const span = lastTime - firstTime;
+  if (span <= 0 || !data.length) return "";
+  const plotW = w - pad.l - pad.r;
+  let interval;
+  if (span <= 5000) interval = 1000;
+  else if (span <= 30000) interval = 5000;
+  else if (span <= 120000) interval = 15000;
+  else if (span <= 600000) interval = 60000;
+  else interval = 300000;
+  const ticks = [];
+  const start = Math.ceil(firstTime / interval) * interval;
+  for (let t = start; t <= lastTime; t += interval) {
+    const xPos = pad.l + ((t - firstTime) / span) * plotW;
+    if (xPos <= pad.l + 20 || xPos >= w - pad.r - 20) continue;
+    const d = new Date(t);
+    const label = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}:${String(d.getUTCSeconds()).padStart(2, "0")}`;
+    ticks.push({ x: xPos, label });
+  }
+  return ticks.map(tick => `<line x1="${tick.x}" x2="${tick.x}" y1="${h - pad.b}" y2="${h - pad.b + 5}" stroke="#8c9aab" opacity="0.4"/><text x="${tick.x}" y="${h - 6}" text-anchor="middle" fill="#8c9aab" font-size="9" opacity="0.5">${tick.label}</text>`).join("");
+}
+
 function timeLabel(seconds, epochMs = null) {
   if (epochMs) {
-    const base = dateTimeFormatter(resolvedNumberLocale(), {
-      timeZone: resolvedTimeZone(),
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    }, "time-label").format(new Date(epochMs));
-    const ms = String(Math.round(epochMs) % 1000).padStart(3, "0");
-    return `${base}.${ms}`;
+    const d = new Date(epochMs);
+    const h = String(d.getUTCHours()).padStart(2, "0");
+    const m = String(d.getUTCMinutes()).padStart(2, "0");
+    const s = String(d.getUTCSeconds()).padStart(2, "0");
+    const ms = String(d.getUTCMilliseconds()).padStart(3, "0");
+    return `${h}:${m}:${s}.${ms}`;
   }
   if (seconds >= 3600) return `${(seconds / 3600).toFixed(1)}h`;
   if (seconds >= 60) return `${(seconds / 60).toFixed(1)}m`;
@@ -7118,7 +7143,15 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const xTicks = xTickFractions.map(f => {
     const targetTime = firstTime + f * Math.max(1, lastTime - firstTime);
     const row = data.reduce((best, item) => Math.abs(chartRowTime(item) - targetTime) < Math.abs(chartRowTime(best) - targetTime) ? item : best, data[0] || {});
-    return { x: pad.l + f * (w - pad.l - pad.r), label: timeLabel(row?.t || 0, row?.epochMs) };
+    const epoch = row?.epochMs;
+    let label;
+    if (epoch) {
+      const d = new Date(epoch);
+      label = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}:${String(d.getUTCSeconds()).padStart(2, "0")}`;
+    } else {
+      label = `t+${Math.round(row?.t || 0)}s`;
+    }
+    return { x: pad.l + f * (w - pad.l - pad.r), label };
   });
   const showWarnLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.warn) && !chartSeriesHidden(metric, "warn");
   const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger) && !chartSeriesHidden(metric, "danger");
@@ -7392,7 +7425,7 @@ function attachBdpCrosshair(svg, data, series, xFn, yFn, pad, w, h, kind, format
     const tooltipX = cx + 14 + tooltipW > w - pad.r ? cx - tooltipW - 14 : cx + 14;
     const lineH = 14;
     const tooltipH = (rows.length + 1) * lineH + 10;
-    const tooltipY = pad.t + 10;
+    const tooltipY = pad.t + 30;
     crosshairG.setAttribute("visibility", "visible");
     crosshairG.innerHTML = `
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffffffaa" stroke-width="1" stroke-dasharray="3 2"/>
@@ -7566,7 +7599,7 @@ function attachChartInteractions(svg) {
     const showSeverity = severity === "warn" || severity === "danger";
     const height = Math.max(62, 36 + items.length * lineH + (showSeverity ? 15 : 0));
     const tooltipX = Math.max(b.left + 6, Math.min(x + 12, b.right - width - 6));
-    const tooltipY = b.top + 8;
+    const tooltipY = b.top + 28;
     return `
       <rect x="${tooltipX}" y="${tooltipY}" width="${width}" height="${height}" rx="8" fill="#0b1018" fill-opacity="${tooltipOpacity}" stroke="#52657a"/>
       <text x="${tooltipX + 10}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="700">${escapeHtml(timeLabel(row.t || 0, row.epochMs))}</text>
@@ -9107,6 +9140,15 @@ function bindEvents() {
     if (action === "diagnosisView") {
       state.diagnosisView = event.currentTarget.dataset.value || "matrix";
       render();
+    }
+    if (action === "expandChart") {
+      const metric = event.currentTarget.dataset.metric;
+      state.expandedChart = state.expandedChart === metric ? null : metric;
+      render();
+      if (state.expandedChart) requestAnimationFrame(() => {
+        const card = document.querySelector(`[data-chart-card="${metric}"]`);
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     }
     if (action === "storyJumpToChart") {
       const epoch = Number(event.currentTarget.dataset.epoch);
