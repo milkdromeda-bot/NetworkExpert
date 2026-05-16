@@ -5670,9 +5670,18 @@ function renderComparison() {
   if (!comparison) {
     return `<div class="compare-empty">
       <i class="ri-scales-3-line"></i>
-      <strong>No baseline yet</strong>
-      <p>Click Set baseline after parsing a known-good or before-change capture. Then import or parse the after-change capture and return here.</p>
-      <button class="primary" data-action="setBaseline"><i class="ri-scales-3-line"></i> Set current capture as baseline</button>
+      <strong>Before / After comparison</strong>
+      <p>Detect exactly what changed between two captures — in either direction.</p>
+      <div class="compare-steps">
+        <div class="compare-step"><span>1</span><b>Load your first capture</b><small>Either the healthy state or the incident — order doesn't matter</small></div>
+        <div class="compare-step"><span>2</span><b>Set as baseline</b><small>Click one of the buttons below to mark it</small></div>
+        <div class="compare-step"><span>3</span><b>Load the second capture</b><small>The diff will show what changed between the two</small></div>
+      </div>
+      <p class="compare-hint">You'll see: what metrics exploded or recovered, new/disappeared peers, new anomalies, and an automatic verdict.</p>
+      <div class="compare-actions">
+        <button class="primary" data-action="setBaseline"><i class="ri-checkbox-circle-line"></i> This is the healthy baseline</button>
+        <button class="secondary" data-action="setBaselineAsIncident"><i class="ri-alarm-warning-line"></i> This is the incident (compare after fix)</button>
+      </div>
     </div>`;
   }
   const s = comparison.summary;
@@ -5680,8 +5689,8 @@ function renderComparison() {
   return `<div class="compare-workbench">
     <div class="compare-header">
       <div>
-        <span class="tooltip-kicker">Before / after</span>
-        <h3>${escapeHtml(state.baseline.sourceName)} -> ${escapeHtml(state.sourceName)}</h3>
+        <span class="tooltip-kicker">${state.baseline.role === "incident" ? "Incident → After fix" : "Healthy → Incident"}</span>
+        <h3>${escapeHtml(state.baseline.sourceName)} → ${escapeHtml(state.sourceName)}</h3>
         <p>Baseline captured ${escapeHtml(new Date(state.baseline.createdAt).toLocaleString(resolvedNumberLocale()))}</p>
       </div>
       <div class="toolbar"><button data-action="setBaseline"><i class="ri-scales-3-line"></i> Replace baseline</button><button data-action="clearBaseline">${icons.clear} Clear baseline</button></div>
@@ -9045,8 +9054,16 @@ function bindEvents() {
     }
     if (action === "setBaseline") {
       state.baseline = createBaseline();
+      state.baseline.role = "healthy";
       state.activeTab = "compare";
-      toast("Baseline captured", `${formatNumber(state.baseline.sockets.length)} sockets saved as before state.`);
+      toast("Healthy baseline captured", `${formatNumber(state.baseline.sockets.length)} sockets saved. Now load the incident capture.`);
+      render();
+    }
+    if (action === "setBaselineAsIncident") {
+      state.baseline = createBaseline();
+      state.baseline.role = "incident";
+      state.activeTab = "compare";
+      toast("Incident baseline captured", `${formatNumber(state.baseline.sockets.length)} sockets saved. Now load the post-fix capture to see what recovered.`);
       render();
     }
     if (action === "clearBaseline") {
