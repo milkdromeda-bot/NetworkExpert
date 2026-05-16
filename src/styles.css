@@ -1720,6 +1720,22 @@ button.mega i {
   gap: 8px;
   margin-bottom: 8px;
 }
+.kpis.compact {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(15, 22, 33, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.kpi-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kpi-inline label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.kpi-inline strong { font-size: 14px; color: var(--text); }
 .kpi {
   background: rgba(15, 22, 33, 0.86);
   border: 1px solid var(--line);
@@ -3679,10 +3695,21 @@ tr:hover, tr.selected { background: #101a27; }
   display: grid;
   gap: 6px;
 }
+.matrix-header {
+  display: grid;
+  grid-template-columns: 70px 50px 1fr;
+  gap: 8px;
+  padding: 0 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--soft);
+}
 .matrix-cell {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 70px 50px 1fr;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;

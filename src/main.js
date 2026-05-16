@@ -766,8 +766,8 @@ function renderExportMenu(scope = "analysis") {
     <button data-export-menu="${escapeHtml(scope)}" title="Export report or evidence pack">${icons.pack} Export</button>
     <div class="row-menu export-menu ${open ? "open" : ""}" ${pos}>
       <button data-action="saveCharts"><i class="ri-image-line"></i><span>Export PNG</span><small>Save visible charts as image</small></button>
-      <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>PDF report</span><small>Readable incident snapshot</small></button>
-      <button data-export-action="incident-html"><i class="ri-file-code-line"></i><span>Incident Report HTML</span><small>Standalone post-mortem with stories, matrix, playbook</small></button>
+      <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>Executive summary PDF</span><small>Short printable overview for stakeholders</small></button>
+      <button data-export-action="incident-html"><i class="ri-file-code-line"></i><span>Full incident report HTML</span><small>Complete analysis: stories, matrix, playbooks, evidence</small></button>
       <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><small>PDF, CSV, JSON and chart PNGs</small></button>
       <button data-export-action="jira"><i class="ri-clipboard-line"></i><span>Copy Jira report</span><small>Wiki markup for ticket</small></button>
     </div>
@@ -3150,11 +3150,11 @@ function renderAnalysisPage() {
     ? "Deep analysis is on. Click to pause the background advisor."
     : "Deep analysis is paused. Click to enable the background advisor.";
   return html`
-    <section class="kpis">
-      <div class="kpi"><label>Sockets</label><strong>${formatNumber(state.sockets.length)}</strong></div>
-      <div class="kpi"><label>Critical</label><strong>${formatNumber(state.anomalies.filter(a => a.severity === "critical").length)}</strong></div>
-      <div class="kpi"><label>Send-Q total</label><strong>${formatMetricValue("sendQ", state.sockets.reduce((s, x) => s + x.sendQ, 0))}</strong></div>
-      <div class="kpi"><label>Drops skmem</label><strong>${formatMetricValue("skmem.d", state.sockets.reduce((s, x) => s + (x.details.skmem.d || 0), 0))}</strong></div>
+    <section class="kpis compact">
+      <span class="kpi-inline"><label>Sockets</label><strong>${formatNumber(state.sockets.length)}</strong></span>
+      <span class="kpi-inline"><label>Critical</label><strong>${formatNumber(state.anomalies.filter(a => a.severity === "critical").length)}</strong></span>
+      <span class="kpi-inline"><label>Send-Q</label><strong>${formatMetricValue("sendQ", state.sockets.reduce((s, x) => s + x.sendQ, 0))}</strong></span>
+      <span class="kpi-inline"><label>Drops</label><strong>${formatMetricValue("skmem.d", state.sockets.reduce((s, x) => s + (x.details.skmem.d || 0), 0))}</strong></span>
     </section>
     <section class="analysis-layout">
       <div class="panel">
@@ -4920,14 +4920,15 @@ function renderRootCauseMatrix(matrix) {
       ${matrix.ambiguous ? `<span class="risk medium">Ambiguous — multiple causes compete</span>` : ""}
     </header>
     <div class="matrix-grid">
+      <div class="matrix-header"><span>Confidence</span><span>Signals</span><span>Probable cause</span></div>
       ${matrix.causes.map(cause => {
         const pct = Math.round(cause.confidence * 100);
         const level = pct >= 60 ? "high" : pct >= 30 ? "medium" : "low";
         return `<div class="matrix-cell ${level}${matrix.topCause?.id === cause.id ? " top" : ""}">
           <div class="matrix-bar" style="width:${pct}%"></div>
-          <strong>${escapeHtml(cause.label)}</strong>
           <span class="matrix-pct">${pct}%</span>
-          <small>${cause.signalCount}/${cause.totalSignals} signals</small>
+          <small>${cause.signalCount}/${cause.totalSignals}</small>
+          <strong>${escapeHtml(cause.label)}</strong>
         </div>`;
       }).join("")}
     </div>
