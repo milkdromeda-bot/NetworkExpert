@@ -2598,8 +2598,25 @@ function syncFromCodeMirror() {
 }
 
 const _busyEl = document.getElementById("busyOverlay");
-function _showBusy() { _busyEl.classList.add("visible"); _busyEl.offsetHeight; }
-function _hideBusy() { _busyEl.classList.remove("visible"); }
+function _showBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.add("visible"); }
+function _hideBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.remove("visible"); _busyEl?.classList.remove("visible"); }
+
+let _cachedDataVersion = -1;
+let _cachedStories = [];
+let _cachedMultiSocket = [];
+let _cachedRateAlerts = [];
+
+function cachedStories() {
+  if (_cachedDataVersion !== state.dataVersion) {
+    _cachedDataVersion = state.dataVersion;
+    _cachedStories = cachedStories();
+    _cachedMultiSocket = cachedMultiSocket();
+    _cachedRateAlerts = cachedRateAlerts();
+  }
+  return _cachedStories;
+}
+function cachedMultiSocket() { cachedStories(); return _cachedMultiSocket; }
+function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
 
 function renderOnboarding() {
   const steps = [
@@ -2629,6 +2646,10 @@ function render() {
   hideFloatingChartTooltipNow();
   if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
+  setTimeout(() => { _renderSync(); _hideBusy(); }, 16);
+}
+
+function _renderSync() {
   const app = document.querySelector("#app");
   app.innerHTML = html`
     ${state.onboarding >= 0 ? renderOnboarding() : ""}
@@ -2654,6 +2675,7 @@ function render() {
         </div>
         <div class="top-actions">
           <div class="app-tabs">
+            <span id="inlineBusy" class="inline-busy"><span class="busy-spinner-sm"></span> Analyzing...</span>
             ${[
               ["ingest", "Import", "ri-upload-2-line"],
               ["analysis", "Analysis", "ri-stethoscope-line"],
@@ -2698,7 +2720,6 @@ function render() {
   }
   scheduleAnomalyBadgeSettle();
   scheduleIpIntelEnrichment();
-  _hideBusy();
 }
 
 function scheduleChartPageDraw() {
@@ -4929,9 +4950,9 @@ function renderDiagnosis() {
   const view = state.diagnosisView || "matrix";
   const aiSummary = buildAiSummary({
     matrix,
-    stories: detectTimelineStories(state.raw || "", state.sockets),
-    multiSocket: state._multiSocketEvents || detectMultiSocketCorrelation(state.raw || ""),
-    rateAlerts: state._rateAlerts || detectRateOfChange(state.raw || ""),
+    stories: cachedStories(),
+    multiSocket: state._multiSocketEvents || cachedMultiSocket(),
+    rateAlerts: state._rateAlerts || cachedRateAlerts(),
     captureQuality: captureQualityReport(),
     hypotheses,
     comparison: state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null
@@ -5623,9 +5644,9 @@ function renderTimeline() {
   if (!events.length) return `<div class="empty">No timeline event is available. Import timestamped snapshots for a stronger time-based view.</div>`;
   const first = events[0]?.epochMs || Date.now();
   const last = events[events.length - 1]?.epochMs || first;
-  const stories = detectTimelineStories(state.raw || "", state.sockets);
-  state._multiSocketEvents = detectMultiSocketCorrelation(state.raw || "");
-  state._rateAlerts = detectRateOfChange(state.raw || "");
+  const stories = cachedStories();
+  state._multiSocketEvents = cachedMultiSocket();
+  state._rateAlerts = cachedRateAlerts();
   const view = state.timelineView || "stories";
   return `<div class="timeline-workbench">
     <div class="timeline-strip">
@@ -8191,7 +8212,7 @@ function buildIncidentReportHtml(chartCaptures = []) {
 
           <section class="report-card report-section" style="border-left:4px solid var(--accent)">
             <h2>Summary</h2>
-            <p style="font-size:14px;line-height:1.7">${escapeHtml(buildAiSummary({ matrix: buildRootCauseMatrix(state.sockets), stories: detectTimelineStories(state.raw || "", state.sockets), multiSocket: detectMultiSocketCorrelation(state.raw || ""), rateAlerts: detectRateOfChange(state.raw || ""), captureQuality: captureQualityReport(), hypotheses: diagnosticHypotheses(), comparison: state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null }))}</p>
+            <p style="font-size:14px;line-height:1.7">${escapeHtml(buildAiSummary({ matrix: buildRootCauseMatrix(state.sockets), stories: cachedStories(), multiSocket: cachedMultiSocket(), rateAlerts: cachedRateAlerts(), captureQuality: captureQualityReport(), hypotheses: diagnosticHypotheses(), comparison: state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null }))}</p>
           </section>
 
           <div class="report-grid">
@@ -8707,9 +8728,9 @@ function exportIncidentReportHtml() {
   const quality = captureQualityReport();
   const hyps = diagnosticHypotheses();
   const matrixData = buildRootCauseMatrix(state.sockets);
-  const storiesData = detectTimelineStories(state.raw || "", state.sockets);
-  const multiData = detectMultiSocketCorrelation(state.raw || "");
-  const rateData = detectRateOfChange(state.raw || "");
+  const storiesData = cachedStories();
+  const multiData = cachedMultiSocket();
+  const rateData = cachedRateAlerts();
   const topHyp = hyps[0];
   const pb = topHyp ? resolvePlaybook(playbookForHypothesis(topHyp.id), state.sockets.find(s => s.id === topHyp.topSocketId)) : null;
   const narrativeData = state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null;
