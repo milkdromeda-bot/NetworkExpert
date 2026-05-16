@@ -4910,7 +4910,21 @@ function renderDiagnosis() {
   return `<div class="diagnosis-shell">
     <section class="ai-summary-block">
       <div class="ai-summary-icon"><i class="ri-sparkling-2-line"></i></div>
-      <div class="ai-summary-lines">${aiSummary.split(". ").filter(Boolean).map(s => `<p>${escapeHtml(s.endsWith(".") ? s : s + ".")}</p>`).join("")}</div>
+      <div class="ai-summary-lines">${aiSummary.split(". ").filter(Boolean).map((s, i) => {
+        const text = s.endsWith(".") ? s : s + ".";
+        const formatted = text
+          .replace(/(\d+:\d+:\d+\s*UTC)/g, "<b>$1</b>")
+          .replace(/(\d+\.?\d*[KMG]B\/s)/g, "<b>$1</b>")
+          .replace(/(\d+[KMG]B\s*→\s*\d+\.?\d*[KMG]B)/g, "<b>$1</b>")
+          .replace(/(java:\d+|nginx:\d+)/g, "<b>$1</b>")
+          .replace(/(\d+%)/g, "<b>$1</b>")
+          .replace(/(ambiguous|More evidence needed)/g, "<i>$1</i>")
+          .replace(/(Network path appears healthy|not network|application-side)/gi, "<i>$1</i>")
+          .replace(/(Most likely cause|Root cause is)/g, "<i>$1</i>");
+        if (i === 0) return `<p class="ai-lead">${formatted}</p>`;
+        if (text.includes("Root cause") || text.includes("Most likely")) return `<p class="ai-cause">${formatted}</p>`;
+        return `<p class="ai-detail">${formatted}</p>`;
+      }).join("")}</div>
     </section>
     <div class="pill-toggle" data-active="${view === "hypotheses" ? "1" : "0"}">
       <div class="pill-slider"></div>
@@ -8137,6 +8151,11 @@ function buildIncidentReportHtml(chartCaptures = []) {
             <div class="report-meta">
               ${summaryCards.map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`).join("")}
             </div>
+          </section>
+
+          <section class="report-card report-section" style="border-left:4px solid var(--accent)">
+            <h2>Summary</h2>
+            <p style="font-size:14px;line-height:1.7">${escapeHtml(buildAiSummary({ matrix: buildRootCauseMatrix(state.sockets), stories: detectTimelineStories(state.raw || "", state.sockets), multiSocket: detectMultiSocketCorrelation(state.raw || ""), rateAlerts: detectRateOfChange(state.raw || ""), captureQuality: captureQualityReport(), hypotheses: diagnosticHypotheses(), comparison: state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null }))}</p>
           </section>
 
           <div class="report-grid">

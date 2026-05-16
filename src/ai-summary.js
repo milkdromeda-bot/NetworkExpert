@@ -65,7 +65,7 @@ export function buildAiSummary({ matrix, stories, multiSocket, rateAlerts, captu
     return "No significant pattern detected. Load a timestamped capture with multiple snapshots for deeper analysis.";
   }
 
-  return lines.join(" ");
+  return lines.slice(0, 3).join(" ");
 }
 
 function formatT(epochMs) {

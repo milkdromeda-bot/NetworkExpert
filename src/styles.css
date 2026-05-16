@@ -3749,6 +3749,24 @@ tr:hover, tr.selected { background: #101a27; }
   color: var(--text);
   margin: 0;
 }
+.ai-summary-lines {
+  display: grid;
+  gap: 4px;
+}
+.ai-summary-lines p {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--soft);
+  margin: 0;
+}
+.ai-summary-lines p:first-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ai-lead { font-size: 13px !important; font-weight: 600 !important; color: var(--text) !important; }
+.ai-cause { font-style: italic; color: rgba(76, 222, 138, .85) !important; }
+.ai-detail { color: var(--soft); }
 
 .root-cause-matrix {
   border: 1px solid var(--line);
