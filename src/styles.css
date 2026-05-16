@@ -4117,11 +4117,24 @@ tr:hover, tr.selected { background: #101a27; }
 .story-step {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 12px;
   font-family: "JetBrains Mono", monospace;
   color: var(--soft);
 }
+.story-text { flex: 1; }
+.story-jump {
+  padding: 2px 4px;
+  border: none;
+  border-radius: 3px;
+  background: rgba(112, 157, 255, .1);
+  color: rgba(112, 157, 255, .7);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.story-jump:hover { background: rgba(112, 157, 255, .25); color: rgba(112, 157, 255, 1); }
 .story-dot {
   width: 6px;
   height: 6px;

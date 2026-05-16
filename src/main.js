@@ -3245,6 +3245,7 @@ function renderChartsPage() {
     </section>
     <section class="chart-grid cols-${columns} density-${layout.density}">
       ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}" data-chart-card="${m}">
+        ${state.storyMarkerPct != null && (!state.storyMarkerMetric || state.storyMarkerMetric === m) ? `<div class="story-marker-overlay" style="padding-left:${state.storyMarkerPct}%"><div class="story-marker-line"><span class="story-marker-label">${escapeHtml(state.storyMarkerTime || "")} ${escapeHtml((state.storyMarkerLabel || "").slice(0, 20))}</span></div></div>` : ""}
         <div class="panel-head">
           <div class="panel-title chart-title-wrap">
             <span>${escapeHtml(metricLabel(m))}</span>
@@ -3690,16 +3691,19 @@ function jvmStallNature(row) {
 
 function preciseDateTimeLabel(epochMs) {
   if (!epochMs) return "-";
-  return dateTimeFormatter(resolvedNumberLocale(), {
-    timeZone: resolvedTimeZone(),
+  const d = new Date(epochMs);
+  const tz = resolvedTimeZone();
+  const base = dateTimeFormatter(resolvedNumberLocale(), {
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
-    fractionalSecondDigits: 3
-  }, "precise-date-time").format(new Date(epochMs));
+    second: "2-digit"
+  }, "precise-date-time-noms").format(d);
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  return `${base}.${ms}`;
 }
 
 function jvmTableRows(results = [], safepoints = []) {
@@ -5572,18 +5576,23 @@ function renderTimeline() {
   </div>`;
 }
 
+function storyStepMetric(key) {
+  const map = { "sendQ-grow": "sendQ", "persist-appears": "sendQ", "backoff-rises": "backoff", "fin-or-close": "sendQ", "recvQ-grow": "recvQ", "drops-appear": "skmem.d", "rcv-space-shrink": "rcv_space", "rto-grow": "rto", "backoff-high": "backoff", "cwnd-collapse": "cwnd", "retrans-appear": "retrans", "rwnd-high": "sendQ", "sendQ-present": "sendQ", "no-retrans": "rto", "skmem-r-grow": "skmem.r", "recvQ-high": "recvQ", "rwnd-limited": "sendQ" };
+  return map[key] || "";
+}
+
 function renderTimelineStoriesView(stories) {
   if (!stories.length) return `<div class="timeline-stories-empty"><i class="ri-movie-2-line"></i><p>No causal pattern detected yet. Need more snapshots or stronger signals.</p></div>`;
   return `<section class="timeline-stories">
     ${stories.slice(0, 6).map(story => `<article class="timeline-story">
       <div class="story-header">
         <strong>${escapeHtml(story.title)}</strong>
-        <span class="story-completeness">${Math.round(story.completeness * 100)}% pattern match</span>
+        <span class="story-completeness" title="${story.matchedSteps.length}/${story.totalSteps} expected steps observed in sequence">${story.matchedSteps.length}/${story.totalSteps} steps matched</span>
       </div>
       <div class="story-narrative">
         ${story.narrative.map((line, i) => i === story.narrative.length - 1
           ? `<div class="story-conclusion">${escapeHtml(line)}</div>`
-          : `<div class="story-step"><span class="story-dot"></span>${escapeHtml(line)}</div>`
+          : `<div class="story-step"><button class="story-jump" data-action="storyJumpToChart" data-epoch="${story.matchedSteps[i]?.epochMs || ""}" data-metric="${storyStepMetric(story.matchedSteps[i]?.key || "")}" data-label="${escapeHtml(story.matchedSteps[i]?.label || "")}" title="Zoom chart to this moment"><i class="ri-line-chart-line"></i></button><span class="story-dot"></span><span class="story-text">${escapeHtml(line)}</span></div>`
         ).join("")}
       </div>
     </article>`).join("")}
@@ -6685,12 +6694,14 @@ function preserveExtremesDownsample(rows, metric, budget) {
 
 function timeLabel(seconds, epochMs = null) {
   if (epochMs) {
-    return dateTimeFormatter(resolvedNumberLocale(), {
+    const base = dateTimeFormatter(resolvedNumberLocale(), {
       timeZone: resolvedTimeZone(),
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit"
     }, "time-label").format(new Date(epochMs));
+    const ms = String(Math.round(epochMs) % 1000).padStart(3, "0");
+    return `${base}.${ms}`;
   }
   if (seconds >= 3600) return `${(seconds / 3600).toFixed(1)}h`;
   if (seconds >= 60) return `${(seconds / 60).toFixed(1)}m`;
@@ -9096,6 +9107,44 @@ function bindEvents() {
     if (action === "diagnosisView") {
       state.diagnosisView = event.currentTarget.dataset.value || "matrix";
       render();
+    }
+    if (action === "storyJumpToChart") {
+      const epoch = Number(event.currentTarget.dataset.epoch);
+      const metric = event.currentTarget.dataset.metric || "";
+      const label = event.currentTarget.dataset.label || "";
+      const history = state.history || [];
+      if (history.length >= 2 && epoch) {
+        const first = history[0].epochMs;
+        const last = history[history.length - 1].epochMs;
+        const range = last - first;
+        if (range > 0) {
+          const pos = (epoch - first) / range;
+          const window = Math.min(0.2, 8000 / range);
+          const zoomStart = Math.max(0, pos - window);
+          const zoomEnd = Math.min(1, pos + window);
+          setZoom(zoomStart, zoomEnd);
+          const actualRange = zoomEnd - zoomStart;
+          state.storyMarkerPct = actualRange > 0 ? ((pos - zoomStart) / actualRange) * 100 : 50;
+          state.storyMarkerMetric = metric;
+          if (metric && !state.chartMetrics.includes(metric)) {
+            state.chartMetrics.push(metric);
+          }
+          clearTimeout(state._storyMarkerTimer);
+          const annotationId = `story-${epoch}-${metric}`;
+          if (!state.annotations.some(a => a.id === annotationId)) {
+            state.annotations = [...state.annotations, { id: annotationId, sourceName: state.sourceName, socketId: state.selectedId || "", metric: metric || "*", kind: "story", label: label || "story event", note: "", anchor: "cursor", epochMs: epoch, createdAt: Date.now() }];
+            saveAnnotations();
+          }
+        }
+      }
+      state.view = "charts";
+      state.chartsTab = "charts";
+      render();
+      if (metric) requestAnimationFrame(() => {
+        const card = document.querySelector(`[data-chart-card="${metric}"]`);
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      toast("Chart zoomed", `Focused on ${metric || "event"} at this timestamp.`);
     }
     if (action === "copyAdvisorCommands") {
       const finding = state.advisorFindings.find(item => item.id === event.currentTarget.dataset.findingId);
