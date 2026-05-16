@@ -1,4 +1,4 @@
-export function buildIncidentReportHtml({ sourceName, captureQuality, matrix, hypotheses, stories, multiSocket, rateAlerts, playbook, comparison, timestamp }) {
+export function buildIncidentReportHtml({ sourceName, captureQuality, matrix, hypotheses, stories, multiSocket, rateAlerts, playbook, comparison, aiSummary, timestamp }) {
   const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const now = timestamp || new Date().toISOString();
 
@@ -61,6 +61,8 @@ tr.critical td{color:#ff5c77}
 .ir-group{margin:8px 0;padding:8px;border-left:3px solid #ff9f43;background:rgba(255,159,67,.03);border-radius:0 6px 6px 0}
 .ir-conclusion{color:#ff9f43;font-weight:600;font-size:12px}
 .ir-hyp{margin:10px 0;padding:10px;border:1px solid #1e2d3d;border-radius:6px}
+.ir-hyp ul{padding-left:24px}
+.ir-hyp li{margin:4px 0}
 .ir-hyp.critical{border-left:3px solid #ff5c77}
 .ir-hyp.high{border-left:3px solid #ff9f43}
 .ir-hyp.medium{border-left:3px solid #ffd166}
@@ -70,10 +72,13 @@ pre{background:#0f1620;padding:10px;border-radius:6px;font-size:11px;overflow-x:
 details{margin:6px 0}
 summary{cursor:pointer;font-size:12px;color:#8caab8}
 .ir-quality{border-left:3px solid ${captureQuality?.score >= 70 ? "#4cde8a" : captureQuality?.score >= 55 ? "#ffd166" : "#ff5c77"}}
+.ir-ai-summary{border-left:3px solid #709dff;background:linear-gradient(135deg,rgba(112,157,255,.08),transparent 50%)}
+.ir-ai-summary p{font-size:14px;line-height:1.7}
 </style></head>
 <body>
 <h1>🔍 Incident Report — ${esc(sourceName)}</h1>
 <p class="ir-meta">Generated ${now} by NetworkExpert</p>
+${aiSummary ? `<section class="ir-section ir-ai-summary"><p>${esc(aiSummary)}</p></section>` : ""}
 ${qualitySection}
 ${verdictSection}
 ${matrixSection}

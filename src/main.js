@@ -4910,7 +4910,7 @@ function renderDiagnosis() {
   return `<div class="diagnosis-shell">
     <section class="ai-summary-block">
       <div class="ai-summary-icon"><i class="ri-sparkling-2-line"></i></div>
-      <p>${escapeHtml(aiSummary)}</p>
+      <div class="ai-summary-lines">${aiSummary.split(". ").filter(Boolean).map(s => `<p>${escapeHtml(s.endsWith(".") ? s : s + ".")}</p>`).join("")}</div>
     </section>
     <div class="pill-toggle" data-active="${view === "hypotheses" ? "1" : "0"}">
       <div class="pill-slider"></div>
@@ -8658,7 +8658,8 @@ function exportIncidentReportHtml() {
   const topHyp = hyps[0];
   const pb = topHyp ? resolvePlaybook(playbookForHypothesis(topHyp.id), state.sockets.find(s => s.id === topHyp.topSocketId)) : null;
   const narrativeData = state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null;
-  const html = generateIncidentReport({ sourceName: state.sourceName, captureQuality: quality, matrix: matrixData, hypotheses: hyps, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, playbook: pb, comparison: narrativeData });
+  const summaryText = buildAiSummary({ matrix: matrixData, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, captureQuality: quality, hypotheses: hyps, comparison: narrativeData });
+  const html = generateIncidentReport({ sourceName: state.sourceName, captureQuality: quality, matrix: matrixData, hypotheses: hyps, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, playbook: pb, comparison: narrativeData, aiSummary: summaryText });
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
