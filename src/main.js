@@ -1,4 +1,4 @@
-import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateMicroburstSample, generateSlowConsumerSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
+import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateIncidentDemoSample, generateMicroburstSample, generateSlowConsumerSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
 import { metricValue, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { importSocketFile } from "./importer.js?v=20260425-2";
@@ -3108,9 +3108,25 @@ function renderIngestPage() {
         <div class="ingest-toolbar">
           <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
           <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open file</button>
-          <button data-action="showEditor" class="${activePanel !== "capture" ? "primary" : ""}"><i class="ri-edit-line"></i> Editor</button>
-          <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "primary" : ""}"><i class="ri-command-line"></i> ss command</button>
-          <button data-action="sample10m"><i class="ri-flask-line"></i> Sample</button>
+          <div class="pill-toggle" data-active="${activePanel === "capture" ? "1" : "0"}">
+            <div class="pill-slider"></div>
+            <button data-action="showEditor" class="${activePanel !== "capture" ? "active" : ""}"><i class="ri-edit-line"></i> Editor</button>
+            <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "active" : ""}"><i class="ri-command-line"></i> ss command</button>
+          </div>
+          <span class="demo-btn-wrap">
+            <button data-action="sampleIncidentDemo" class="demo-btn"><i class="ri-fire-line"></i> See it in action</button>
+            <div class="demo-tooltip">
+              <strong>🔥 JVM GC Stall Incident</strong>
+              <ul>
+                <li><i class="ri-cpu-line"></i> 5 sockets from <code>java:2155462</code></li>
+                <li><i class="ri-timer-line"></i> Normal → onset → full stall → recovery</li>
+                <li><i class="ri-alarm-warning-line"></i> persist, backoff, drops, Recv-Q explosion</li>
+                <li><i class="ri-grid-line"></i> Multi-socket correlation fires</li>
+                <li><i class="ri-movie-2-line"></i> Stories, matrix, rate alerts all trigger</li>
+              </ul>
+              <small>Press <b>Analyze</b> after loading</small>
+            </div>
+          </span>
           <span class="ingest-toolbar-spacer"></span>
           <button data-action="toggleWordWrap" class="${state.editorWordWrap ? "primary" : ""}" title="Toggle word wrap"><i class="ri-text-wrap"></i> Wrap</button>
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
@@ -4905,7 +4921,8 @@ function renderDiagnosis() {
         <small>hypothesis(es)</small>
       </div>
     </section>
-    <div class="timeline-toggle">
+    <div class="pill-toggle" data-active="${view === "hypotheses" ? "1" : "0"}">
+      <div class="pill-slider"></div>
       <button class="${view === "matrix" ? "active" : ""}" data-action="diagnosisView" data-value="matrix"><i class="ri-grid-line"></i> Root Cause Matrix</button>
       <button class="${view === "hypotheses" ? "active" : ""}" data-action="diagnosisView" data-value="hypotheses"><i class="ri-file-list-3-line"></i> Hypotheses</button>
     </div>
@@ -5574,13 +5591,14 @@ function renderTimeline() {
   state._rateAlerts = detectRateOfChange(state.raw || "");
   const view = state.timelineView || "stories";
   return `<div class="timeline-workbench">
-    <div class="expert-strip">
-      <article><span>Events</span><strong>${formatNumber(events.length)}</strong></article>
-      <article><span>Window</span><strong>${formatNumber(Math.max(0, Math.round((last - first) / 1000)))}s</strong></article>
-      <article><span>High/Critical</span><strong>${formatNumber(events.filter(event => riskRank(event.severity) >= 3).length)}</strong></article>
-      ${stories.length ? `<article><span>Stories</span><strong>${formatNumber(stories.length)}</strong></article>` : ""}
+    <div class="timeline-strip">
+      <span><b>${formatNumber(events.length)}</b> events</span>
+      <span><b>${formatNumber(Math.max(0, Math.round((last - first) / 1000)))}s</b> window</span>
+      <span><b>${formatNumber(events.filter(event => riskRank(event.severity) >= 3).length)}</b> high/critical</span>
+      ${stories.length ? `<span><b>${formatNumber(stories.length)}</b> stories</span>` : ""}
     </div>
-    <div class="timeline-toggle">
+    <div class="pill-toggle" data-active="${view === "events" ? "1" : "0"}">
+      <div class="pill-slider"></div>
       <button class="${view === "stories" ? "active" : ""}" data-action="timelineView" data-value="stories"><i class="ri-book-open-line"></i> Stories</button>
       <button class="${view === "events" ? "active" : ""}" data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> All events</button>
     </div>
@@ -5618,7 +5636,7 @@ function renderTimelineStoriesView(stories) {
       ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts → All Events</button></div>` : ""}
     </div>` : ""}
     ${groupEvents.length ? `<div class="multi-socket-events">
-      ${groupEvents.slice(0, 4).map(event => `<article class="timeline-story group-event">
+      ${groupEvents.slice(0, 2).map(event => `<article class="timeline-story group-event">
         <div class="story-header">
           <strong>${escapeHtml(event.narrative.title)}</strong>
           <span class="story-completeness">${event.socketCount} sockets</span>
@@ -5637,7 +5655,7 @@ function renderTimelineStoriesView(stories) {
       <div class="story-narrative">
         ${story.narrative.map((line, i) => i === story.narrative.length - 1
           ? `<div class="story-conclusion">${escapeHtml(line)}</div>`
-          : `<div class="story-step${i === story.narrative.length - 2 ? " story-step-critical" : ""}"><button class="story-jump" data-action="storyJumpToChart" data-epoch="${story.matchedSteps[i]?.epochMs || ""}" data-metric="${storyStepMetric(story.matchedSteps[i]?.key || "")}" data-label="${escapeHtml(story.matchedSteps[i]?.label || "")}" title="Zoom chart to this moment"><i class="ri-line-chart-line"></i></button><span class="story-dot"></span><span class="story-text">${escapeHtml(line)}</span></div>`
+          : `<div class="story-step${i === story.narrative.length - 2 && /torn down|abandoned|critical/i.test(line) ? " story-step-critical" : ""}"><button class="story-jump" data-action="storyJumpToChart" data-epoch="${story.matchedSteps[i]?.epochMs || ""}" data-metric="${storyStepMetric(story.matchedSteps[i]?.key || "")}" data-label="${escapeHtml(story.matchedSteps[i]?.label || "")}" title="Zoom chart to this moment"><i class="ri-line-chart-line"></i></button><span class="story-dot"></span><span class="story-text">${escapeHtml(line)}</span></div>`
         ).join("")}
       </div>
     </article>`).join("")}
@@ -9013,6 +9031,18 @@ function bindEvents() {
       state.prefs.guidedChecklistCollapsed = !state.prefs.guidedChecklistCollapsed;
       savePrefs();
       renderKeepingWorkspacePosition();
+    }
+    if (action === "sampleIncidentDemo") {
+      state.raw = generateIncidentDemoSample();
+      state.ingestRawExpanded = false;
+      setSourceName("JVM GC stall incident (demo)");
+      state.selectedId = null;
+      setActiveInvestigation(state, null);
+      state.showSsOptions = false;
+      setZoom(0, 1);
+      markAnalysisDirty({ raw: true });
+      toast("🔥 Incident demo loaded", "Press Analyze to see stories, matrix, and multi-socket correlation in action.");
+      render();
     }
     if (action === "sample10m") {
       state.raw = generateSlowConsumerSample();
