@@ -439,9 +439,9 @@ export function createGuideView(context) {
     const videos = [
       { title: "Brendan Gregg - Linux Performance Tools", url: "https://www.youtube.com/watch?v=FJW8nGV4jxY", channel: "USENIX", tag: "observability" },
       { title: "Brendan Gregg - BPF Performance Analysis at Netflix", url: "https://www.youtube.com/watch?v=16slh29iN1g", channel: "USENIX ATC", tag: "observability" },
-      { title: "Understanding G1 GC - Monica Beckwith", url: "https://www.youtube.com/watch?v=iGRfyhE02lA", channel: "Devoxx", tag: "jvm" },
-      { title: "Java GC Tuning - Kirk Pepperdine", url: "https://www.youtube.com/watch?v=we_enrM7TSY", channel: "QCon", tag: "jvm" },
-      { title: "Cloudflare - How TCP Sockets Work", url: "https://www.youtube.com/watch?v=PpsEaqJV_A0", channel: "Cloudflare TV", tag: "fundamentals" }
+      { title: "Cloudflare - How TCP Sockets Work", url: "https://www.youtube.com/watch?v=PpsEaqJV_A0", channel: "Cloudflare TV", tag: "fundamentals" },
+      { title: "Cloudflare - SYN Flood Mitigations", url: "https://www.youtube.com/watch?v=w0QbnxKRD0w", channel: "Cloudflare TV", tag: "tcp" },
+      { title: "Hussein Nasser - TCP Deep Dive", url: "https://www.youtube.com/watch?v=rmFX1V49K8U", channel: "Hussein Nasser", tag: "tcp" }
     ];
     const docs = [
       { title: "ss(8) man page - iproute2", url: "https://manpages.debian.org/testing/iproute2/ss.8.en.html", cat: "Man pages" },
