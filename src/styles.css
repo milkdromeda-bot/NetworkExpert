@@ -3727,6 +3727,29 @@ tr:hover, tr.selected { background: #101a27; }
 }
 
 /* Root Cause Matrix */
+.ai-summary-block {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid rgba(112, 157, 255, .3);
+  border-left: 3px solid rgba(112, 157, 255, .7);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(112, 157, 255, .06), transparent 50%), #080d14;
+}
+.ai-summary-icon {
+  font-size: 20px;
+  color: rgba(112, 157, 255, .8);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.ai-summary-block p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0;
+}
+
 .root-cause-matrix {
   border: 1px solid var(--line);
   border-radius: 8px;

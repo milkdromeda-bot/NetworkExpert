@@ -20,6 +20,7 @@ import { detectTimelineStories } from "./timeline-stories.js";
 import { detectMultiSocketCorrelation } from "./multi-socket-correlation.js";
 import { detectRateOfChange } from "./rate-of-change.js";
 import { buildIncidentReportHtml as generateIncidentReport } from "./incident-report.js";
+import { buildAiSummary } from "./ai-summary.js";
 import { playbookForHypothesis, resolvePlaybook } from "./playbooks.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeCaptureQuality } from "./capture-quality.js";
@@ -4909,17 +4910,19 @@ function renderDiagnosis() {
     for (const c of matrix.causes) { if (c.confidence > cap) c.confidence = cap; }
   }
   const view = state.diagnosisView || "matrix";
+  const aiSummary = buildAiSummary({
+    matrix,
+    stories: detectTimelineStories(state.raw || "", state.sockets),
+    multiSocket: state._multiSocketEvents || detectMultiSocketCorrelation(state.raw || ""),
+    rateAlerts: state._rateAlerts || detectRateOfChange(state.raw || ""),
+    captureQuality: captureQualityReport(),
+    hypotheses,
+    comparison: state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null
+  });
   return `<div class="diagnosis-shell">
-    <section class="advisor-hero diagnosis-hero">
-      <div>
-        <span class="tooltip-kicker">Diagnostic hypotheses</span>
-        <h3>${escapeHtml(top?.title || "No hypothesis yet")}</h3>
-        <p>${escapeHtml(top?.summary || "Import or parse ss output to build network diagnosis hypotheses.")}</p>
-      </div>
-      <div class="advisor-score">
-        <span>${formatNumber(hypotheses.length)}</span>
-        <small>hypothesis(es)</small>
-      </div>
+    <section class="ai-summary-block">
+      <div class="ai-summary-icon"><i class="ri-sparkling-2-line"></i></div>
+      <p>${escapeHtml(aiSummary)}</p>
     </section>
     <div class="pill-toggle" data-active="${view === "hypotheses" ? "1" : "0"}">
       <div class="pill-slider"></div>
