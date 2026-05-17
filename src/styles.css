@@ -4562,6 +4562,26 @@ tr:hover, tr.selected { background: #101a27; }
 .group-event .story-conclusion { color: rgba(255, 159, 67, .9); }
 .group-dot { background: rgba(255, 159, 67, .8) !important; }
 .multi-socket-events { margin-bottom: 8px; }
+.stories-summary {
+  font-size: 12px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  background: rgba(76, 222, 138, .08);
+  border: 1px solid rgba(76, 222, 138, .2);
+  color: var(--soft);
+}
+.stories-summary i { margin-right: 4px; color: rgba(76, 222, 138, .7); }
+.stories-summary b { color: var(--text); }
+.story-socket {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(112, 157, 255, .1);
+  color: rgba(112, 157, 255, .8);
+  font-family: "JetBrains Mono", monospace;
+  white-space: nowrap;
+}
 
 /* Rate of change alerts */
 .rate-alerts {
@@ -4588,6 +4608,7 @@ tr:hover, tr.selected { background: #101a27; }
 .rate-time { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--soft); }
 .rate-alert small { color: var(--soft); opacity: .7; }
 .rate-explain { font-size: 11px; color: var(--soft); font-style: italic; }
+.rate-count { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(112, 157, 255, .15); color: rgba(112, 157, 255, .9); font-weight: 600; }
 .rate-more { margin-top: 4px; }
 .rate-more button { font-size: 11px; color: rgba(112, 157, 255, .8); background: none; border: none; cursor: pointer; padding: 0; }
 .rate-more button:hover { color: rgba(112, 157, 255, 1); }
