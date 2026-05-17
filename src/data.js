@@ -306,6 +306,63 @@ export const prefsDefault = {
 };
 
 
+export function generateIncidentDemoSample() {
+  const start = Date.parse("2026-05-16T13:28:00.000Z");
+  const lines = [];
+  const sockets = [
+    { local: "192.168.1.10:8080", peer: "10.0.0.50:44210", sk: "a1f0", fd: 12 },
+    { local: "192.168.1.10:8080", peer: "10.0.0.51:38900", sk: "a2f1", fd: 14 },
+    { local: "192.168.1.10:8080", peer: "10.0.0.52:55120", sk: "a3f2", fd: 16 },
+    { local: "192.168.1.10:8080", peer: "10.0.0.53:41800", sk: "a4f3", fd: 18 },
+    { local: "192.168.1.10:8080", peer: "10.0.0.54:60100", sk: "a5f4", fd: 20 }
+  ];
+  for (let i = 0; i < 40; i++) {
+    const epochMs = start + i * 1000;
+    const ts = new Date(epochMs).toISOString().replace("Z", "000+00:00").replace("T", "T").replace(/\.(\d{3})/, ",$1");
+    lines.push(ts);
+    const phase = i < 10 ? "normal" : i < 15 ? "onset" : i < 30 ? "stall" : "recovery";
+    for (let s = 0; s < sockets.length; s++) {
+      const sock = sockets[s];
+      let recvQ = 0, sendQ = 0, timer = "timer:(keepalive,120min,0)", rto = 201, backoff = 0, drops = 0, skmemR = 0, rcvSpace = 245059, rwndPct = 0;
+      if (phase === "normal") {
+        recvQ = Math.round(Math.random() * 2000);
+        sendQ = Math.round(Math.random() * 1000);
+      } else if (phase === "onset") {
+        const t = (i - 10) / 5;
+        recvQ = Math.round(100000 + t * 500000 + Math.random() * 20000);
+        skmemR = recvQ;
+        rcvSpace = Math.round(245059 * (1 - t * 0.8));
+        rwndPct = Math.round(20 + t * 60);
+      } else if (phase === "stall") {
+        const t = (i - 15) / 15;
+        recvQ = Math.round(600000 + t * 400000);
+        skmemR = recvQ;
+        rcvSpace = Math.round(8000 - t * 6000);
+        timer = `timer:(persist,${Math.round(1 + t * 4)}sec,0)`;
+        backoff = Math.min(6, Math.round(1 + t * 5));
+        drops = Math.round(t * 15);
+        rwndPct = Math.round(80 + t * 15);
+        sendQ = Math.round(200000 + t * 800000);
+        rto = Math.round(201 + t * 3000);
+      } else {
+        const t = (i - 30) / 10;
+        recvQ = Math.round(1000000 * (1 - t * 0.8));
+        skmemR = recvQ;
+        rcvSpace = Math.round(8000 + t * 200000);
+        drops = 15;
+        backoff = Math.max(0, Math.round(6 - t * 6));
+        timer = backoff > 0 ? `timer:(persist,1sec,0)` : "timer:(keepalive,120min,0)";
+        rwndPct = Math.round(95 * (1 - t));
+      }
+      lines.push(`tcp ESTAB ${recvQ} ${sendQ} ${sock.local} ${sock.peer} users:(("java",pid=2155462,fd=${sock.fd})) ${timer} uid:1002 ino:${383757900 + s} sk:${sock.sk} cgroup:/user.slice/user-1002.slice/session-481815.scope skmem:(r${skmemR},rb4059023,t${sendQ > 0 ? sendQ : 0},tb870400,f1280,w0,o0,bl0,d${drops}) ts sack cubic wscale:7,7 rto:${rto} rtt:0.109/0.098 mss:1448 cwnd:10 bytes_sent:${1000000 + i * 5000} bytes_received:${7000000000 + i * 2000000} segs_out:${3500000 + i * 100} segs_in:${8400000 + i * 200} send 1594128440bps delivery_rate 827428568bps rcv_space:${rcvSpace} rcv_ssthresh:${Math.round(rcvSpace * 4)}${backoff ? ` backoff:${backoff}` : ""}${rwndPct > 0 ? ` rwnd_limited:${rwndPct * 10}ms(${rwndPct}%)` : ""}`);
+    }
+    if (phase === "stall" && i === 25) {
+      lines.push(`tcp FIN-WAIT-1 0 0 192.168.1.10:8080 10.0.0.55:33000 users:(("java",pid=2155462,fd=22)) uid:1002 ino:383757905 sk:a6f5 cgroup:/user.slice/user-1002.slice/session-481815.scope skmem:(r0,rb4059023,t0,tb870400,f0,w0,o0,bl0,d0) ts sack cubic wscale:7,7 rto:3000 rtt:0.109/0.098 mss:1448 cwnd:10`);
+    }
+  }
+  return lines.join("\n");
+}
+
 export function generateSlowConsumerSample() {
   const start = Date.parse("2026-05-12T14:00:00.000Z");
   const lines = ["State Recv-Q Send-Q Local Address:Port Peer Address:Port Process"];

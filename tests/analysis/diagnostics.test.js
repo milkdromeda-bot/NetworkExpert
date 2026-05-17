@@ -355,3 +355,32 @@ test("diagnostics sorts high-confidence severe hypotheses first", () => {
   assert.equal(hypotheses[0].severity, "critical");
   assert.notEqual(hypotheses[0].id, "listener-exposure");
 });
+
+
+test("diagnostics exposes confidenceDetail with strong, contra, missing, wouldConfirm, wouldReject", () => {
+  const hypotheses = diagnose([
+    "ESTAB 700000 0 10.0.0.1:9200 10.0.0.2:54321 skmem:(r600000,rb700000,t0,tb100,w0,d0)"
+  ]);
+  const hyp = hypotheses[0];
+
+  assert.equal(typeof hyp.confidenceDetail, "object");
+  assert.equal(Array.isArray(hyp.confidenceDetail.strong), true);
+  assert.equal(Array.isArray(hyp.confidenceDetail.contra), true);
+  assert.equal(Array.isArray(hyp.confidenceDetail.missing), true);
+  assert.equal(typeof hyp.confidenceDetail.wouldConfirm, "string");
+  assert.equal(typeof hyp.confidenceDetail.wouldReject, "string");
+  assert.equal(hyp.confidenceDetail.wouldConfirm.length > 0, true);
+  assert.equal(hyp.confidenceDetail.wouldReject.length > 0, true);
+});
+
+test("diagnostics confidenceScore accounts for missing evidence penalty", () => {
+  const hypotheses = buildDiagnosticHypotheses({
+    sockets: [{ id: "s1", state: "ESTAB", sendQ: 500000, recvQ: 0, local: "10.0.0.1:1000", peer: "10.0.0.2:443", details: { timer: null, values: { rto: 200, cwnd: 20 }, skmem: { t: 100000 }, raw: "" } }],
+    thresholds
+  });
+  const hyp = hypotheses.find(h => h.id === "peer-slow-consumer-or-egress");
+
+  assert.equal(hyp != null, true);
+  assert.equal(hyp.confidenceScore >= 0, true);
+  assert.equal(hyp.confidenceScore <= 1, true);
+});

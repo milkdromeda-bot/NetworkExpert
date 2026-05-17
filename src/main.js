@@ -2609,9 +2609,9 @@ let _cachedRateAlerts = [];
 function cachedStories() {
   if (_cachedDataVersion !== state.dataVersion) {
     _cachedDataVersion = state.dataVersion;
-    _cachedStories = cachedStories();
-    _cachedMultiSocket = cachedMultiSocket();
-    _cachedRateAlerts = cachedRateAlerts();
+    _cachedStories = detectTimelineStories(state.raw, state.sockets);
+    _cachedMultiSocket = detectMultiSocketCorrelation(state.raw);
+    _cachedRateAlerts = detectRateOfChange(state.raw);
   }
   return _cachedStories;
 }
