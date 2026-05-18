@@ -9888,3 +9888,9 @@ mark.guide-hl {
 [data-theme="light"] button.primary {
   background: #1a73e8 !important;
 }
+
+.fix-selected-row { outline: 2px solid var(--accent); outline-offset: -2px; background: rgba(140, 183, 255, 0.12) !important; }
+
+.fix-chart-expanded { grid-column: 1 / -1; }
+.fix-chart-expanded .bdp-chart { height: 400px !important; }
+.fix-chart-hidden { display: none; }

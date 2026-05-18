@@ -1,4 +1,4 @@
-﻿import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateIncidentDemoSample, generateMicroburstSample, generateSlowConsumerSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
+import { FIELD_DOCS, FIELD_GUIDANCE, SAMPLE, SS_OPTIONS, generateIncidentDemoSample, generateMicroburstSample, generateSlowConsumerSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "./data.js";
 import { metricValue, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { importSocketFile } from "./importer.js?v=20260425-2";
@@ -27,6 +27,9 @@ import { analyzeCaptureQuality } from "./capture-quality.js";
 import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from "./gc-log-parser.js";
 import { alignTimestamps, correlateJvmStalls, DEFAULT_WINDOWS as JVM_DEFAULT_WINDOWS } from "./jvm-correlation.js";
 import { parsePidstat, parseNstat, correlateCpuWithStalls, extractTcpCounters } from "./pidstat-parser.js";
+import { parseFixLog, computeFixStats, extractEndpoints } from "./fix-log-parser.js";
+import { correlateFixLatency, DEFAULT_WINDOWS as FIX_DEFAULT_WINDOWS } from "./fix-correlation.js";
+import { parseVmstat, parseNstatTimestamped, vmstatSummary } from "./vmstat-parser.js";
 import { buildSsCollectionCommand, commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { validateSsCommandConfig } from "./ss-command-validation.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
@@ -199,6 +202,8 @@ let state = {
   hiddenJvmSeries: new Set(),
   jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0, pidstat: null, nstat: null, cpuCorrelation: null },
   jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
+  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 200, showGcZones: true, expandedChart: null, hiddenSeries: new Set(), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, zoom: { start: 0, end: 1 } },
+  fixTable: { page: 1, pageSize: 20, sortKey: "score", sortDir: "desc", causeFilter: "", selectedEpoch: null },
   advisorFindings: [],
   bandwidthIndex: {},
   anomalyAlertSince: null,
@@ -2621,7 +2626,7 @@ function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
 function renderOnboarding() {
   const steps = [
     { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo. Timestamped captures with <code>date --iso-8601=ns</code> unlock timeline and stories." },
-    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> — the tool builds a Root Cause Matrix, causal stories, velocity alerts, and multi-socket correlation. An AI summary tells you what happened in plain language." },
+    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> � the tool builds a Root Cause Matrix, causal stories, velocity alerts, and multi-socket correlation. An AI summary tells you what happened in plain language." },
     { icon: "ri-route-line", title: "Act with confidence", desc: "Each hypothesis includes a <b>Playbook</b> with commands for local, peer, and host. Compare before/after captures. Export a full incident report in one click." }
   ];
   const step = steps[state.onboarding] || steps[0];
@@ -2698,6 +2703,7 @@ function _renderSync() {
           <button class="charts-sub-tab ${state.chartsTab === "charts" ? "active" : ""}" data-charts-tab="charts" role="tab" aria-selected="${state.chartsTab === "charts"}">Metrics</button>
           <button class="charts-sub-tab ${state.chartsTab === "bdp" ? "active" : ""}" data-charts-tab="bdp" role="tab" aria-selected="${state.chartsTab === "bdp"}">BDP & Throughput</button>
           <button class="charts-sub-tab ${state.chartsTab === "jvm" ? "active" : ""}" data-charts-tab="jvm" role="tab" aria-selected="${state.chartsTab === "jvm"}">JVM Stall / GC</button>
+          <button class="charts-sub-tab ${state.chartsTab === "fix" ? "active" : ""}" data-charts-tab="fix" role="tab" aria-selected="${state.chartsTab === "fix"}">FIX Latency</button>
           <button class="charts-sub-tab ${state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="advisor" role="tab" aria-selected="${state.chartsTab === "advisor"}">Advisor</button>
           ${state.chartsTab === "charts" ? renderDashboardStudioInline() : ""}
         </nav>
@@ -2705,6 +2711,7 @@ function _renderSync() {
         ${state.chartsTab === "charts" ? renderChartsPage() : ""}
         ${state.chartsTab === "bdp" ? renderBdpWindowPanel() : ""}
         ${state.chartsTab === "jvm" ? renderJvmGcPanel() : ""}
+        ${state.chartsTab === "fix" ? renderFixLatencyPanel() : ""}
         ${state.chartsTab === "advisor" ? renderChartsPage() : ""}
       </main>` : ""}
       ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
@@ -2729,6 +2736,7 @@ function scheduleChartPageDraw() {
     drawChart();
     drawBdpWindowCharts();
     drawJvmCharts();
+    drawFixCharts();
     scheduleMultiChartDraw();
     scheduleCorrelationDraw();
   });
@@ -3167,10 +3175,10 @@ function renderIngestPage() {
           <span class="demo-btn-wrap">
             <button data-action="sampleIncidentDemo" class="demo-btn"><i class="ri-fire-line"></i> See it in action</button>
             <div class="demo-tooltip">
-              <strong>ðŸ”¥ JVM GC Stall Incident</strong>
+              <strong>🔥 JVM GC Stall Incident</strong>
               <ul>
                 <li><i class="ri-cpu-line"></i> 5 sockets from <code>java:2155462</code></li>
-                <li><i class="ri-timer-line"></i> Normal → onset → full stall → recovery</li>
+                <li><i class="ri-timer-line"></i> Normal ? onset ? full stall ? recovery</li>
                 <li><i class="ri-alarm-warning-line"></i> persist, backoff, drops, Recv-Q explosion</li>
                 <li><i class="ri-grid-line"></i> Multi-socket correlation fires</li>
                 <li><i class="ri-movie-2-line"></i> Stories, matrix, rate alerts all trigger</li>
@@ -3598,14 +3606,14 @@ function renderJvmGcPanel() {
       </div><span class="jvm-sep"></span>` : ""}
       <div class="bdp-controls" style="margin-left:auto">
         <label><span>Mode</span><select id="jvmCorrelationMode"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (local GC)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (remote GC)</option></select></label>
-        <label style="margin-left:10px"><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">● Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">● Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">● Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">● Critical</option></select></label>
+        <label style="margin-left:10px"><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">? Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">? Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">? Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">? Critical</option></select></label>
         <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
         <label style="margin-left:10px"><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
       </div>
     </div>
     <div class="panel-body">
       ${!hasPauses ? `<div class="jvm-gc-import">
-        <p><strong>Import GC / safepoint log</strong> — Java 17+ Unified Logging format. Large files (50 MB+) are streamed and parsed without freezing.</p>
+        <p><strong>Import GC / safepoint log</strong> � Java 17+ Unified Logging format. Large files (50 MB+) are streamed and parsed without freezing.</p>
         <div style="display:flex;gap:12px;margin-top:8px;align-items:center;flex-wrap:wrap">
           <label class="bdp-controls" style="margin:0"><span>SS capture is from</span><select id="jvmCorrelationModeImport"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (GC is local)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (GC is remote)</option></select></label>
           <button class="primary" data-action="pickJvmGcFile">Load & parse file</button>
@@ -3628,21 +3636,21 @@ function renderJvmGcPanel() {
         </details>
       </div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
-          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 – 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 – 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 – 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 – 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 – 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
+          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 � 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 � 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 � 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 � 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 � 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
-          <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} total</strong>
-          <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}</em>
-          <span style="margin-left:auto;font-size:11px;color:var(--soft)">${summary?.recommendations?.map(r => `<b style="color:${r.severity === "critical" ? "#ff5c77" : r.severity === "warning" ? "#ffd166" : "#39d6d6"}">${escapeHtml(r.severity)}</b> ${escapeHtml(r.text)}`).join(" Â· ") || ""}</span>
+          <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} in window${gc.analysisWindow ? ` (${gc.analysisWindow.filteredPauses}/${gc.analysisWindow.totalPauses} pauses in ss period)` : ""}</strong>
+          <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}${gc.analysisWindow?.start ? ` · Analysis window: ${preciseDateTimeLabel(gc.analysisWindow.start)} → ${preciseDateTimeLabel(gc.analysisWindow.end)}` : ""}</em>
+          <span style="margin-left:auto;font-size:11px;color:var(--soft)">${summary?.recommendations?.map(r => `<b style="color:${r.severity === "critical" ? "#ff5c77" : r.severity === "warning" ? "#ffd166" : "#39d6d6"}">${escapeHtml(r.severity)}</b> ${escapeHtml(r.text)}`).join(" · ") || ""}</span>
         </div>
         ${gc.cpuCorrelation?.summary ? `<div class="bdp-context-line info" style="margin-top:8px">
           <i class="ri-cpu-line" style="font-size:16px;color:#a78bfa"></i>
           <strong>CPU correlation: ${gc.cpuCorrelation.summary.correlatedCount} GC pause(s) with CPU scheduling issues</strong>
-          <em>Max wait: ${gc.cpuCorrelation.summary.maxWaitObserved.toFixed(1)}% Â· Saturation events: ${gc.cpuCorrelation.summary.cpuSaturationEvents} Â· High cswch: ${gc.cpuCorrelation.summary.highContextSwitchEvents}</em>
+          <em>Max wait: ${gc.cpuCorrelation.summary.maxWaitObserved.toFixed(1)}% · Saturation events: ${gc.cpuCorrelation.summary.cpuSaturationEvents} · High cswch: ${gc.cpuCorrelation.summary.highContextSwitchEvents}</em>
         </div>` : ""}
         ${gc.nstat ? `<div class="bdp-context-line info" style="margin-top:4px">
           <i class="ri-bar-chart-line" style="font-size:16px;color:#7dd3fc"></i>
           <strong>nstat counters</strong>
-          <em>Retrans: ${gc.nstat.retransSegs} Â· Timeouts: ${gc.nstat.timeouts} Â· ListenDrops: ${gc.nstat.listenDrops} Â· MemPressure: ${gc.nstat.tcpMemoryPressures} Â· RcvPruned: ${gc.nstat.rcvPruned}</em>
+          <em>Retrans: ${gc.nstat.retransSegs} · Timeouts: ${gc.nstat.timeouts} · ListenDrops: ${gc.nstat.listenDrops} · MemPressure: ${gc.nstat.tcpMemoryPressures} · RcvPruned: ${gc.nstat.rcvPruned}</em>
         </div>` : ""}
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
@@ -3652,7 +3660,7 @@ function renderJvmGcPanel() {
               ${renderJvmLegend("timeline")}
             </article>
             <article>
-              <div class="bdp-chart-title"><strong>Pause duration vs Î”${gc.mode === "sender" ? "Send-Q" : "Recv-Q"}</strong><span>scatter</span></div>
+              <div class="bdp-chart-title"><strong>Pause duration vs Δ${gc.mode === "sender" ? "Send-Q" : "Recv-Q"}</strong><span>scatter</span></div>
               <svg class="chart bdp-chart" data-jvm-chart="scatter" role="img" aria-label="GC pause scatter plot"></svg>
               ${renderJvmLegend("scatter")}
             </article>
@@ -3699,14 +3707,14 @@ function renderJvmGcPanel() {
 function jvmLegendSeries(kind) {
   if (kind === "scatter") {
     return [
-      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24", tip: "GC pauses with correlation score 0.20–0.50. Temporal overlap with TCP symptoms but moderate confidence." },
+      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24", tip: "GC pauses with correlation score 0.20�0.50. Temporal overlap with TCP symptoms but moderate confidence." },
       { key: "scatter_high", label: "High score pauses", color: "#ef4444", tip: "GC pauses with correlation score > 0.50. Strong evidence of JVM-induced slow consumer behavior." },
       { key: "scatter_low", label: "Low score pauses", color: "#7dd3fc", tip: "GC pauses with correlation score < 0.20. Pause detected but no significant TCP impact observed." }
     ];
   }
   return [
-    { key: "recvq", label: state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q", color: state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc", tip: state.jvmGc.mode === "sender" ? "TCP send queue depth in bytes. Rises when the remote receiver cannot drain data — indicates the remote GC stall is blocking ACKs." : "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough — a key slow consumer signal." },
-    { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1–20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
+    { key: "recvq", label: state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q", color: state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc", tip: state.jvmGc.mode === "sender" ? "TCP send queue depth in bytes. Rises when the remote receiver cannot drain data � indicates the remote GC stall is blocking ACKs." : "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough � a key slow consumer signal." },
+    { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1�20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
     { key: "gc_mixed", label: "Mixed GC", color: "#fbbf24", tip: "G1 mixed collections evacuating both young and old regions. Typically longer than young GC and may indicate heap pressure building up." },
     { key: "gc_full", label: "Full / Remark", color: "#ef4444", tip: "Full GC, Remark, or Cleanup pauses. These are the longest and most disruptive. Full GC indicates heap exhaustion or fragmentation." },
     { key: "gc_safepoint", label: "Safepoint", color: "#a78bfa", tip: "JVM safepoint pauses not related to GC (e.g. deoptimization, biased locking revocation). Can still block application threads." }
@@ -3850,13 +3858,20 @@ function runJvmCorrelation() {
   const gc = state.jvmGc;
   if (!gc.pauses.length) { gc.correlation = null; return; }
   const history = visibleHistory().filter(s => s.epochMs);
+  // Filter pauses to ss observation window (exclude startup/unrelated pauses)
+  const ssStart = history.length ? history[0].epochMs : 0;
+  const ssEnd = history.length ? history[history.length - 1].epochMs : Infinity;
+  const aligned = alignTimestamps(gc.pauses, history, gc.clockOffsetMs);
+  const windowPauses = aligned.filter(p => (p.alignedEpochMs || p.epochMs || 0) >= ssStart - 60000 && (p.alignedEpochMs || p.epochMs || 0) <= ssEnd + 60000);
+  gc.analysisWindow = { start: ssStart, end: ssEnd, totalPauses: gc.pauses.length, filteredPauses: windowPauses.length };
   gc.correlation = correlateJvmStalls({
-    pauses: gc.pauses,
+    pauses: windowPauses,
     safepoints: gc.safepoints,
     history,
     clockOffsetMs: gc.clockOffsetMs,
     mode: gc.mode || "receiver"
   });
+  if (state.fixLatency.records.length) runFixCorrelation();
 }
 
 function drawJvmCharts() {
@@ -3999,8 +4014,8 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   const stateChangesSvg = stateChanges.map(sc => {
     const sx = x(sc.epochMs);
     return `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${pad.t}" y2="${pad.t + plotH}" stroke="#e879f9" stroke-width="1.5" stroke-dasharray="4 2"/>` +
-      `<rect x="${sx.toFixed(1) - 1}" y="${pad.t + plotH - 16}" width="${(sc.from + " → " + sc.to).length * 5 + 10}" height="14" rx="3" fill="rgba(10,16,24,.85)"/>` +
-      `<text x="${(Number(sx.toFixed(1)) + 4)}" y="${pad.t + plotH - 6}" fill="#e879f9" font-size="8" font-weight="600">${escapeHtml(sc.from)} → ${escapeHtml(sc.to)}</text>`;
+      `<rect x="${sx.toFixed(1) - 1}" y="${pad.t + plotH - 16}" width="${(sc.from + " ? " + sc.to).length * 5 + 10}" height="14" rx="3" fill="rgba(10,16,24,.85)"/>` +
+      `<text x="${(Number(sx.toFixed(1)) + 4)}" y="${pad.t + plotH - 6}" fill="#e879f9" font-size="8" font-weight="600">${escapeHtml(sc.from)} ? ${escapeHtml(sc.to)}</text>`;
   }).join("");
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * maxPrimary);
@@ -4095,7 +4110,7 @@ function drawJvmScatterChartInteractive(svg, results) {
     ${yTicksSvg}
     ${dots}
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#8c9aab" font-size="11">Pause duration (ms)</text>
-    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Î”Recv-Q (bytes)</text>
+    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">ΔRecv-Q (bytes)</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
@@ -4198,7 +4213,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Î”${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
     // Sync to timeline chart
@@ -4225,7 +4240,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       return !best || d < best.d ? { item, d } : best;
     }, null)?.item;
     if (!point || !point.epochMs) return;
-    // Zoom timeline to Â±5s around this pause
+    // Zoom timeline to ±5s around this pause
     const history = visibleHistory().filter(s => s.epochMs);
     if (!history.length) return;
     const t0 = history[0].epochMs, t1 = history[history.length - 1].epochMs;
@@ -4278,7 +4293,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Î”${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
   };
@@ -4781,6 +4796,541 @@ function bindColumnHelpTooltips() {
   });
 }
 
+function runFixCorrelation() {
+  const fix = state.fixLatency;
+  if (!fix.records.length) { fix.correlation = null; return; }
+  // Build flat history from all sockets across all snapshots (with peer field)
+  const snapshots = parsedTimestampSnapshots();
+  const history = [];
+  for (const snap of snapshots) {
+    for (const socket of snap.sockets) {
+      history.push({
+        epochMs: snap.epochMs,
+        peer: socket.peer || '',
+        local: socket.local || '',
+        recvQ: metricValue(socket, 'recvQ') || 0,
+        sendQ: metricValue(socket, 'sendQ') || 0,
+        rtt: metricValue(socket, 'rtt') || 0,
+        retrans: metricValue(socket, 'retrans') || 0,
+        cwnd: metricValue(socket, 'cwnd') || 0,
+        backoff: metricValue(socket, 'backoff') || 0,
+        'skmem.d': metricValue(socket, 'skmem.d') || 0
+      });
+    }
+  }
+  fix.correlation = correlateFixLatency({
+    records: fix.records,
+    history,
+    threshold: fix.threshold,
+    vmstatSamples: fix.vmstat,
+    nstatSamples: fix.nstat,
+    gcPauses: state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses,
+    gcWindowMs: fix.gcWindowMs,
+    cpuCores: fix.cpuCores
+  });
+}
+
+function fixPagedRows() {
+  const fix = state.fixLatency;
+  const corr = fix.correlation;
+  if (!corr?.results?.length) return { rows: [], total: 0, totalPages: 0, start: 0 };
+  const table = state.fixTable;
+  let rows = [...corr.results];
+  if (table.causeFilter) rows = rows.filter(r => r.cause === table.causeFilter);
+  if (table.sortKey === "lag") rows.sort((a, b) => table.sortDir === "desc" ? b.lagMs - a.lagMs : a.lagMs - b.lagMs);
+  else if (table.sortKey === "score") rows.sort((a, b) => table.sortDir === "desc" ? b.score - a.score : a.score - b.score);
+  else if (table.sortKey === "time") rows.sort((a, b) => table.sortDir === "desc" ? b.receiveMs - a.receiveMs : a.receiveMs - b.receiveMs);
+  else if (table.sortKey === "cause") rows.sort((a, b) => table.sortDir === "desc" ? (b.cause || "").localeCompare(a.cause || "") : (a.cause || "").localeCompare(b.cause || ""));
+  const total = rows.length;
+  const totalPages = Math.ceil(total / table.pageSize);
+  const start = (table.page - 1) * table.pageSize;
+  return { rows: rows.slice(start, start + table.pageSize), total, totalPages, start };
+}
+
+function renderFixLatencyPanel() {
+  const fix = state.fixLatency;
+  const hasRecords = fix.records.length > 0;
+  const corr = fix.correlation;
+  const summary = corr?.summary;
+  const stats = hasRecords ? computeFixStats(fix.records) : null;
+  const paged = fixPagedRows();
+  return `<section class="panel jvm-gc-panel">
+    <div class="panel-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px">
+      <span style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap">FIX Latency Correlation</span>
+      ${hasRecords ? `<button class="jvm-clear-btn" data-action="clearFixLog" title="Clear FIX data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}
+      ${hasRecords ? `<span class="jvm-sep"></span><div style="display:flex;gap:4px;margin:0 auto">
+        <button class="mini" data-chart-zoom="zoomIn" data-fix-zoom title="Zoom in">${icons.zoomIn}</button>
+        <button class="mini" data-chart-zoom="zoomOut" data-fix-zoom title="Zoom out">${icons.zoomOut}</button>
+        <button class="mini" data-chart-zoom="resetZoom" data-fix-zoom title="Reset zoom">${icons.reset}</button>
+        <button class="mini" data-chart-zoom="panLeft" data-fix-zoom title="Pan left">${icons.arrowLeft}</button>
+        <button class="mini" data-chart-zoom="panRight" data-fix-zoom title="Pan right">${icons.arrowRight}</button>
+      </div><span class="jvm-sep"></span>` : ""}
+      ${hasRecords ? `<div class="bdp-controls" style="margin-left:auto">
+        <label><span>Lag threshold</span><select id="fixThresholdInput" style="width:auto"><option value="1"${fix.threshold===1?" selected":""}>1 ms</option><option value="2"${fix.threshold===2?" selected":""}>2 ms</option><option value="5"${fix.threshold===5?" selected":""}>5 ms (default)</option><option value="10"${fix.threshold===10?" selected":""}>10 ms</option><option value="20"${fix.threshold===20?" selected":""}>20 ms</option><option value="50"${fix.threshold===50?" selected":""}>50 ms</option><option value="100"${fix.threshold===100?" selected":""}>100 ms</option></select></label>
+        <label><span>GC window</span><select id="fixGcWindowInput" style="width:auto"><option value="50"${fix.gcWindowMs===50?" selected":""}>50 ms</option><option value="100"${fix.gcWindowMs===100?" selected":""}>100 ms</option><option value="200"${fix.gcWindowMs===200?" selected":""}>200 ms</option><option value="500"${fix.gcWindowMs===500?" selected":""}>500 ms</option><option value="1000"${fix.gcWindowMs===1000?" selected":""}>1000 ms</option></select></label>
+        <label style="margin-left:6px"><span>GC zones</span><input id="fixShowGcZones" type="checkbox" ${fix.showGcZones ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
+        <label style="margin-left:6px"><span>CPUs</span><select id="fixCpuCores" style="width:auto"><option value="0"${!fix.cpuCores?" selected":""}>auto</option><option value="24"${fix.cpuCores===24?" selected":""}>24</option><option value="32"${fix.cpuCores===32?" selected":""}>32</option><option value="48"${fix.cpuCores===48?" selected":""}>48</option><option value="64"${fix.cpuCores===64?" selected":""}>64</option><option value="96"${fix.cpuCores===96?" selected":""}>96</option><option value="128"${fix.cpuCores===128?" selected":""}>128</option></select></label>
+      </div>` : ""}
+    </div>
+    <div class="panel-body">
+      <input type="file" id="fixFileInput" accept=".log,.txt,.gz,.zip" multiple style="display:none"/>
+      <input type="file" id="fixDirInput" webkitdirectory style="display:none"/>
+      <input type="file" id="fixVmstatFileInput" accept=".log,.txt,.out" style="display:none"/>
+      <input type="file" id="fixNstatFileInput" accept=".log,.txt,.out" style="display:none"/>
+      ${!hasRecords ? `<div class="jvm-gc-import">
+        <p><strong>Import FIX connector logs</strong> � Supports .log, .txt, .gz files. Parses tag 52 (SendingTime) vs server timestamp to measure network + connector latency.</p>
+        <div style="display:flex;gap:12px;margin-top:8px;align-items:center;flex-wrap:wrap">
+          <button class="primary" data-action="pickFixFile">Load FIX file(s)</button>
+          <button data-action="pickFixDir">Load directory</button>
+        </div>
+        <div class="fix-progress" style="display:none;align-items:center;gap:8px;margin-top:10px">
+          <div style="flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden"><div id="fixProgressBar" style="width:0%;height:100%;border-radius:3px;background:linear-gradient(90deg,#2bbcf6,#66a8ff);transition:width 0.2s"></div></div>
+          <span id="fixProgressLabel" style="font-size:11px;color:var(--muted);white-space:nowrap">Idle</span>
+        </div>
+
+        <details style="margin-top:8px"><summary>Optional: vmstat / nstat (CPU & kernel correlation)</summary>
+          <p style="font-size:12px;color:var(--muted);margin:6px 0">Import vmstat or nstat output to correlate CPU scheduling and kernel drops with FIX latency spikes.</p>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button data-action="pickFixVmstatFile">Load vmstat</button>
+            <button data-action="pickFixNstatFile">Load nstat</button>
+          </div>
+          <pre style="font-size:10px;margin-top:6px;color:var(--muted)">vmstat -t 1 > vmstat.log
+while true; do nstat -r >/dev/null; sleep 1; echo "=== $(date --iso-8601=ns) ==="; nstat -z | egrep 'Tcp|Ip'; done > nstat.log</pre>
+        </details>
+        <details style="margin-top:12px"><summary>What is measured?</summary>
+          <p style="font-size:12px;color:var(--muted);margin:6px 0">Lag = server receive timestamp - tag 52 (SendingTime from peer). High lag on IN messages indicates network delay or connector thread-pool saturation. Correlation with ss snapshots identifies whether the cause is retransmissions, RTT spikes, recv-Q pressure, or cwnd collapse on the matching socket.</p>
+        </details>
+      </div>` : `
+        <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
+          <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "none")}</span>
+          <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:520px;max-height:280px;overflow-y:auto;columns:2;column-gap:18px"><span class="tooltip-kicker">FIX Latency Correlation — How to read</span><strong>Messages</strong><p>Total FIX messages parsed from all loaded files.</p><strong>Spikes</strong><p>Messages where lag (server receive time − tag 52 SendingTime) exceeds the configured threshold. These are the candidates for root-cause investigation.</p><strong>With ss evidence</strong><p>Spikes for which a matching TCP socket was found in the ss snapshots (by IP:port). This means we could inspect the socket state at the time of the spike.</p><strong>Endpoint match %</strong><p>Proportion of spikes where the FIX connection IP:port was found in ss data. 0% means ss was captured on a different host or the socket was not included.</p><strong>Cause breakdown</strong><p><b style="color:#3b82f6">Network</b>: ss shows retransmissions, RTT spike, cwnd collapse, or backoff at spike time.<br/><b style="color:#a855f7">Kernel</b>: nstat shows backlog drops, listen overflows, or RcvQ drops.<br/><b style="color:#ff9f43">CPU</b>: vmstat shows high run queue, CPU saturation, or I/O wait.<br/><b style="color:#2cc62c">GC</b>: a JVM GC pause overlaps the spike.<br/><b style="color:#8c9aab">Unknown</b>: no symptom found in any source — likely connector thread-pool scheduling or application-level delay.</p><strong>GC window</strong><p>A FIX spike is attributed to GC if it occurs during the pause or within this window after the pause ends. The JVM connector cannot read the socket during Stop-The-World, and needs time to drain the backlog after resuming. Shorter window = stricter attribution (only spikes very close to the pause). Longer window = catches backlog drain effects.</p><strong>If all causes are Unknown</strong><p>The network is innocent. The TCP socket was healthy at spike time (recvQ=0, retrans=0, RTT stable, cwnd normal). The lag is caused by something above TCP: thread scheduling, GC, or application processing. Load vmstat/nstat to investigate further.</p></span></span>
+          <strong>${summary?.totalRecords || 0} messages · ${summary?.totalSpikes || 0} spikes (lag > ${fix.threshold}ms) · ${summary?.correlatedCount || 0} with ss evidence</strong>
+          <em>Max score: ${(summary?.maxScore || 0).toFixed(2)} � Endpoint match: ${((summary?.endpointMatchRate || 0) * 100).toFixed(0)}%</em>
+          ${stats ? `<span style="margin-left:auto;font-size:11px;color:var(--soft)">Median: ${stats.median.toFixed(1)}ms � P95: ${stats.p95.toFixed(1)}ms � P99: ${stats.p99.toFixed(1)}ms � Max: ${stats.max.toFixed(1)}ms</span>` : ""}
+        </div>
+        ${summary?.causeCounts ? `<div class="bdp-context-line info" style="margin-top:6px">
+          <i class="ri-pie-chart-line" style="font-size:16px;color:#a78bfa"></i>
+          <strong>Cause breakdown:</strong>
+          <em>Network: ${summary.causeCounts.network} · GC: ${summary.causeCounts.gc || 0} · Kernel: ${summary.causeCounts.kernel} · CPU: ${summary.causeCounts.cpu} · Unknown: ${summary.causeCounts.unknown}</em>
+          
+          
+          
+          <span style="margin-left:auto;display:flex;gap:6px">
+            ${!fix.vmstat ? '<button class="tiny-btn" data-action="pickFixVmstatFile"><i class="ri-cpu-line"></i> + vmstat</button>' : '<span class="chip" style="font-size:10px"><i class="ri-cpu-line"></i> vmstat ✓</span>'}
+            ${!fix.nstat ? '<button class="tiny-btn" data-action="pickFixNstatFile"><i class="ri-bar-chart-line"></i> + nstat</button>' : '<span class="chip" style="font-size:10px"><i class="ri-bar-chart-line"></i> nstat ✓</span>'}
+          </span>
+        </div>` : ""}
+        <div class="jvm-chart-section">
+          <div class="bdp-chart-grid jvm-chart-grid">
+            <article class="${fix.expandedChart === "timeline" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
+              <div class="bdp-chart-title"><strong>FIX Lag + ss Recv-Q timeline</strong><span>overlay</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="timeline" title="${fix.expandedChart === "timeline" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "timeline" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <svg class="chart bdp-chart" data-fix-chart="timeline" role="img" aria-label="FIX latency timeline"></svg>
+              <div class="chart-legend fix-chart-legend">
+                <button class="chart-legend-item ${fix.hiddenSeries.has("lag") ? "is-muted" : ""}" data-fix-series="lag"><i style="--legend-color:#ff5c77"></i><span>Lag spikes</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("recvq") ? "is-muted" : ""}" data-fix-series="recvq"><i style="--legend-color:rgba(59,130,246,0.8)"></i><span>Recv-Q</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("gczone") ? "is-muted" : ""}" data-fix-series="gczone"><i style="--legend-color:rgba(255,92,119,0.4)"></i><span>GC zones</span></button>
+              </div>
+            </article>
+            <article class="${fix.expandedChart === "scatter" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
+              <div class="bdp-chart-title"><strong>Lag vs Correlation Score</strong><span>scatter</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="scatter" title="${fix.expandedChart === "scatter" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "scatter" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <svg class="chart bdp-chart" data-fix-chart="scatter" role="img" aria-label="FIX lag scatter"></svg>
+            </article>
+            ${fix.vmstat ? `<article class="${fix.expandedChart === "vmstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
+              <div class="bdp-chart-title"><strong>CPU + Run Queue (vmstat)</strong><span>timeline</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="vmstat" title="${fix.expandedChart === "vmstat" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "vmstat" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <svg class="chart bdp-chart" data-fix-chart="vmstat" role="img" aria-label="vmstat CPU timeline"></svg>
+              <div class="chart-legend fix-chart-legend">
+                <button class="chart-legend-item ${fix.hiddenSeries.has("us") ? "is-muted" : ""}" data-fix-series="us"><i style="--legend-color:#3b82f6"></i><span>us%</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("sy") ? "is-muted" : ""}" data-fix-series="sy"><i style="--legend-color:#a855f7"></i><span>us+sy%</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("wa") ? "is-muted" : ""}" data-fix-series="wa"><i style="--legend-color:#ff9f43"></i><span>+wa%</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("runqueue") ? "is-muted" : ""}" data-fix-series="runqueue"><i style="--legend-color:#2cc62c"></i><span>runqueue</span></button>
+              </div>
+            </article>` : ""}
+            ${fix.nstat ? `<article class="${fix.expandedChart === "nstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
+              <div class="bdp-chart-title"><strong>TCP Drops & Retrans (nstat)</strong><span>timeline</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="nstat" title="${fix.expandedChart === "nstat" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "nstat" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <svg class="chart bdp-chart" data-fix-chart="nstat" role="img" aria-label="nstat counters timeline"></svg>
+              <div class="chart-legend fix-chart-legend">
+                <button class="chart-legend-item ${fix.hiddenSeries.has("retrans") ? "is-muted" : ""}" data-fix-series="retrans"><i style="--legend-color:#ff5c77"></i><span>Retrans</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("timeouts") ? "is-muted" : ""}" data-fix-series="timeouts"><i style="--legend-color:#ff9f43"></i><span>Timeouts</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("backlogdrop") ? "is-muted" : ""}" data-fix-series="backlogdrop"><i style="--legend-color:#a855f7"></i><span>BacklogDrop</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("listendrop") ? "is-muted" : ""}" data-fix-series="listendrop"><i style="--legend-color:#ffd166"></i><span>ListenDrop</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("rcvqdrop") ? "is-muted" : ""}" data-fix-series="rcvqdrop"><i style="--legend-color:#39d6d6"></i><span>RcvQDrop</span></button>
+              </div>
+            </article>` : ""}
+          </div>
+        </div>
+        <div class="jvm-gc-results">
+          <div class="jvm-table-head">
+            <strong>Correlated FIX latency spikes</strong>
+            <span>${formatNumber(paged.total)} spike(s) above ${fix.threshold}ms</span>
+            <select id="fixCauseFilter" style="margin-left:auto;font-size:11px;padding:2px 6px;width:150px"><option value="">All causes</option><option value="network"${state.fixTable.causeFilter==="network"?" selected":""}>Network</option><option value="gc"${state.fixTable.causeFilter==="gc"?" selected":""}>GC</option><option value="kernel"${state.fixTable.causeFilter==="kernel"?" selected":""}>Kernel</option><option value="cpu"${state.fixTable.causeFilter==="cpu"?" selected":""}>CPU</option><option value="unknown"${state.fixTable.causeFilter==="unknown"?" selected":""}>Unknown</option></select>
+            <span style="font-size:11px;color:var(--muted)">Page ${state.fixTable.page}/${paged.totalPages || 1}</span>
+            <button class="tiny-btn" data-action="fixTablePrev" ${state.fixTable.page <= 1 ? "disabled" : ""}>←</button>
+            <button class="tiny-btn" data-action="fixTableNext" ${state.fixTable.page >= paged.totalPages ? "disabled" : ""}>→</button>
+          </div>
+          <div class="table-wrap jvm-table-wrap"><table class="mini-table jvm-gc-table"><thead><tr>
+            <th data-fix-sort="time" style="cursor:pointer">Time</th>
+            <th data-fix-sort="lag" style="cursor:pointer">Lag (ms)</th>
+            <th>Direction</th>
+            <th>MsgType</th>
+            <th>Symbol</th>
+            <th>Endpoint</th>
+            <th data-fix-sort="score" style="cursor:pointer">Score</th>
+            <th>Severity</th>
+            <th data-fix-sort="cause" style="cursor:pointer">Cause</th>
+            <th>Signals</th>
+          </tr></thead><tbody>
+            ${paged.rows.map(r => `<tr class="jvm-severity-${escapeHtml(r.severity || "none")}${r.receiveMs === state.fixTable.selectedEpoch ? " fix-selected-row" : ""}" data-fix-epoch="${r.receiveMs}" style="cursor:pointer">
+              <td class="mono-cell">${escapeHtml(preciseDateTimeLabel(r.receiveMs))}</td>
+              <td><strong>${r.lagMs.toFixed(1)}</strong></td>
+              <td>${escapeHtml(r.direction)}</td>
+              <td>${escapeHtml(r.msgType)}</td>
+              <td>${escapeHtml(r.symbol)}</td>
+              <td class="mono-cell">${escapeHtml(r.endpoint)}</td>
+              <td>${r.score.toFixed(2)}</td>
+              <td><span class="risk ${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
+              <td>${escapeHtml(r.cause || "")}</td>
+              <td>${r.signals.map(s => `<span class="chip">${escapeHtml(s)}</span>`).join(" ")}</td>
+            </tr>`).join("")}
+          </tbody></table></div>
+        </div>
+      `}
+    </div>
+  </section>`;
+}
+
+function drawFixCharts() {
+  const fix = state.fixLatency;
+  if (!fix.correlation?.results?.length) return;
+  const history = visibleHistory().filter(s => s.epochMs);
+  if (!history.length) return;
+  const allResults = fix.correlation.results;
+  // Apply zoom window
+  const z = fix.zoom || { start: 0, end: 1 };
+  const times = allResults.map(r => r.receiveMs);
+  const tMin = Math.min(...times), tMax = Math.max(...times);
+  const tSpan = tMax - tMin || 1;
+  const zStart = tMin + z.start * tSpan, zEnd = tMin + z.end * tSpan;
+  const results = allResults.filter(r => r.receiveMs >= zStart && r.receiveMs <= zEnd);
+
+  // Timeline chart
+  const svg1 = document.querySelector("[data-fix-chart='timeline']");
+  if (svg1) drawFixTimelineChart(svg1, results, history, fix.showGcZones ? (state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses) : null, fix.gcWindowMs);
+
+  // Scatter chart
+  const svg2 = document.querySelector("[data-fix-chart='scatter']");
+  if (svg2) drawFixScatterChart(svg2, results);
+
+  // vmstat chart
+  const svg3 = document.querySelector("[data-fix-chart='vmstat']");
+  if (svg3 && fix.vmstat?.length) {
+    const vm = fix.vmstat.filter(s => s.epochMs >= zStart && s.epochMs <= zEnd);
+    if (vm.length) drawFixVmstatChart(svg3, vm, results, fix.cpuCores);
+  }
+
+  // nstat chart
+  const svg4 = document.querySelector("[data-fix-chart='nstat']");
+  if (svg4 && fix.nstat?.length) {
+    const ns = fix.nstat.filter(s => s.epochMs >= zStart && s.epochMs <= zEnd);
+    if (ns.length) drawFixNstatChart(svg4, ns, results);
+  }
+}
+
+function fixTimeLabel(epochMs) {
+  const d = new Date(epochMs);
+  return `${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}:${String(d.getUTCSeconds()).padStart(2,"0")}`;
+}
+
+function fixChartXTicks(t0, t1, pad, w, count = 5) {
+  const span = t1 - t0 || 1;
+  return Array.from({ length: count }, (_, i) => {
+    const f = i / (count - 1);
+    const epoch = t0 + f * span;
+    const px = pad.l + f * (w - pad.l - pad.r);
+    return { px, label: fixTimeLabel(epoch) };
+  });
+}
+
+function fixChartYTicks(min, max, pad, h, count = 5) {
+  const span = max - min || 1;
+  return Array.from({ length: count }, (_, i) => {
+    const f = i / (count - 1);
+    const val = min + f * span;
+    const py = pad.t + (h - pad.t - pad.b) * (1 - f);
+    return { py, val };
+  });
+}
+
+function fixChartGrid(xTicks, yTicks, pad, w, h) {
+  const yLines = yTicks.map(t => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${t.py}" y2="${t.py}" stroke="var(--line)" stroke-width="0.5"/>`).join("");
+  const xLines = xTicks.map(t => `<line x1="${t.px}" x2="${t.px}" y1="${pad.t}" y2="${h - pad.b}" stroke="var(--line)" stroke-width="0.3"/>`).join("");
+  return yLines + xLines;
+}
+
+function fixChartXLabels(xTicks, h) {
+  return xTicks.map(t => `<text x="${t.px}" y="${h - 8}" text-anchor="middle" fill="var(--muted)" font-size="10">${t.label}</text>`).join("");
+}
+
+function fixChartYLabels(yTicks, pad, formatter) {
+  return yTicks.map(t => `<text x="${pad.l - 6}" y="${t.py + 3}" text-anchor="end" fill="var(--muted)" font-size="10">${formatter(t.val)}</text>`).join("");
+}
+
+function fixSeverityColor(severity) {
+  return severity === "critical" ? "#ff5c77" : severity === "warning_high" ? "#ff9f43" : severity === "warning" ? "#ffd166" : severity === "info" ? "#39d6d6" : "#8c9aab";
+}
+
+function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs = 200) {
+  const rect = svg.getBoundingClientRect();
+  const w = rect.width || 640, h = rect.height || 240;
+  const pad = { t: 32, r: 60, b: 48, l: 70 };
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+
+  const allTimes = [...history.map(s => s.epochMs), ...results.map(r => r.receiveMs)];
+  const t0 = Math.min(...allTimes), t1 = Math.max(...allTimes);
+  const span = t1 - t0 || 1;
+  const x = t => pad.l + ((t - t0) / span) * plotW;
+
+  const maxLag = Math.max(...results.map(r => r.lagMs), 1);
+  const maxRecvQ = Math.max(...history.map(s => s.recvQ || 0), 1);
+  const yLag = v => pad.t + plotH - (v / maxLag) * plotH;
+  const yRecvQ = v => pad.t + plotH - (v / maxRecvQ) * plotH;
+
+  const xTicks = fixChartXTicks(t0, t1, pad, w);
+  const yTicksLag = fixChartYTicks(0, maxLag, pad, h);
+  const grid = fixChartGrid(xTicks, yTicksLag, pad, w, h);
+  const xLabels = fixChartXLabels(xTicks, h);
+  const yLabelsLag = fixChartYLabels(yTicksLag, pad, v => v >= 1000 ? `${(v/1000).toFixed(1)}s` : `${Math.round(v)}ms`);
+  const yLabelsRecvQ = yTicksLag.map(t => {
+    const val = (t.val / maxLag) * maxRecvQ;
+    return `<text x="${w - pad.r + 6}" y="${t.py + 3}" text-anchor="start" fill="rgba(59,130,246,0.8)" font-size="10">${val >= 1024 ? `${(val/1024).toFixed(0)}K` : Math.round(val)}B</text>`;
+  }).join("");
+
+  // RecvQ area
+  let recvQPath = "";
+  for (let i = 0; i < history.length; i++) {
+    const px = x(history[i].epochMs), py = yRecvQ(history[i].recvQ || 0);
+    recvQPath += i === 0 ? `M${px},${py}` : `L${px},${py}`;
+  }
+  const recvQArea = recvQPath ? `${recvQPath}L${x(history[history.length - 1].epochMs)},${pad.t + plotH}L${x(history[0].epochMs)},${pad.t + plotH}Z` : "";
+
+  // Lag points
+  const points = results.map(r => {
+    const color = fixSeverityColor(r.severity);
+    return `<circle cx="${x(r.receiveMs)}" cy="${yLag(r.lagMs)}" r="3.5" fill="${color}" opacity="0.85" style="cursor:pointer"><title>${r.lagMs.toFixed(1)}ms | ${r.direction} ${r.msgType} | ${r.endpoint} | ${r.severity}${r.cause ? " | cause: " + r.cause : ""}${r.signals.length ? "\nsignals: " + r.signals.join(", ") : ""}</title></circle>`;
+  }).join("");
+
+  const legend = "";
+  const hidden = state.fixLatency.hiddenSeries;
+
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.innerHTML = `
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="rgba(0,0,0,0.15)"/>
+    ${grid}${xLabels}${yLabelsLag}${yLabelsRecvQ}
+    ${gcPauses && !hidden.has("gczone") ? gcPauses.filter(p => { const ps = p.alignedEpochMs || p.epochMs || 0; return ps >= t0 - gcWindowMs && ps <= t1; }).map(p => { const ps = p.alignedEpochMs || p.epochMs || 0; const pe = ps + (p.durationMs || 0); const x1 = Math.max(pad.l, x(ps)); const x2 = Math.min(pad.l + plotW, x(pe)); const x3 = Math.min(pad.l + plotW, x(pe + gcWindowMs)); return `<rect x="${x1}" y="${pad.t}" width="${Math.max(1, x2 - x1)}" height="${plotH}" fill="rgba(255,92,119,0.12)"/><rect x="${x2}" y="${pad.t}" width="${Math.max(0, x3 - x2)}" height="${plotH}" fill="rgba(255,159,67,0.06)"/>`; }).join("") : ""}
+    ${!hidden.has("recvq") ? `<path d="${recvQArea}" fill="rgba(59,130,246,0.12)" stroke="rgba(59,130,246,0.5)" stroke-width="1.2"/>` : ""}
+    ${!hidden.has("lag") ? points : ""}
+    <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
+    <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">Lag (ms)</text>
+    <text x="${w - 12}" y="${h / 2}" transform="rotate(90 ${w - 12} ${h / 2})" text-anchor="middle" fill="rgba(59,130,246,0.8)" font-size="11">Recv-Q (bytes)</text>
+
+    ${legend}
+    <rect class="fix-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent"/>
+    ${(() => { const sel = results.find(r => r.receiveMs === state.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.receiveMs), sy = yLag(sel.lagMs); return `<line x1="${sx}" y1="${pad.t}" x2="${sx}" y2="${pad.t + plotH}" stroke="#fff" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.9"/><circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx}" y="${pad.t - 6}" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms ${sel.cause || ""}</text>`; })()}
+  `;
+  attachFixChartCrosshair(svg, pad, w, h, t0, span, results, r => `${r.lagMs.toFixed(1)}ms ${r.direction} ${r.msgType}`);
+}
+
+function drawFixScatterChart(svg, results) {
+  const rect = svg.getBoundingClientRect();
+  const w = rect.width || 640, h = rect.height || 240;
+  const pad = { t: 32, r: 26, b: 48, l: 70 };
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+
+  const maxLag = Math.max(...results.map(r => r.lagMs), 1);
+  const x = v => pad.l + (v / maxLag) * plotW;
+  const y = v => pad.t + plotH - v * plotH;
+
+  const xTicks = fixChartYTicks(0, maxLag, { t: pad.t, l: pad.l, r: pad.r }, w).map(t => ({ px: pad.l + (t.val / maxLag) * plotW, val: t.val }));
+  const yTicks = fixChartYTicks(0, 1, pad, h);
+  const grid = fixChartGrid(xTicks.map(t => ({ px: t.px })), yTicks, pad, w, h);
+  const xLabels = xTicks.map(t => `<text x="${t.px}" y="${h - 8}" text-anchor="middle" fill="var(--muted)" font-size="10">${t.val >= 1000 ? `${(t.val/1000).toFixed(1)}s` : `${Math.round(t.val)}ms`}</text>`).join("");
+  const yLabels = yTicks.map(t => `<text x="${pad.l - 6}" y="${t.py + 3}" text-anchor="end" fill="var(--muted)" font-size="10">${t.val.toFixed(2)}</text>`).join("");
+
+  const points = results.map(r => {
+    const color = fixSeverityColor(r.severity);
+    return `<circle cx="${x(r.lagMs)}" cy="${y(r.score)}" r="3.5" fill="${color}" opacity="0.8" style="cursor:pointer"><title>Lag: ${r.lagMs.toFixed(1)}ms | Score: ${r.score.toFixed(2)} | ${r.severity}\nCause: ${r.cause || "unknown"}\nSignals: ${r.signals.join(", ") || "none"}\n${r.endpoint} ${r.direction} ${r.msgType}</title></circle>`;
+  }).join("");
+
+  const legend = `<g transform="translate(${pad.l + 8}, ${pad.t + 12})" font-size="10">
+    <circle cx="0" cy="0" r="3" fill="#ff5c77"/><text x="6" y="3" fill="var(--text)">critical</text>
+    <circle cx="60" cy="0" r="3" fill="#ff9f43"/><text x="66" y="3" fill="var(--text)">warning_high</text>
+    <circle cx="150" cy="0" r="3" fill="#ffd166"/><text x="156" y="3" fill="var(--text)">warning</text>
+    <circle cx="220" cy="0" r="3" fill="#39d6d6"/><text x="226" y="3" fill="var(--text)">info</text>
+  </g>`;
+
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.innerHTML = `
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="rgba(0,0,0,0.15)"/>
+    ${grid}${xLabels}${yLabels}
+    ${points}
+    <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Lag (ms)</text>
+    <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">Correlation Score</text>
+
+    ${legend}
+    ${(() => { const sel = results.find(r => r.receiveMs === state.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.lagMs), sy = y(sel.score); return `<circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx + 10}" y="${sy - 4}" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms</text>`; })()}
+  `;
+}
+
+function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
+  const rect = svg.getBoundingClientRect();
+  const w = rect.width || 640, h = rect.height || 240;
+  const pad = { t: 32, r: 50, b: 48, l: 70 };
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+
+  const t0 = vmsamples[0].epochMs, t1 = vmsamples[vmsamples.length - 1].epochMs;
+  const span = t1 - t0 || 1;
+  const x = t => pad.l + ((t - t0) / span) * plotW;
+
+  const maxR = Math.max(...vmsamples.map(s => s.r), 4);
+  const yCpu = v => pad.t + plotH - (v / 100) * plotH;
+  const yR = v => pad.t + plotH - (v / maxR) * plotH;
+
+  const xTicks = fixChartXTicks(t0, t1, pad, w);
+  const yTicksCpu = fixChartYTicks(0, 100, pad, h);
+  const grid = fixChartGrid(xTicks, yTicksCpu, pad, w, h);
+  const xLabels = fixChartXLabels(xTicks, h);
+  const yLabelsCpu = fixChartYLabels(yTicksCpu, pad, v => `${Math.round(v)}%`);
+  const yLabelsR = yTicksCpu.map(t => {
+    const val = (t.val / 100) * maxR;
+    return `<text x="${w - pad.r + 6}" y="${t.py + 3}" text-anchor="start" fill="#2cc62c" font-size="10">${Math.round(val)}</text>`;
+  }).join("");
+
+  // CPU lines
+  let usPath = "", syPath = "", waPath = "";
+  for (let i = 0; i < vmsamples.length; i++) {
+    const s = vmsamples[i], px = x(s.epochMs);
+    usPath += (i === 0 ? "M" : "L") + `${px},${yCpu(s.us)}`;
+    syPath += (i === 0 ? "M" : "L") + `${px},${yCpu(s.us + s.sy)}`;
+    waPath += (i === 0 ? "M" : "L") + `${px},${yCpu(s.us + s.sy + s.wa)}`;
+  }
+  // Run queue
+  let rPath = "";
+  for (let i = 0; i < vmsamples.length; i++) {
+    rPath += (i === 0 ? "M" : "L") + `${x(vmsamples[i].epochMs)},${yR(vmsamples[i].r)}`;
+  }
+  // FIX spike markers
+  const markers = fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
+    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ff5c77" stroke-width="0.7" opacity="0.35"/>`
+  ).join("");
+
+  const legend = "";
+  const hidden = state.fixLatency.hiddenSeries;
+
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.innerHTML = `
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="rgba(0,0,0,0.15)"/>
+    ${grid}${xLabels}${yLabelsCpu}${yLabelsR}
+    ${markers}
+    ${!hidden.has("wa") ? `<path d="${waPath}" fill="none" stroke="#ff9f43" stroke-width="1.5" opacity="0.7"/>` : ""}
+    ${!hidden.has("sy") ? `<path d="${syPath}" fill="none" stroke="#a855f7" stroke-width="1.5" opacity="0.7"/>` : ""}
+    ${!hidden.has("us") ? `<path d="${usPath}" fill="none" stroke="#3b82f6" stroke-width="2"/>` : ""}
+    ${!hidden.has("runqueue") ? `<path d="${rPath}" fill="none" stroke="#2cc62c" stroke-width="2" stroke-dasharray="4,2"/>` : ""}
+    ${cpuCores > 0 ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${yR(cpuCores)}" y2="${yR(cpuCores)}" stroke="#ff5c77" stroke-width="1" stroke-dasharray="6,4" opacity="0.7"/><text x="${w - pad.r - 4}" y="${yR(cpuCores) - 4}" text-anchor="end" fill="#ff5c77" font-size="9">${cpuCores} CPUs</text>` : ""}
+    <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
+    <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">CPU %</text>
+    <text x="${w - 12}" y="${h / 2}" transform="rotate(90 ${w - 12} ${h / 2})" text-anchor="middle" fill="#2cc62c" font-size="11">Run Queue</text>
+
+    ${legend}
+    <rect class="fix-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent"/>
+  `;
+  attachFixChartCrosshair(svg, pad, w, h, t0, span, vmsamples, s => `r=${s.r} us=${s.us}% sy=${s.sy}% wa=${s.wa}% cs=${formatNumber(s.cs)}`);
+}
+
+function drawFixNstatChart(svg, nsamples, fixResults) {
+  const rect = svg.getBoundingClientRect();
+  const w = rect.width || 640, h = rect.height || 240;
+  const pad = { t: 32, r: 26, b: 48, l: 70 };
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+
+  const t0 = nsamples[0].epochMs, t1 = nsamples[nsamples.length - 1].epochMs;
+  const span = t1 - t0 || 1;
+  const x = t => pad.l + ((t - t0) / span) * plotW;
+
+  const keys = ["TcpRetransSegs", "TcpExtTCPTimeouts", "TcpExtTCPBacklogDrop", "TcpExtListenDrops", "TcpExtTCPRcvQDrop"];
+  const colors = ["#ff5c77", "#ff9f43", "#a855f7", "#ffd166", "#39d6d6"];
+  const labels = ["Retrans", "Timeouts", "BacklogDrop", "ListenDrop", "RcvQDrop"];
+
+  const maxVal = Math.max(1, ...nsamples.flatMap(s => keys.map(k => s.counters[k] || 0)));
+  const y = v => pad.t + plotH - (v / maxVal) * plotH;
+
+  const xTicks = fixChartXTicks(t0, t1, pad, w);
+  const yTicks = fixChartYTicks(0, maxVal, pad, h);
+  const grid = fixChartGrid(xTicks, yTicks, pad, w, h);
+  const xLabelsHtml = fixChartXLabels(xTicks, h);
+  const yLabelsHtml = fixChartYLabels(yTicks, pad, v => String(Math.round(v)));
+
+  const lines = keys.map((key, ki) => {
+    if (hidden.has(seriesKeys[ki])) return "";
+    let path = "";
+    for (let i = 0; i < nsamples.length; i++) {
+      const px = x(nsamples[i].epochMs), py = y(nsamples[i].counters[key] || 0);
+      path += (i === 0 ? "M" : "L") + `${px},${py}`;
+    }
+    return path ? `<path d="${path}" fill="none" stroke="${colors[ki]}" stroke-width="1.5" opacity="0.85"/>` : "";
+  }).join("");
+
+  const markers = fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
+    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ff5c77" stroke-width="0.7" opacity="0.25"/>`
+  ).join("");
+
+  const legend = "";
+  const hidden = state.fixLatency.hiddenSeries;
+  const seriesKeys = ["retrans", "timeouts", "backlogdrop", "listendrop", "rcvqdrop"];
+
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.innerHTML = `
+    <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="rgba(0,0,0,0.15)"/>
+    ${grid}${xLabelsHtml}${yLabelsHtml}
+    ${markers}
+    ${lines}
+    <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
+    <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">Count / second</text>
+
+    ${legend}
+    <rect class="fix-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent"/>
+  `;
+  attachFixChartCrosshair(svg, pad, w, h, t0, span, nsamples, s => keys.map((k, i) => `${labels[i]}=${s.counters[k] || 0}`).filter(v => !v.endsWith("=0")).join(" · ") || "all zero");
+}
+
+function attachFixChartCrosshair(svg, pad, w, h, t0, span, data, labelFn) {
+  const zone = svg.querySelector(".fix-hover-zone");
+  if (!zone || !data.length) return;
+  let crosshairEl = svg.querySelector(".fix-crosshair-g");
+  if (!crosshairEl) {
+    crosshairEl = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    crosshairEl.classList.add("fix-crosshair-g");
+    crosshairEl.style.pointerEvents = "none";
+    crosshairEl.innerHTML = `<line class="fix-xh-line" y1="${pad.t}" y2="${h - pad.b}" stroke="var(--accent)" stroke-width="0.8" opacity="0.6"/><text class="fix-xh-label" y="${pad.t - 4}" fill="var(--text)" font-size="10" text-anchor="middle"></text><text class="fix-xh-time" y="${h - pad.b + 14}" fill="var(--muted)" font-size="10" text-anchor="middle"></text>`;
+    svg.appendChild(crosshairEl);
+  }
+  crosshairEl.style.display = "none";
+  zone.addEventListener("mousemove", e => {
+    const rect = svg.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const frac = Math.max(0, Math.min(1, (mx - pad.l) / (w - pad.l - pad.r)));
+    const epoch = t0 + frac * span;
+    const closest = data.reduce((best, item) => Math.abs((item.epochMs || item.receiveMs) - epoch) < Math.abs((best.epochMs || best.receiveMs) - epoch) ? item : best, data[0]);
+    const cx = pad.l + (((closest.epochMs || closest.receiveMs) - t0) / span) * (w - pad.l - pad.r);
+    crosshairEl.style.display = "";
+    crosshairEl.querySelector(".fix-xh-line").setAttribute("x1", cx);
+    crosshairEl.querySelector(".fix-xh-line").setAttribute("x2", cx);
+    crosshairEl.querySelector(".fix-xh-label").setAttribute("x", cx);
+    crosshairEl.querySelector(".fix-xh-label").textContent = labelFn(closest);
+    crosshairEl.querySelector(".fix-xh-time").setAttribute("x", cx);
+    crosshairEl.querySelector(".fix-xh-time").textContent = fixTimeLabel(closest.epochMs || closest.receiveMs);
+  });
+  zone.addEventListener("mouseleave", () => { crosshairEl.style.display = "none"; });
+}
+
 function renderActiveTab() {
   if (state.activeTab === "quality") return renderCaptureQualityReport();
   if (state.activeTab === "diagnosis") return renderDiagnosis();
@@ -4931,7 +5481,7 @@ function diagnosticHypotheses() {
       if (h.confidenceScore > cap) {
         h.confidenceScore = cap;
         h.confidenceCapped = true;
-        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% — capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% — capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
+        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% � capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% � capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
       }
     }
   }
@@ -4965,7 +5515,7 @@ function renderDiagnosis() {
         const formatted = text
           .replace(/(\d+:\d+:\d+\s*UTC)/g, "<b>$1</b>")
           .replace(/(\d+\.?\d*[KMG]B\/s)/g, "<b>$1</b>")
-          .replace(/(\d+[KMG]B\s*→\s*\d+\.?\d*[KMG]B)/g, "<b>$1</b>")
+          .replace(/(\d+[KMG]B\s*?\s*\d+\.?\d*[KMG]B)/g, "<b>$1</b>")
           .replace(/(java:\d+|nginx:\d+)/g, "<b>$1</b>")
           .replace(/(\d+%)/g, "<b>$1</b>")
           .replace(/(ambiguous|More evidence needed)/g, "<i>$1</i>")
@@ -4989,7 +5539,7 @@ function renderRootCauseMatrix(matrix) {
   return `<section class="root-cause-matrix">
     <header>
       <h4><i class="ri-grid-line"></i> Root Cause Matrix</h4>
-      ${matrix.ambiguous ? `<span class="risk medium">Ambiguous — multiple causes compete</span>` : ""}
+      ${matrix.ambiguous ? `<span class="risk medium">Ambiguous � multiple causes compete</span>` : ""}
     </header>
     <div class="matrix-grid">
       <div class="matrix-header"><span>Confidence</span><span>Signals</span><span>Probable cause</span></div>
@@ -5014,7 +5564,7 @@ function renderDiagnosticHypothesis(item) {
         <span class="risk ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
         <strong>${escapeHtml(item.title)}</strong>
       </div>
-      <span class="confidence${item.confidenceCapped ? " capped" : ""}" title="${item.confidenceCapped ? escapeHtml(item.confidenceCapReason) : `${item.confidenceSignals} converging signal(s), ${item.confidenceCounters} counter-evidence(s)`}"><span class="confidence-bar" style="width:${Math.round((item.confidenceScore || 0) * 100)}%"></span>${Math.round((item.confidenceScore || 0) * 100)}% confidence${item.confidenceCapped ? " ⚠️ capped" : ""}</span>
+      <span class="confidence${item.confidenceCapped ? " capped" : ""}" title="${item.confidenceCapped ? escapeHtml(item.confidenceCapReason) : `${item.confidenceSignals} converging signal(s), ${item.confidenceCounters} counter-evidence(s)`}"><span class="confidence-bar" style="width:${Math.round((item.confidenceScore || 0) * 100)}%"></span>${Math.round((item.confidenceScore || 0) * 100)}% confidence${item.confidenceCapped ? " ?? capped" : ""}</span>
     </header>
     <p>${escapeHtml(item.summary)}</p>
     <div class="evidence-row">
@@ -5684,18 +6234,18 @@ function renderTimelineStoriesView(stories) {
         const prev = isBytes ? `${Math.round(a.prevValue / 1024)} KB` : String(a.prevValue);
         const curr = isBytes ? `${Math.round(a.currValue / 1024)} KB` : String(a.currValue);
         const dt = a.dtMs >= 1000 ? `${(a.dtMs / 1000).toFixed(1)}s` : `${Math.round(a.dtMs)} ms`;
-        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain — peer or path cannot keep up."
-          : a.metric === "recvQ" ? "Data arriving faster than the app reads — local process may be stalled."
-          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly — app not consuming."
-          : a.metric === "skmem.d" ? "Packets being dropped — buffer overflow."
-          : a.metric === "rto" ? "Retransmission timeout escalating — path or peer unresponsive."
-          : a.metric === "backoff" ? "TCP retry backoff jumped — prolonged wait before next probe."
+        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain � peer or path cannot keep up."
+          : a.metric === "recvQ" ? "Data arriving faster than the app reads � local process may be stalled."
+          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly � app not consuming."
+          : a.metric === "skmem.d" ? "Packets being dropped � buffer overflow."
+          : a.metric === "rto" ? "Retransmission timeout escalating � path or peer unresponsive."
+          : a.metric === "backoff" ? "TCP retry backoff jumped � prolonged wait before next probe."
           : "";
         const time = a.epochMs ? new Date(a.epochMs).toISOString().slice(11, 23) + " UTC" : "";
         const countBadge = a.count > 1 ? ` <span class="rate-count">\u00d7${a.count} sockets</span>` : "";
-        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)}${countBadge} — <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} → ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
+        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)}${countBadge} � <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} ? ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
       }).join("")}
-      ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts → All Events</button></div>` : ""}
+      ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts ? All Events</button></div>` : ""}
     </div>` : ""}
     ${groupEvents.length ? `<div class="multi-socket-events">
       ${(() => {
@@ -5723,7 +6273,7 @@ function renderTimelineStoriesView(stories) {
       const patternTypes = [...new Set(stories.map(s => s.title))];
       const scope = socketCount === 1 ? `1 socket affected` : `${socketCount} sockets affected`;
       const peerLabel = socketCount === 1 && stories[0].socket ? (stories[0].socket.peer || stories[0].socketKey) : "";
-      return `<div class="stories-summary"><i class="ri-git-merge-line"></i> <b>${stories.length} ${stories.length === 1 ? "story" : "stories"}</b> — ${scope}${socketCount > 1 ? ` — ${patternTypes.length} distinct ${patternTypes.length === 1 ? "pattern" : "patterns"} (${escapeHtml(patternTypes.join(", "))})` : peerLabel ? ` — ${escapeHtml(peerLabel)}` : ""}</div>`;
+      return `<div class="stories-summary"><i class="ri-git-merge-line"></i> <b>${stories.length} ${stories.length === 1 ? "story" : "stories"}</b> � ${scope}${socketCount > 1 ? ` � ${patternTypes.length} distinct ${patternTypes.length === 1 ? "pattern" : "patterns"} (${escapeHtml(patternTypes.join(", "))})` : peerLabel ? ` � ${escapeHtml(peerLabel)}` : ""}</div>`;
     })() : ""}
     ${stories.slice(0, 6).map(story => `<article class="timeline-story">
       <div class="story-header">
@@ -5840,9 +6390,9 @@ function renderComparison() {
     return `<div class="compare-empty">
       <i class="ri-scales-3-line"></i>
       <strong>Before / After comparison</strong>
-      <p>Detect exactly what changed between two captures — in either direction.</p>
+      <p>Detect exactly what changed between two captures � in either direction.</p>
       <div class="compare-steps">
-        <div class="compare-step"><span>1</span><b>Load your first capture</b><small>Either the healthy state or the incident — order doesn't matter</small></div>
+        <div class="compare-step"><span>1</span><b>Load your first capture</b><small>Either the healthy state or the incident � order doesn't matter</small></div>
         <div class="compare-step"><span>2</span><b>Set as baseline</b><small>Click one of the buttons below to mark it</small></div>
         <div class="compare-step"><span>3</span><b>Load the second capture</b><small>The diff will show what changed between the two</small></div>
       </div>
@@ -5858,8 +6408,8 @@ function renderComparison() {
   return `<div class="compare-workbench">
     <div class="compare-header">
       <div>
-        <span class="tooltip-kicker">${state.baseline.role === "incident" ? "Incident → After fix" : "Healthy → Incident"}</span>
-        <h3>${escapeHtml(state.baseline.sourceName)} → ${escapeHtml(state.sourceName)}</h3>
+        <span class="tooltip-kicker">${state.baseline.role === "incident" ? "Incident ? After fix" : "Healthy ? Incident"}</span>
+        <h3>${escapeHtml(state.baseline.sourceName)} ? ${escapeHtml(state.sourceName)}</h3>
         <p>Baseline captured ${escapeHtml(new Date(state.baseline.createdAt).toLocaleString(resolvedNumberLocale()))}</p>
       </div>
       <div class="toolbar"><button data-action="setBaseline"><i class="ri-scales-3-line"></i> Replace baseline</button><button data-action="clearBaseline">${icons.clear} Clear baseline</button></div>
@@ -7572,7 +8122,7 @@ function attachBdpCrosshair(svg, data, series, xFn, yFn, pad, w, h, kind, format
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="${chartBgColor() === `#f0f3f7` ? `#1a2533cc` : `#ffffffaa`}" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="${tooltipH}" rx="4" fill="rgba(10,16,24,.8)" stroke="#52657a"/>
       <text x="${tooltipX + 8}" y="${tooltipY + 14}" fill="#8cc8e8" font-size="10" font-weight="700">${escapeHtml(time)}</text>
-      ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "—"}</text>`).join("")}
+      ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "�"}</text>`).join("")}
     `;
   }
   svg._bdpShowCrosshair = showCrosshairAtIndex;
@@ -7769,7 +8319,7 @@ function attachChartInteractions(svg) {
       const badgeW = Math.max(48, label.length * 7 + 12);
       const badgeX = Math.min(Math.max(ax - badgeW / 2, b.left), b.right - badgeW);
       const badgeY = b.bottom + 4;
-      return `<rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="18" rx="9" fill="${color}" opacity=".9"/><text x="${badgeX + badgeW / 2}" y="${badgeY + 13}" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">Δ ${escapeHtml(label)}</text>`;
+      return `<rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="18" rx="9" fill="${color}" opacity=".9"/><text x="${badgeX + badgeW / 2}" y="${badgeY + 13}" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">? ${escapeHtml(label)}</text>`;
     }).join("");
   };
   const drawOverlay = (x, dragX = null) => {
@@ -7966,7 +8516,7 @@ function buildJiraReport() {
   if (hypotheses.length) {
     lines.push(`h2. Diagnostic Hypotheses`);
     for (const h of hypotheses) {
-      lines.push(`h3. ${h.severity.toUpperCase()} — ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
+      lines.push(`h3. ${h.severity.toUpperCase()} � ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
       lines.push(h.summary);
       if (h.evidence.length) {
         lines.push(`*Evidence:*`);
@@ -9062,6 +9612,15 @@ function bindEvents() {
       } else if (event.currentTarget.hasAttribute("data-jvm-zoom")) {
         state.jvmGc.selectedEpoch = null;
         drawJvmCharts();
+      } else if (event.currentTarget.hasAttribute("data-fix-zoom")) {
+        const z = state.fixLatency.zoom;
+        const span = z.end - z.start;
+        if (action === "zoomIn") { const d = span * 0.2; z.start += d; z.end -= d; }
+        else if (action === "zoomOut") { const d = span * 0.3; z.start = Math.max(0, z.start - d); z.end = Math.min(1, z.end + d); }
+        else if (action === "panLeft") { const d = span * 0.2; z.start = Math.max(0, z.start - d); z.end = Math.max(z.start + 0.01, z.end - d); }
+        else if (action === "panRight") { const d = span * 0.2; z.end = Math.min(1, z.end + d); z.start = Math.min(z.end - 0.01, z.start + d); }
+        else if (action === "resetZoom") { z.start = 0; z.end = 1; }
+        drawFixCharts();
       } else if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
     });
   });
@@ -9155,7 +9714,7 @@ function bindEvents() {
       state.showSsOptions = false;
       setZoom(0, 1);
       markAnalysisDirty({ raw: true });
-      toast("ðŸ”¥ Incident demo loaded", "Press Analyze to see stories, matrix, and multi-socket correlation in action.");
+      toast("🔥 Incident demo loaded", "Press Analyze to see stories, matrix, and multi-socket correlation in action.");
       render();
     }
     if (action === "sample10m") {
@@ -9311,6 +9870,18 @@ function bindEvents() {
     }
     if (action === "clearJvmGcLog") {
       state.jvmGc = { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0 };
+      render();
+    }
+    if (action === "expandFixChart") { const id = event.currentTarget.dataset.fixChartId; state.fixLatency.expandedChart = state.fixLatency.expandedChart === id ? null : id; render(); requestAnimationFrame(drawFixCharts); }
+    if (action === "fixTablePrev") { state.fixTable.page = Math.max(1, state.fixTable.page - 1); render(); }
+    if (action === "fixTableNext") { state.fixTable.page++; render(); }
+    if (action === "pickFixFile") { document.querySelector("#fixFileInput")?.click(); }
+    if (action === "pickFixDir") { document.querySelector("#fixDirInput")?.click(); }
+    if (action === "pickFixVmstatFile") { document.querySelector("#fixVmstatFileInput")?.click(); }
+    if (action === "pickFixNstatFile") { document.querySelector("#fixNstatFileInput")?.click(); }
+    if (action === "clearFixLog") {
+      state.fixLatency = { records: [], correlation: null, threshold: 5, fileStats: [], vmstat: null, nstat: null };
+      state.fixTable = { page: 1, pageSize: 20, sortKey: "lag", sortDir: "desc" };
       render();
     }
     if (action === "toggleDeepAnalysis") {
@@ -10482,6 +11053,157 @@ function bindEvents() {
       const { counters } = parseNstat(text);
       state.jvmGc.nstat = extractTcpCounters(counters);
       toast("nstat loaded", `${counters.size} counters parsed. Key: retrans=${state.jvmGc.nstat.retransSegs}, timeouts=${state.jvmGc.nstat.timeouts}, listenDrops=${state.jvmGc.nstat.listenDrops}.`);
+      render();
+    });
+  });
+  async function readFixFileText(file) {
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".gz")) {
+      if ("DecompressionStream" in window) {
+        const stream = file.stream().pipeThrough(new DecompressionStream("gzip"));
+        const reader = stream.getReader();
+        const chunks = [];
+        while (true) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
+        return new TextDecoder().decode(await new Blob(chunks).arrayBuffer());
+      }
+    }
+    if (name.endsWith(".zip") && window.JSZip) {
+      const zip = await window.JSZip.loadAsync(file);
+      const entries = Object.values(zip.files).filter(e => !e.dir && /\.(log|txt|gz)$/i.test(e.name));
+      const texts = [];
+      for (const entry of entries) {
+        let t = await entry.async("string");
+        if (entry.name.toLowerCase().endsWith(".gz") && window.pako) {
+          const buf = await entry.async("uint8array");
+          t = window.pako.ungzip(buf, { to: "string" });
+        }
+        texts.push({ name: entry.name, text: t });
+      }
+      return texts;
+    }
+    return file.text();
+  }
+  async function ingestFixFiles(files) {
+    if (!files.length) return;
+    const progressEl = document.querySelector("#fixProgressBar");
+    const progressLabel = document.querySelector("#fixProgressLabel");
+    if (progressEl) { progressEl.style.width = "0%"; progressEl.parentElement.style.display = "flex"; }
+    let allRecords = [...state.fixLatency.records];
+    const total = files.length;
+    for (let i = 0; i < total; i++) {
+      const file = files[i];
+      const pct = Math.round(((i) / total) * 100);
+      if (progressEl) progressEl.style.width = `${pct}%`;
+      if (progressLabel) progressLabel.textContent = `Parsing ${file.name} (${i + 1}/${total})`;
+      await new Promise(r => setTimeout(r, 0));
+      try {
+        const result = await readFixFileText(file);
+        if (Array.isArray(result)) {
+          for (const { name, text } of result) {
+            const { records, stats } = parseFixLog(text, name);
+            allRecords.push(...records);
+            state.fixLatency.fileStats.push({ fileName: name, size: text.length, ...stats });
+          }
+        } else {
+          const { records, stats } = parseFixLog(result, file.name);
+          allRecords.push(...records);
+          state.fixLatency.fileStats.push({ fileName: file.name, size: file.size, ...stats });
+        }
+      } catch (err) {
+        state.fixLatency.fileStats.push({ fileName: file.name, size: file.size, parsed: 0, rejected: 0, error: err.message });
+      }
+    }
+    if (progressEl) progressEl.style.width = "100%";
+    if (progressLabel) progressLabel.textContent = "Done";
+    allRecords.sort((a, b) => a.receiveMs - b.receiveMs);
+    state.fixLatency.records = allRecords;
+    runFixCorrelation();
+    toast("FIX logs loaded", `${allRecords.length} messages from ${total} file(s). ${state.fixLatency.correlation?.summary?.totalSpikes || 0} spikes above ${state.fixLatency.threshold}ms.`);
+    setTimeout(() => { if (progressEl) progressEl.parentElement.style.display = "none"; }, 1500);
+    render();
+    requestAnimationFrame(drawFixCharts);
+  }
+  document.querySelector("#fixFileInput")?.addEventListener("change", e => {
+    const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name));
+    ingestFixFiles(files);
+  });
+  document.querySelector("#fixDirInput")?.addEventListener("change", e => {
+    const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name));
+    ingestFixFiles(files);
+  });
+  document.querySelector("#fixThresholdInput")?.addEventListener("change", e => {
+    state.fixLatency.threshold = parseInt(e.target.value, 10) || 5;
+    runFixCorrelation();
+    render();
+    requestAnimationFrame(drawFixCharts);
+  });
+  document.querySelector("#fixVmstatFileInput")?.addEventListener("change", e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.text().then(text => {
+      const { samples } = parseVmstat(text);
+      state.fixLatency.vmstat = samples;
+      runFixCorrelation();
+      toast("vmstat loaded", `${samples.length} samples parsed from ${file.name}. CPU/scheduling correlation active.`);
+      render();
+      requestAnimationFrame(drawFixCharts);
+    });
+  });
+  document.querySelector("#fixNstatFileInput")?.addEventListener("change", e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.text().then(text => {
+      const { samples } = parseNstatTimestamped(text);
+      state.fixLatency.nstat = samples;
+      runFixCorrelation();
+      toast("nstat loaded", `${samples.length} per-second samples parsed from ${file.name}. Kernel/network correlation active.`);
+      render();
+      requestAnimationFrame(drawFixCharts);
+    });
+  });
+  document.querySelectorAll("[data-fix-epoch]").forEach(row => {
+    row.addEventListener("click", () => {
+      const epoch = Number(row.dataset.fixEpoch);
+      state.fixTable.selectedEpoch = state.fixTable.selectedEpoch === epoch ? null : epoch;
+      document.querySelectorAll("[data-fix-epoch]").forEach(r => r.classList.toggle("fix-selected-row", Number(r.dataset.fixEpoch) === state.fixTable.selectedEpoch));
+      drawFixCharts();
+    });
+  });
+  document.querySelectorAll("[data-fix-series]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.fixSeries;
+      const s = state.fixLatency.hiddenSeries;
+      s.has(key) ? s.delete(key) : s.add(key);
+      btn.classList.toggle("is-muted", s.has(key));
+      drawFixCharts();
+    });
+  });
+  document.querySelector("#fixCpuCores")?.addEventListener("change", e => {
+    state.fixLatency.cpuCores = parseInt(e.target.value, 10) || 0;
+    runFixCorrelation();
+    render();
+    requestAnimationFrame(drawFixCharts);
+  });
+  document.querySelector("#fixShowGcZones")?.addEventListener("change", e => {
+    state.fixLatency.showGcZones = e.target.checked;
+    drawFixCharts();
+  });
+  document.querySelector("#fixGcWindowInput")?.addEventListener("change", e => {
+    state.fixLatency.gcWindowMs = parseInt(e.target.value, 10) || 200;
+    runFixCorrelation();
+    render();
+    requestAnimationFrame(drawFixCharts);
+  });
+  document.querySelector("#fixCauseFilter")?.addEventListener("change", e => {
+    state.fixTable.causeFilter = e.target.value;
+    state.fixTable.page = 1;
+    render();
+  });
+  document.querySelectorAll("[data-fix-sort]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.fixSort;
+      if (state.fixTable.sortKey === key) state.fixTable.sortDir = state.fixTable.sortDir === "desc" ? "asc" : "desc";
+      else { state.fixTable.sortKey = key; state.fixTable.sortDir = "desc"; }
       render();
     });
   });

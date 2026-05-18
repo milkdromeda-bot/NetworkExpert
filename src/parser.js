@@ -109,6 +109,8 @@ export function parseSs(raw) {
       const sendQ = parts[offset + 2];
       const local = parts[offset + 3];
       const peer = parts[offset + 4];
+      // Skip truncated lines (incomplete address)
+      if (!peer || (!peer.includes(":") && peer !== "*")) continue;
       const rest = parts.slice(offset + 5);
       const localAddress = parseAddress(local);
       const peerAddress = parseAddress(peer);
