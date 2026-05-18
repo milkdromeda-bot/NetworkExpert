@@ -202,7 +202,7 @@ let state = {
   hiddenJvmSeries: new Set(),
   jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0, pidstat: null, nstat: null, cpuCorrelation: null },
   jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
-  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 200, showGcZones: true, expandedChart: null, hiddenSeries: new Set(), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, zoom: { start: 0, end: 1 } },
+  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 200, showGcZones: true, expandedChart: null, hiddenSeries: new Set(), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, zoom: { timeline: { start: 0, end: 1 }, scatter: { start: 0, end: 1 }, vmstat: { start: 0, end: 1 }, nstat: { start: 0, end: 1 } } },
   fixTable: { page: 1, pageSize: 20, sortKey: "score", sortDir: "desc", causeFilter: "", selectedEpoch: null },
   advisorFindings: [],
   bandwidthIndex: {},
@@ -4849,6 +4849,7 @@ function fixPagedRows() {
 
 function renderFixLatencyPanel() {
   const fix = state.fixLatency;
+  const fixTools = (id) => `<span class="chart-card-tools"><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomIn" title="Zoom in">${icons.zoomIn}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomOut" title="Zoom out">${icons.zoomOut}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="resetZoom" title="Reset">${icons.reset}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panLeft" title="Pan left">${icons.arrowLeft}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panRight" title="Pan right">${icons.arrowRight}</button><button class="mini" data-action="expandFixChart" data-fix-chart-id="${id}" title="${fix.expandedChart === id ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === id ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}"></i></button></span>`;
   const hasRecords = fix.records.length > 0;
   const corr = fix.correlation;
   const summary = corr?.summary;
@@ -4858,13 +4859,7 @@ function renderFixLatencyPanel() {
     <div class="panel-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px">
       <span style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap">FIX Latency Correlation</span>
       ${hasRecords ? `<button class="jvm-clear-btn" data-action="clearFixLog" title="Clear FIX data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}
-      ${hasRecords ? `<span class="jvm-sep"></span><div style="display:flex;gap:4px;margin:0 auto">
-        <button class="mini" data-chart-zoom="zoomIn" data-fix-zoom title="Zoom in">${icons.zoomIn}</button>
-        <button class="mini" data-chart-zoom="zoomOut" data-fix-zoom title="Zoom out">${icons.zoomOut}</button>
-        <button class="mini" data-chart-zoom="resetZoom" data-fix-zoom title="Reset zoom">${icons.reset}</button>
-        <button class="mini" data-chart-zoom="panLeft" data-fix-zoom title="Pan left">${icons.arrowLeft}</button>
-        <button class="mini" data-chart-zoom="panRight" data-fix-zoom title="Pan right">${icons.arrowRight}</button>
-      </div><span class="jvm-sep"></span>` : ""}
+
       ${hasRecords ? `<div class="bdp-controls" style="margin-left:auto">
         <label><span>Lag threshold</span><select id="fixThresholdInput" style="width:auto"><option value="1"${fix.threshold===1?" selected":""}>1 ms</option><option value="2"${fix.threshold===2?" selected":""}>2 ms</option><option value="5"${fix.threshold===5?" selected":""}>5 ms (default)</option><option value="10"${fix.threshold===10?" selected":""}>10 ms</option><option value="20"${fix.threshold===20?" selected":""}>20 ms</option><option value="50"${fix.threshold===50?" selected":""}>50 ms</option><option value="100"${fix.threshold===100?" selected":""}>100 ms</option></select></label>
         <label><span>GC window</span><select id="fixGcWindowInput" style="width:auto"><option value="50"${fix.gcWindowMs===50?" selected":""}>50 ms</option><option value="100"${fix.gcWindowMs===100?" selected":""}>100 ms</option><option value="200"${fix.gcWindowMs===200?" selected":""}>200 ms</option><option value="500"${fix.gcWindowMs===500?" selected":""}>500 ms</option><option value="1000"${fix.gcWindowMs===1000?" selected":""}>1000 ms</option></select></label>
@@ -4923,7 +4918,7 @@ while true; do nstat -r >/dev/null; sleep 1; echo "=== $(date --iso-8601=ns) ===
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article class="${fix.expandedChart === "timeline" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
-              <div class="bdp-chart-title"><strong>FIX Lag + ss Recv-Q timeline</strong><span>overlay</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="timeline" title="${fix.expandedChart === "timeline" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "timeline" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <div class="bdp-chart-title"><strong>FIX Lag + ss Recv-Q timeline</strong><span>overlay</span>${fixTools("timeline")}</div>
               <svg class="chart bdp-chart" data-fix-chart="timeline" role="img" aria-label="FIX latency timeline"></svg>
               <div class="chart-legend fix-chart-legend">
                 <button class="chart-legend-item ${fix.hiddenSeries.has("lag") ? "is-muted" : ""}" data-fix-series="lag"><i style="--legend-color:#ff5c77"></i><span>Lag spikes</span></button>
@@ -4932,11 +4927,11 @@ while true; do nstat -r >/dev/null; sleep 1; echo "=== $(date --iso-8601=ns) ===
               </div>
             </article>
             <article class="${fix.expandedChart === "scatter" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
-              <div class="bdp-chart-title"><strong>Lag vs Correlation Score</strong><span>scatter</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="scatter" title="${fix.expandedChart === "scatter" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "scatter" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <div class="bdp-chart-title"><strong>Lag vs Correlation Score</strong><span>scatter</span>${fixTools("scatter")}</div>
               <svg class="chart bdp-chart" data-fix-chart="scatter" role="img" aria-label="FIX lag scatter"></svg>
             </article>
             ${fix.vmstat ? `<article class="${fix.expandedChart === "vmstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
-              <div class="bdp-chart-title"><strong>CPU + Run Queue (vmstat)</strong><span>timeline</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="vmstat" title="${fix.expandedChart === "vmstat" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "vmstat" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <div class="bdp-chart-title"><strong>CPU + Run Queue (vmstat)</strong><span>timeline</span>${fixTools("vmstat")}</div>
               <svg class="chart bdp-chart" data-fix-chart="vmstat" role="img" aria-label="vmstat CPU timeline"></svg>
               <div class="chart-legend fix-chart-legend">
                 <button class="chart-legend-item ${fix.hiddenSeries.has("us") ? "is-muted" : ""}" data-fix-series="us"><i style="--legend-color:#3b82f6"></i><span>us%</span></button>
@@ -4946,7 +4941,7 @@ while true; do nstat -r >/dev/null; sleep 1; echo "=== $(date --iso-8601=ns) ===
               </div>
             </article>` : ""}
             ${fix.nstat ? `<article class="${fix.expandedChart === "nstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
-              <div class="bdp-chart-title"><strong>TCP Drops & Retrans (nstat)</strong><span>timeline</span><button class="mini" data-action="expandFixChart" data-fix-chart-id="nstat" title="${fix.expandedChart === "nstat" ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === "nstat" ? "ri-collapse-diagonal-line" : "ri-fullscreen-line"}"></i</button></div>
+              <div class="bdp-chart-title"><strong>TCP Drops & Retrans (nstat)</strong><span>timeline</span>${fixTools("nstat")}</div>
               <svg class="chart bdp-chart" data-fix-chart="nstat" role="img" aria-label="nstat counters timeline"></svg>
               <div class="chart-legend fix-chart-legend">
                 <button class="chart-legend-item ${fix.hiddenSeries.has("retrans") ? "is-muted" : ""}" data-fix-series="retrans"><i style="--legend-color:#ff5c77"></i><span>Retrans</span></button>
@@ -5004,35 +4999,28 @@ function drawFixCharts() {
   const history = visibleHistory().filter(s => s.epochMs);
   if (!history.length) return;
   const allResults = fix.correlation.results;
-  // Apply zoom window
-  const z = fix.zoom || { start: 0, end: 1 };
-  const times = allResults.map(r => r.receiveMs);
-  const tMin = Math.min(...times), tMax = Math.max(...times);
+  // Time range from all records
+  const allTimes = fix.records.length ? [fix.records[0].receiveMs, fix.records[fix.records.length - 1].receiveMs] : allResults.map(r => r.receiveMs);
+  const tMin = Math.min(...allTimes), tMax = Math.max(...allTimes);
   const tSpan = tMax - tMin || 1;
-  const zStart = tMin + z.start * tSpan, zEnd = tMin + z.end * tSpan;
-  const results = allResults.filter(r => r.receiveMs >= zStart && r.receiveMs <= zEnd);
+  function zoomRange(chartId) { const z = fix.zoom?.[chartId] || { start: 0, end: 1 }; return { start: tMin + z.start * tSpan, end: tMin + z.end * tSpan }; }
+  const results = allResults;
 
   // Timeline chart
   const svg1 = document.querySelector("[data-fix-chart='timeline']");
-  if (svg1) drawFixTimelineChart(svg1, results, history, fix.showGcZones ? (state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses) : null, fix.gcWindowMs);
+  if (svg1) { const zr = zoomRange("timeline"); const r1 = results.filter(r => r.receiveMs >= zr.start && r.receiveMs <= zr.end); if (r1.length) drawFixTimelineChart(svg1, r1, history, fix.showGcZones ? (state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses) : null, fix.gcWindowMs); }
 
   // Scatter chart
   const svg2 = document.querySelector("[data-fix-chart='scatter']");
-  if (svg2) drawFixScatterChart(svg2, results);
+  if (svg2) { const zr = zoomRange("scatter"); const r2 = results.filter(r => r.receiveMs >= zr.start && r.receiveMs <= zr.end); if (r2.length) drawFixScatterChart(svg2, r2); }
 
   // vmstat chart
   const svg3 = document.querySelector("[data-fix-chart='vmstat']");
-  if (svg3 && fix.vmstat?.length) {
-    const vm = fix.vmstat.filter(s => s.epochMs >= zStart && s.epochMs <= zEnd);
-    if (vm.length) drawFixVmstatChart(svg3, vm, results, fix.cpuCores);
-  }
+  if (svg3 && fix.vmstat?.length) { const zr = zoomRange("vmstat"); const vm = fix.vmstat.filter(s => s.epochMs >= zr.start && s.epochMs <= zr.end); drawFixVmstatChart(svg3, vm.length ? vm : fix.vmstat, results, fix.cpuCores); }
 
   // nstat chart
   const svg4 = document.querySelector("[data-fix-chart='nstat']");
-  if (svg4 && fix.nstat?.length) {
-    const ns = fix.nstat.filter(s => s.epochMs >= zStart && s.epochMs <= zEnd);
-    if (ns.length) drawFixNstatChart(svg4, ns, results);
-  }
+  if (svg4 && fix.nstat?.length) { const zr = zoomRange("nstat"); const ns = fix.nstat.filter(s => s.epochMs >= zr.start && s.epochMs <= zr.end); drawFixNstatChart(svg4, ns.length ? ns : fix.nstat, results); }
 }
 
 function fixTimeLabel(epochMs) {
@@ -5125,7 +5113,7 @@ function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs
   svg.innerHTML = `
     <rect x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="rgba(0,0,0,0.15)"/>
     ${grid}${xLabels}${yLabelsLag}${yLabelsRecvQ}
-    ${gcPauses && !hidden.has("gczone") ? gcPauses.filter(p => { const ps = p.alignedEpochMs || p.epochMs || 0; return ps >= t0 - gcWindowMs && ps <= t1; }).map(p => { const ps = p.alignedEpochMs || p.epochMs || 0; const pe = ps + (p.durationMs || 0); const x1 = Math.max(pad.l, x(ps)); const x2 = Math.min(pad.l + plotW, x(pe)); const x3 = Math.min(pad.l + plotW, x(pe + gcWindowMs)); return `<rect x="${x1}" y="${pad.t}" width="${Math.max(1, x2 - x1)}" height="${plotH}" fill="rgba(255,92,119,0.12)"/><rect x="${x2}" y="${pad.t}" width="${Math.max(0, x3 - x2)}" height="${plotH}" fill="rgba(255,159,67,0.06)"/>`; }).join("") : ""}
+    ${gcPauses && !hidden.has("gczone") ? gcPauses.filter(p => { const ps = p.alignedEpochMs || p.epochMs || 0; return ps >= t0 - gcWindowMs && ps <= t1; }).map(p => { const ps = p.alignedEpochMs || p.epochMs || 0; const pe = ps + (p.durationMs || 0); const x1 = Math.max(pad.l, x(ps)); const x2 = Math.min(pad.l + plotW, x(pe)); const x3 = Math.min(pad.l + plotW, x(pe + gcWindowMs)); return `<rect x="${x1}" y="${pad.t}" width="${Math.max(1, x2 - x1)}" height="${plotH}" fill="rgba(255,92,119,0.5)"/><rect x="${x2}" y="${pad.t}" width="${Math.max(0, x3 - x2)}" height="${plotH}" fill="rgba(255,159,67,0.3)"/>`; }).join("") : ""}
     ${!hidden.has("recvq") ? `<path d="${recvQArea}" fill="rgba(59,130,246,0.12)" stroke="rgba(59,130,246,0.5)" stroke-width="1.2"/>` : ""}
     ${!hidden.has("lag") ? points : ""}
     <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
@@ -9613,13 +9601,6 @@ function bindEvents() {
         state.jvmGc.selectedEpoch = null;
         drawJvmCharts();
       } else if (event.currentTarget.hasAttribute("data-fix-zoom")) {
-        const z = state.fixLatency.zoom;
-        const span = z.end - z.start;
-        if (action === "zoomIn") { const d = span * 0.2; z.start += d; z.end -= d; }
-        else if (action === "zoomOut") { const d = span * 0.3; z.start = Math.max(0, z.start - d); z.end = Math.min(1, z.end + d); }
-        else if (action === "panLeft") { const d = span * 0.2; z.start = Math.max(0, z.start - d); z.end = Math.max(z.start + 0.01, z.end - d); }
-        else if (action === "panRight") { const d = span * 0.2; z.end = Math.min(1, z.end + d); z.start = Math.min(z.end - 0.01, z.start + d); }
-        else if (action === "resetZoom") { z.start = 0; z.end = 1; }
         drawFixCharts();
       } else if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
     });
@@ -11166,6 +11147,20 @@ function bindEvents() {
       const epoch = Number(row.dataset.fixEpoch);
       state.fixTable.selectedEpoch = state.fixTable.selectedEpoch === epoch ? null : epoch;
       document.querySelectorAll("[data-fix-epoch]").forEach(r => r.classList.toggle("fix-selected-row", Number(r.dataset.fixEpoch) === state.fixTable.selectedEpoch));
+      drawFixCharts();
+    });
+  });
+  document.querySelectorAll("[data-fix-zoom-chart]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const chartId = btn.dataset.fixZoomChart;
+      const action = btn.dataset.fixZoomAction;
+      const z = state.fixLatency.zoom[chartId] || (state.fixLatency.zoom[chartId] = { start: 0, end: 1 });
+      const span = z.end - z.start;
+      if (action === "zoomIn") { const d = span * 0.2; z.start += d; z.end -= d; }
+      else if (action === "zoomOut") { const d = span * 0.3; z.start = Math.max(0, z.start - d); z.end = Math.min(1, z.end + d); }
+      else if (action === "panLeft") { const d = span * 0.2; z.start = Math.max(0, z.start - d); z.end = Math.max(z.start + 0.01, z.end - d); }
+      else if (action === "panRight") { const d = span * 0.2; z.end = Math.min(1, z.end + d); z.start = Math.min(z.end - 0.01, z.start + d); }
+      else if (action === "resetZoom") { z.start = 0; z.end = 1; }
       drawFixCharts();
     });
   });
