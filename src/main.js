@@ -202,7 +202,7 @@ let state = {
   hiddenJvmSeries: new Set(),
   jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0, pidstat: null, nstat: null, cpuCorrelation: null },
   jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
-  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 200, showGcZones: true, expandedChart: null, hiddenSeries: new Set(), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, zoom: { timeline: { start: 0, end: 1 }, scatter: { start: 0, end: 1 }, vmstat: { start: 0, end: 1 }, nstat: { start: 0, end: 1 } } },
+  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 0, showGcZones: true, expandedChart: null, hiddenSeries: new Set(), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, zoom: { timeline: { start: 0, end: 1 }, scatter: { start: 0, end: 1 }, vmstat: { start: 0, end: 1 }, nstat: { start: 0, end: 1 } } },
   fixTable: { page: 1, pageSize: 20, sortKey: "score", sortDir: "desc", causeFilter: "", selectedEpoch: null },
   advisorFindings: [],
   bandwidthIndex: {},
@@ -2702,8 +2702,8 @@ function _renderSync() {
         <nav class="charts-sub-tabs" role="tablist">
           <button class="charts-sub-tab ${state.chartsTab === "charts" ? "active" : ""}" data-charts-tab="charts" role="tab" aria-selected="${state.chartsTab === "charts"}">Metrics</button>
           <button class="charts-sub-tab ${state.chartsTab === "bdp" ? "active" : ""}" data-charts-tab="bdp" role="tab" aria-selected="${state.chartsTab === "bdp"}">BDP & Throughput</button>
-          <button class="charts-sub-tab ${state.chartsTab === "jvm" ? "active" : ""}" data-charts-tab="jvm" role="tab" aria-selected="${state.chartsTab === "jvm"}">JVM Stall / GC</button>
-          <button class="charts-sub-tab ${state.chartsTab === "fix" ? "active" : ""}" data-charts-tab="fix" role="tab" aria-selected="${state.chartsTab === "fix"}">FIX Latency</button>
+          ${state.jvmGc.pauses.length ? `<button class="charts-sub-tab ${state.chartsTab === "jvm" ? "active" : ""}" data-charts-tab="jvm" role="tab" aria-selected="${state.chartsTab === "jvm"}">JVM Stall / GC</button>` : ""}
+          ${state.fixLatency.records.length ? `<button class="charts-sub-tab ${state.chartsTab === "fix" ? "active" : ""}" data-charts-tab="fix" role="tab" aria-selected="${state.chartsTab === "fix"}">FIX Latency</button>` : ""}
           <button class="charts-sub-tab ${state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="advisor" role="tab" aria-selected="${state.chartsTab === "advisor"}">Advisor</button>
           ${state.chartsTab === "charts" ? renderDashboardStudioInline() : ""}
         </nav>
@@ -3154,7 +3154,8 @@ function renderIngestPage() {
     <section class="ingest-hero">
       <div>
         <h2>Import an ss collection</h2>
-        <p>Paste captured output or open a file. Analysis reads the text exactly as captured.</p>
+        <p>Paste captured output or open a file. Use <strong>Auto-detect dir</strong> to load an entire directory at once.</p>
+        <p style="font-size:11px;color:var(--muted);margin-top:4px">Supported: <strong>ss</strong> (.log/.txt/.gz/.zip) · <strong>GC</strong> (Java 17+ unified logging) · <strong>vmstat</strong> (vmstat -t 1) · <strong>nstat</strong> (timestamped per-second) · <strong>FIX</strong> (connector logs with tag 52)</p>
       </div>
     </section>
     <section class="panel ingest-source-panel ss-editor-theme-${escapeHtml(editorTheme)}">
@@ -3166,7 +3167,21 @@ function renderIngestPage() {
       <div class="panel-body">
         <div class="ingest-toolbar">
           <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
-          <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open file</button>
+          <input id="ingestGcFileInput" type="file" accept=".log,.txt" style="display:none"/>
+          <input id="ingestVmstatFileInput" type="file" accept=".log,.txt,.out" style="display:none"/>
+          <input id="ingestNstatFileInput" type="file" accept=".log,.txt,.out" style="display:none"/>
+          <input id="ingestFixFileInput" type="file" accept=".log,.txt,.gz,.zip" multiple style="display:none"/>
+          <input id="ingestFixDirInput" type="file" webkitdirectory style="display:none"/>
+          <input id="ingestAutoDir" type="file" webkitdirectory style="display:none"/>
+          <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open ss file</button>
+          <button data-action="pickAutoDir" title="Load a directory — auto-detects ss, FIX, GC, vmstat, nstat files"><i class="ri-folder-search-line"></i> Auto-detect dir</button>
+          <span class="ingest-extra-sources">
+            <button data-action="pickJvmGcFile" class="${state.jvmGc.pauses.length ? "chip-loaded" : ""}" title="Load GC log for JVM stall correlation"><i class="ri-recycle-line"></i> GC${state.jvmGc.pauses.length ? ` ${state.jvmGc.pauses.length}` : ""}</button>
+            <button data-action="pickFixVmstatFile" class="${state.fixLatency.vmstat?.length ? "chip-loaded" : ""}" title="Load vmstat for CPU correlation"><i class="ri-cpu-line"></i> vmstat${state.fixLatency.vmstat?.length ? ` ${state.fixLatency.vmstat.length}s` : ""}</button>
+            <button data-action="pickFixNstatFile" class="${state.fixLatency.nstat?.length ? "chip-loaded" : ""}" title="Load nstat for kernel TCP counter correlation"><i class="ri-bar-chart-line"></i> nstat${state.fixLatency.nstat?.length ? ` ${state.fixLatency.nstat.length}s` : ""}</button>
+            <button data-action="pickFixFile" class="${state.fixLatency.records.length ? "chip-loaded" : ""}" title="Load FIX log files or directory"><i class="ri-exchange-line"></i> FIX${state.fixLatency.records.length ? ` ${formatNumber(state.fixLatency.records.length)}` : ""}</button>
+          </span>
+          <span class="ingest-toolbar-divider"></span>
           <div class="pill-toggle" data-active="${activePanel === "capture" ? "1" : "0"}">
             <div class="pill-slider"></div>
             <button data-action="showEditor" class="${activePanel !== "capture" ? "active" : ""}"><i class="ri-edit-line"></i> Editor</button>
@@ -3175,15 +3190,16 @@ function renderIngestPage() {
           <span class="demo-btn-wrap">
             <button data-action="sampleIncidentDemo" class="demo-btn"><i class="ri-fire-line"></i> See it in action</button>
             <div class="demo-tooltip">
-              <strong>🔥 JVM GC Stall Incident</strong>
+              <strong>Multi-Source Correlation Demo</strong>
               <ul>
-                <li><i class="ri-cpu-line"></i> 5 sockets from <code>java:2155462</code></li>
-                <li><i class="ri-timer-line"></i> Normal ? onset ? full stall ? recovery</li>
-                <li><i class="ri-alarm-warning-line"></i> persist, backoff, drops, Recv-Q explosion</li>
-                <li><i class="ri-grid-line"></i> Multi-socket correlation fires</li>
-                <li><i class="ri-movie-2-line"></i> Stories, matrix, rate alerts all trigger</li>
+                <li><i class="ri-exchange-line"></i> FIX price feed with latency spikes (5-50ms)</li>
+                <li><i class="ri-recycle-line"></i> GC pauses causing message backlog</li>
+                <li><i class="ri-cpu-line"></i> vmstat: CPU runqueue spikes during GC</li>
+                <li><i class="ri-bar-chart-line"></i> nstat: retransmissions correlating with lag</li>
+                <li><i class="ri-wifi-line"></i> ss: Recv-Q rise + RTT spike on FIX socket</li>
+                <li><i class="ri-pie-chart-line"></i> Root cause: GC + Network + CPU breakdown</li>
               </ul>
-              <small>Press <b>Analyze</b> after loading</small>
+              <small>Loads ss + GC + vmstat + nstat + FIX data. All tabs activate.</small>
             </div>
           </span>
           <span class="ingest-toolbar-spacer"></span>
@@ -3216,6 +3232,7 @@ function renderIngestPage() {
           </div>` : renderIngestEditor()}
       </div>
     </section>
+
   `;
 }
 
@@ -3612,29 +3629,7 @@ function renderJvmGcPanel() {
       </div>
     </div>
     <div class="panel-body">
-      ${!hasPauses ? `<div class="jvm-gc-import">
-        <p><strong>Import GC / safepoint log</strong> � Java 17+ Unified Logging format. Large files (50 MB+) are streamed and parsed without freezing.</p>
-        <div style="display:flex;gap:12px;margin-top:8px;align-items:center;flex-wrap:wrap">
-          <label class="bdp-controls" style="margin:0"><span>SS capture is from</span><select id="jvmCorrelationModeImport"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (GC is local)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (GC is remote)</option></select></label>
-          <button class="primary" data-action="pickJvmGcFile">Load & parse file</button>
-          <input type="file" id="jvmGcFileInput" accept=".log,.txt" style="display:none"/>
-        </div>
-        <details style="margin-top:12px"><summary>Paste GC log manually</summary>
-          <textarea id="jvmGcLogInput" rows="4" placeholder="Paste GC log excerpt here..." style="margin-top:6px"></textarea>
-          <button data-action="parseJvmGcLog" style="margin-top:6px">Parse pasted text</button>
-        </details>
-        <details style="margin-top:8px"><summary>Recommended JVM logging flags</summary><pre style="font-size:11px;margin-top:4px">${escapeHtml(RECOMMENDED_JVM_LOGGING)}</pre></details>
-        <details style="margin-top:8px"><summary>Optional: pidstat / nstat (CPU correlation)</summary>
-          <p style="font-size:12px;color:var(--muted);margin:6px 0">Import pidstat or nstat output to correlate CPU scheduling with GC pauses.</p>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button data-action="pickPidstatFile">Load pidstat</button>
-            <button data-action="pickNstatFile">Load nstat</button>
-            <input type="file" id="pidstatFileInput" accept=".log,.txt,.out" style="display:none"/>
-            <input type="file" id="nstatFileInput" accept=".log,.txt,.out" style="display:none"/>
-          </div>
-          <pre style="font-size:10px;margin-top:6px;color:var(--muted)">pidstat -druwt -p &lt;pid&gt; 1 &gt; pidstat.log\nnstat -az &gt; nstat.log</pre>
-        </details>
-      </div>` : `
+      ${!hasPauses ? `<div class="jvm-gc-import"><p>No GC log loaded. Use <strong>Auto-detect dir</strong> or the <strong>GC</strong> button in the Import tab to load a Java GC log.</p></div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
           <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 � 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 � 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 � 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 � 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 � 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
@@ -4825,7 +4820,7 @@ function runFixCorrelation() {
     vmstatSamples: fix.vmstat,
     nstatSamples: fix.nstat,
     gcPauses: state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses,
-    gcWindowMs: fix.gcWindowMs,
+    gcWindowMs: fix.gcWindowMs || (() => { const pauses = state.jvmGc.pauses; if (!pauses.length) return 200; const durations = pauses.map(p => p.durationMs || 0).filter(d => d > 0); if (!durations.length) return 200; const avg = durations.reduce((s, d) => s + d, 0) / durations.length; return Math.round(Math.max(50, avg * 2)); })(),
     cpuCores: fix.cpuCores
   });
 }
@@ -4862,8 +4857,8 @@ function renderFixLatencyPanel() {
 
       ${hasRecords ? `<div class="bdp-controls" style="margin-left:auto">
         <label><span>Lag threshold</span><select id="fixThresholdInput" style="width:auto"><option value="1"${fix.threshold===1?" selected":""}>1 ms</option><option value="2"${fix.threshold===2?" selected":""}>2 ms</option><option value="5"${fix.threshold===5?" selected":""}>5 ms (default)</option><option value="10"${fix.threshold===10?" selected":""}>10 ms</option><option value="20"${fix.threshold===20?" selected":""}>20 ms</option><option value="50"${fix.threshold===50?" selected":""}>50 ms</option><option value="100"${fix.threshold===100?" selected":""}>100 ms</option></select></label>
-        <label><span>GC window</span><select id="fixGcWindowInput" style="width:auto"><option value="50"${fix.gcWindowMs===50?" selected":""}>50 ms</option><option value="100"${fix.gcWindowMs===100?" selected":""}>100 ms</option><option value="200"${fix.gcWindowMs===200?" selected":""}>200 ms</option><option value="500"${fix.gcWindowMs===500?" selected":""}>500 ms</option><option value="1000"${fix.gcWindowMs===1000?" selected":""}>1000 ms</option></select></label>
-        <label style="margin-left:6px"><span>GC zones</span><input id="fixShowGcZones" type="checkbox" ${fix.showGcZones ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
+        <label><span>GC window</span><select id="fixGcWindowInput" style="width:auto"><option value="0"${!fix.gcWindowMs?" selected":""}>auto${state.jvmGc.pauses.length ? ` (${Math.round(Math.max(50, (state.jvmGc.pauses.reduce((s,p) => s + (p.durationMs||0), 0) / state.jvmGc.pauses.length) * 2))}ms)` : ""}</option><option value="50"${fix.gcWindowMs===50?" selected":""}>50 ms</option><option value="100"${fix.gcWindowMs===100?" selected":""}>100 ms</option><option value="200"${fix.gcWindowMs===200?" selected":""}>200 ms</option><option value="500"${fix.gcWindowMs===500?" selected":""}>500 ms</option><option value="1000"${fix.gcWindowMs===1000?" selected":""}>1000 ms</option></select></label>
+        
         <label style="margin-left:6px"><span>CPUs</span><select id="fixCpuCores" style="width:auto"><option value="0"${!fix.cpuCores?" selected":""}>auto</option><option value="24"${fix.cpuCores===24?" selected":""}>24</option><option value="32"${fix.cpuCores===32?" selected":""}>32</option><option value="48"${fix.cpuCores===48?" selected":""}>48</option><option value="64"${fix.cpuCores===64?" selected":""}>64</option><option value="96"${fix.cpuCores===96?" selected":""}>96</option><option value="128"${fix.cpuCores===128?" selected":""}>128</option></select></label>
       </div>` : ""}
     </div>
@@ -4872,30 +4867,7 @@ function renderFixLatencyPanel() {
       <input type="file" id="fixDirInput" webkitdirectory style="display:none"/>
       <input type="file" id="fixVmstatFileInput" accept=".log,.txt,.out" style="display:none"/>
       <input type="file" id="fixNstatFileInput" accept=".log,.txt,.out" style="display:none"/>
-      ${!hasRecords ? `<div class="jvm-gc-import">
-        <p><strong>Import FIX connector logs</strong> � Supports .log, .txt, .gz files. Parses tag 52 (SendingTime) vs server timestamp to measure network + connector latency.</p>
-        <div style="display:flex;gap:12px;margin-top:8px;align-items:center;flex-wrap:wrap">
-          <button class="primary" data-action="pickFixFile">Load FIX file(s)</button>
-          <button data-action="pickFixDir">Load directory</button>
-        </div>
-        <div class="fix-progress" style="display:none;align-items:center;gap:8px;margin-top:10px">
-          <div style="flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden"><div id="fixProgressBar" style="width:0%;height:100%;border-radius:3px;background:linear-gradient(90deg,#2bbcf6,#66a8ff);transition:width 0.2s"></div></div>
-          <span id="fixProgressLabel" style="font-size:11px;color:var(--muted);white-space:nowrap">Idle</span>
-        </div>
-
-        <details style="margin-top:8px"><summary>Optional: vmstat / nstat (CPU & kernel correlation)</summary>
-          <p style="font-size:12px;color:var(--muted);margin:6px 0">Import vmstat or nstat output to correlate CPU scheduling and kernel drops with FIX latency spikes.</p>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button data-action="pickFixVmstatFile">Load vmstat</button>
-            <button data-action="pickFixNstatFile">Load nstat</button>
-          </div>
-          <pre style="font-size:10px;margin-top:6px;color:var(--muted)">vmstat -t 1 > vmstat.log
-while true; do nstat -r >/dev/null; sleep 1; echo "=== $(date --iso-8601=ns) ==="; nstat -z | egrep 'Tcp|Ip'; done > nstat.log</pre>
-        </details>
-        <details style="margin-top:12px"><summary>What is measured?</summary>
-          <p style="font-size:12px;color:var(--muted);margin:6px 0">Lag = server receive timestamp - tag 52 (SendingTime from peer). High lag on IN messages indicates network delay or connector thread-pool saturation. Correlation with ss snapshots identifies whether the cause is retransmissions, RTT spikes, recv-Q pressure, or cwnd collapse on the matching socket.</p>
-        </details>
-      </div>` : `
+      ${!hasRecords ? `<div class="jvm-gc-import"><p>No FIX logs loaded. Use <strong>Auto-detect dir</strong> or the <strong>FIX</strong> button in the Import tab to load FIX connector logs.</p></div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "none")}</span>
           <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:520px;max-height:280px;overflow-y:auto;columns:2;column-gap:18px"><span class="tooltip-kicker">FIX Latency Correlation — How to read</span><strong>Messages</strong><p>Total FIX messages parsed from all loaded files.</p><strong>Spikes</strong><p>Messages where lag (server receive time − tag 52 SendingTime) exceeds the configured threshold. These are the candidates for root-cause investigation.</p><strong>With ss evidence</strong><p>Spikes for which a matching TCP socket was found in the ss snapshots (by IP:port). This means we could inspect the socket state at the time of the spike.</p><strong>Endpoint match %</strong><p>Proportion of spikes where the FIX connection IP:port was found in ss data. 0% means ss was captured on a different host or the socket was not included.</p><strong>Cause breakdown</strong><p><b style="color:#3b82f6">Network</b>: ss shows retransmissions, RTT spike, cwnd collapse, or backoff at spike time.<br/><b style="color:#a855f7">Kernel</b>: nstat shows backlog drops, listen overflows, or RcvQ drops.<br/><b style="color:#ff9f43">CPU</b>: vmstat shows high run queue, CPU saturation, or I/O wait.<br/><b style="color:#2cc62c">GC</b>: a JVM GC pause overlaps the spike.<br/><b style="color:#8c9aab">Unknown</b>: no symptom found in any source — likely connector thread-pool scheduling or application-level delay.</p><strong>GC window</strong><p>A FIX spike is attributed to GC if it occurs during the pause or within this window after the pause ends. The JVM connector cannot read the socket during Stop-The-World, and needs time to drain the backlog after resuming. Shorter window = stricter attribution (only spikes very close to the pause). Longer window = catches backlog drain effects.</p><strong>If all causes are Unknown</strong><p>The network is innocent. The TCP socket was healthy at spike time (recvQ=0, retrans=0, RTT stable, cwnd normal). The lag is caused by something above TCP: thread scheduling, GC, or application processing. Load vmstat/nstat to investigate further.</p></span></span>
@@ -4921,34 +4893,41 @@ while true; do nstat -r >/dev/null; sleep 1; echo "=== $(date --iso-8601=ns) ===
               <div class="bdp-chart-title"><strong>FIX Lag + ss Recv-Q timeline</strong><span>overlay</span>${fixTools("timeline")}</div>
               <svg class="chart bdp-chart" data-fix-chart="timeline" role="img" aria-label="FIX latency timeline"></svg>
               <div class="chart-legend fix-chart-legend">
-                <button class="chart-legend-item ${fix.hiddenSeries.has("lag") ? "is-muted" : ""}" data-fix-series="lag"><i style="--legend-color:#ff5c77"></i><span>Lag spikes</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("recvq") ? "is-muted" : ""}" data-fix-series="recvq"><i style="--legend-color:rgba(59,130,246,0.8)"></i><span>Recv-Q</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("gczone") ? "is-muted" : ""}" data-fix-series="gczone"><i style="--legend-color:rgba(255,92,119,0.4)"></i><span>GC zones</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("lag") ? "is-muted" : ""}" data-fix-series="lag" title="Toggle lag spike dots. Colors indicate correlation severity: critical (strong network/GC cause), warning (moderate), info (weak)."><i style="--legend-color:#ff5c77"></i><span>critical</span></button><button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning_high") ? "is-muted" : ""}" data-fix-series="sev_warning_high" title="Score 0.5-0.7: moderate correlation. Click to toggle."><i style="--legend-color:#ff9f43"></i><span>warning_high</span></button><button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning") ? "is-muted" : ""}" data-fix-series="sev_warning" title="Score 0.3-0.5: weak correlation. Click to toggle."><i style="--legend-color:#ffd166"></i><span>warning</span></button><button class="chart-legend-item ${fix.hiddenSeries.has("sev_info") ? "is-muted" : ""}" data-fix-series="sev_info" title="Score 0.01-0.3: minimal correlation. Click to toggle."><i style="--legend-color:#39d6d6"></i><span>info</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("recvq") ? "is-muted" : ""}" data-fix-series="recvq" title="Toggle Recv-Q area. Shows unread bytes in the socket receive buffer from ss snapshots."><i style="--legend-color:rgba(59,130,246,0.8)"></i><span>Recv-Q</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("gczone") ? "is-muted" : ""}" data-fix-series="gczone" title="Toggle GC freeze zones. Red = JVM Stop-The-World (cannot read socket). Orange = drain window (backlog processing after STW)."><i style="--legend-color:rgba(255,92,119,0.4)"></i><span>GC zones</span></button>
               </div>
             </article>
             <article class="${fix.expandedChart === "scatter" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
               <div class="bdp-chart-title"><strong>Lag vs Correlation Score</strong><span>scatter</span>${fixTools("scatter")}</div>
               <svg class="chart bdp-chart" data-fix-chart="scatter" role="img" aria-label="FIX lag scatter"></svg>
+              <div class="chart-legend fix-chart-legend">
+                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_critical") ? "is-muted" : ""}" data-fix-series="sev_critical" title="Score 0.7-1.0: strong cause identified. Click to toggle."><i style="--legend-color:#ff5c77"></i><span>critical</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning_high") ? "is-muted" : ""}" data-fix-series="sev_warning_high" title="Score 0.5-0.7: moderate correlation. Click to toggle."><i style="--legend-color:#ff9f43"></i><span>warning_high</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning") ? "is-muted" : ""}" data-fix-series="sev_warning" title="Score 0.3-0.5: weak correlation. Click to toggle."><i style="--legend-color:#ffd166"></i><span>warning</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_info") ? "is-muted" : ""}" data-fix-series="sev_info" title="Score 0.01-0.3: minimal correlation. Click to toggle."><i style="--legend-color:#39d6d6"></i><span>info</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_none") ? "is-muted" : ""}" data-fix-series="sev_none" title="Score 0: no symptom found. Click to toggle."><i style="--legend-color:#8c9aab"></i><span>none</span></button>
+              </div>
             </article>
             ${fix.vmstat ? `<article class="${fix.expandedChart === "vmstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
               <div class="bdp-chart-title"><strong>CPU + Run Queue (vmstat)</strong><span>timeline</span>${fixTools("vmstat")}</div>
               <svg class="chart bdp-chart" data-fix-chart="vmstat" role="img" aria-label="vmstat CPU timeline"></svg>
               <div class="chart-legend fix-chart-legend">
-                <button class="chart-legend-item ${fix.hiddenSeries.has("us") ? "is-muted" : ""}" data-fix-series="us"><i style="--legend-color:#3b82f6"></i><span>us%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("sy") ? "is-muted" : ""}" data-fix-series="sy"><i style="--legend-color:#a855f7"></i><span>us+sy%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("wa") ? "is-muted" : ""}" data-fix-series="wa"><i style="--legend-color:#ff9f43"></i><span>+wa%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("runqueue") ? "is-muted" : ""}" data-fix-series="runqueue"><i style="--legend-color:#2cc62c"></i><span>runqueue</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("us") ? "is-muted" : ""}" data-fix-series="us" title="Toggle user CPU %. Time spent in user-space code."><i style="--legend-color:#3b82f6"></i><span>us%</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("sy") ? "is-muted" : ""}" data-fix-series="sy" title="Toggle user+system CPU %. Combined application + kernel time."><i style="--legend-color:#a855f7"></i><span>us+sy%</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("wa") ? "is-muted" : ""}" data-fix-series="wa" title="Toggle I/O wait %. CPU idle waiting for disk. High values indicate storage bottleneck."><i style="--legend-color:#ff9f43"></i><span>+wa%</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("runqueue") ? "is-muted" : ""}" data-fix-series="runqueue" title="Toggle run queue (r column). Processes waiting for CPU. Above CPU count = scheduling contention."><i style="--legend-color:#2cc62c"></i><span>runqueue</span></button>
               </div>
             </article>` : ""}
             ${fix.nstat ? `<article class="${fix.expandedChart === "nstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
               <div class="bdp-chart-title"><strong>TCP Drops & Retrans (nstat)</strong><span>timeline</span>${fixTools("nstat")}</div>
               <svg class="chart bdp-chart" data-fix-chart="nstat" role="img" aria-label="nstat counters timeline"></svg>
               <div class="chart-legend fix-chart-legend">
-                <button class="chart-legend-item ${fix.hiddenSeries.has("retrans") ? "is-muted" : ""}" data-fix-series="retrans"><i style="--legend-color:#ff5c77"></i><span>Retrans</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("timeouts") ? "is-muted" : ""}" data-fix-series="timeouts"><i style="--legend-color:#ff9f43"></i><span>Timeouts</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("backlogdrop") ? "is-muted" : ""}" data-fix-series="backlogdrop"><i style="--legend-color:#a855f7"></i><span>BacklogDrop</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("listendrop") ? "is-muted" : ""}" data-fix-series="listendrop"><i style="--legend-color:#ffd166"></i><span>ListenDrop</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("rcvqdrop") ? "is-muted" : ""}" data-fix-series="rcvqdrop"><i style="--legend-color:#39d6d6"></i><span>RcvQDrop</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("retrans") ? "is-muted" : ""}" data-fix-series="retrans" title="Toggle TcpRetransSegs/s. Retransmitted TCP segments per second — indicates packet loss."><i style="--legend-color:#ff5c77"></i><span>Retrans</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("timeouts") ? "is-muted" : ""}" data-fix-series="timeouts" title="Toggle TcpExtTCPTimeouts/s. TCP retransmission timeouts — severe loss or path failure."><i style="--legend-color:#ff9f43"></i><span>Timeouts</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("backlogdrop") ? "is-muted" : ""}" data-fix-series="backlogdrop" title="Toggle TcpExtTCPBacklogDrop/s. Packets dropped because socket backlog is full — application too slow to accept()."><i style="--legend-color:#a855f7"></i><span>BacklogDrop</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("listendrop") ? "is-muted" : ""}" data-fix-series="listendrop" title="Toggle TcpExtListenDrops/s. Incoming connections dropped — listen queue overflow."><i style="--legend-color:#ffd166"></i><span>ListenDrop</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("rcvqdrop") ? "is-muted" : ""}" data-fix-series="rcvqdrop" title="Toggle TcpExtTCPRcvQDrop/s. Packets dropped from receive queue — kernel memory pressure."><i style="--legend-color:#39d6d6"></i><span>RcvQDrop</span></button>
               </div>
             </article>` : ""}
           </div>
@@ -4994,10 +4973,10 @@ while true; do nstat -r >/dev/null; sleep 1; echo "=== $(date --iso-8601=ns) ===
 }
 
 function drawFixCharts() {
+ try {
   const fix = state.fixLatency;
   if (!fix.correlation?.results?.length) return;
   const history = visibleHistory().filter(s => s.epochMs);
-  if (!history.length) return;
   const allResults = fix.correlation.results;
   // Time range from all records
   const allTimes = fix.records.length ? [fix.records[0].receiveMs, fix.records[fix.records.length - 1].receiveMs] : allResults.map(r => r.receiveMs);
@@ -5008,19 +4987,33 @@ function drawFixCharts() {
 
   // Timeline chart
   const svg1 = document.querySelector("[data-fix-chart='timeline']");
-  if (svg1) { const zr = zoomRange("timeline"); const r1 = results.filter(r => r.receiveMs >= zr.start && r.receiveMs <= zr.end); if (r1.length) drawFixTimelineChart(svg1, r1, history, fix.showGcZones ? (state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses) : null, fix.gcWindowMs); }
+  if (svg1 && results.length) {
+    const tz = fix.zoom?.timeline || { start: 0, end: 1 };
+    const r1 = results.slice(Math.floor(tz.start * results.length), Math.ceil(tz.end * results.length));
+    if (r1.length) drawFixTimelineChart(svg1, r1, history, state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || (state.jvmGc.pauses.length ? state.jvmGc.pauses : null), fix.gcWindowMs || 200);
+  }
 
   // Scatter chart
   const svg2 = document.querySelector("[data-fix-chart='scatter']");
-  if (svg2) { const zr = zoomRange("scatter"); const r2 = results.filter(r => r.receiveMs >= zr.start && r.receiveMs <= zr.end); if (r2.length) drawFixScatterChart(svg2, r2); }
+  if (svg2 && results.length) drawFixScatterChart(svg2, results);
 
-  // vmstat chart
+  // vmstat chart (zoom based on vmstat own time range)
   const svg3 = document.querySelector("[data-fix-chart='vmstat']");
-  if (svg3 && fix.vmstat?.length) { const zr = zoomRange("vmstat"); const vm = fix.vmstat.filter(s => s.epochMs >= zr.start && s.epochMs <= zr.end); drawFixVmstatChart(svg3, vm.length ? vm : fix.vmstat, results, fix.cpuCores); }
+  if (svg3 && fix.vmstat?.length) {
+    const vz = fix.zoom?.vmstat || { start: 0, end: 1 };
+    const vt0 = fix.vmstat[0].epochMs, vt1 = fix.vmstat[fix.vmstat.length-1].epochMs, vspan = vt1-vt0||1;
+    const vm = fix.vmstat.slice(Math.floor(vz.start * fix.vmstat.length), Math.ceil(vz.end * fix.vmstat.length));
+    drawFixVmstatChart(svg3, vm.length ? vm : fix.vmstat, results, fix.cpuCores);
+  }
 
-  // nstat chart
+  // nstat chart (zoom based on nstat own time range)
   const svg4 = document.querySelector("[data-fix-chart='nstat']");
-  if (svg4 && fix.nstat?.length) { const zr = zoomRange("nstat"); const ns = fix.nstat.filter(s => s.epochMs >= zr.start && s.epochMs <= zr.end); drawFixNstatChart(svg4, ns.length ? ns : fix.nstat, results); }
+  if (svg4 && fix.nstat?.length) {
+    const nz = fix.zoom?.nstat || { start: 0, end: 1 };
+    const ns = fix.nstat.slice(Math.floor(nz.start * fix.nstat.length), Math.ceil(nz.end * fix.nstat.length));
+    drawFixNstatChart(svg4, ns.length ? ns : fix.nstat, results);
+  }
+ } catch(e) { console.error("drawFixCharts error:", e); }
 }
 
 function fixTimeLabel(epochMs) {
@@ -5067,8 +5060,7 @@ function fixSeverityColor(severity) {
 }
 
 function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs = 200) {
-  const rect = svg.getBoundingClientRect();
-  const w = rect.width || 640, h = rect.height || 240;
+  const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 60, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
 
@@ -5101,13 +5093,13 @@ function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs
   const recvQArea = recvQPath ? `${recvQPath}L${x(history[history.length - 1].epochMs)},${pad.t + plotH}L${x(history[0].epochMs)},${pad.t + plotH}Z` : "";
 
   // Lag points
-  const points = results.map(r => {
+  const hidden = state.fixLatency.hiddenSeries;
+  const points = results.filter(r => !hidden.has(`sev_${r.severity || "none"}`)).map(r => {
     const color = fixSeverityColor(r.severity);
     return `<circle cx="${x(r.receiveMs)}" cy="${yLag(r.lagMs)}" r="3.5" fill="${color}" opacity="0.85" style="cursor:pointer"><title>${r.lagMs.toFixed(1)}ms | ${r.direction} ${r.msgType} | ${r.endpoint} | ${r.severity}${r.cause ? " | cause: " + r.cause : ""}${r.signals.length ? "\nsignals: " + r.signals.join(", ") : ""}</title></circle>`;
   }).join("");
 
   const legend = "";
-  const hidden = state.fixLatency.hiddenSeries;
 
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.innerHTML = `
@@ -5128,8 +5120,7 @@ function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs
 }
 
 function drawFixScatterChart(svg, results) {
-  const rect = svg.getBoundingClientRect();
-  const w = rect.width || 640, h = rect.height || 240;
+  const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 26, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
 
@@ -5143,17 +5134,13 @@ function drawFixScatterChart(svg, results) {
   const xLabels = xTicks.map(t => `<text x="${t.px}" y="${h - 8}" text-anchor="middle" fill="var(--muted)" font-size="10">${t.val >= 1000 ? `${(t.val/1000).toFixed(1)}s` : `${Math.round(t.val)}ms`}</text>`).join("");
   const yLabels = yTicks.map(t => `<text x="${pad.l - 6}" y="${t.py + 3}" text-anchor="end" fill="var(--muted)" font-size="10">${t.val.toFixed(2)}</text>`).join("");
 
-  const points = results.map(r => {
+  const hidden = state.fixLatency.hiddenSeries;
+  const points = results.filter(r => !hidden.has(`sev_${r.severity || "none"}`)).map(r => {
     const color = fixSeverityColor(r.severity);
     return `<circle cx="${x(r.lagMs)}" cy="${y(r.score)}" r="3.5" fill="${color}" opacity="0.8" style="cursor:pointer"><title>Lag: ${r.lagMs.toFixed(1)}ms | Score: ${r.score.toFixed(2)} | ${r.severity}\nCause: ${r.cause || "unknown"}\nSignals: ${r.signals.join(", ") || "none"}\n${r.endpoint} ${r.direction} ${r.msgType}</title></circle>`;
   }).join("");
 
-  const legend = `<g transform="translate(${pad.l + 8}, ${pad.t + 12})" font-size="10">
-    <circle cx="0" cy="0" r="3" fill="#ff5c77"/><text x="6" y="3" fill="var(--text)">critical</text>
-    <circle cx="60" cy="0" r="3" fill="#ff9f43"/><text x="66" y="3" fill="var(--text)">warning_high</text>
-    <circle cx="150" cy="0" r="3" fill="#ffd166"/><text x="156" y="3" fill="var(--text)">warning</text>
-    <circle cx="220" cy="0" r="3" fill="#39d6d6"/><text x="226" y="3" fill="var(--text)">info</text>
-  </g>`;
+  const legend = "";
 
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.innerHTML = `
@@ -5169,8 +5156,7 @@ function drawFixScatterChart(svg, results) {
 }
 
 function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
-  const rect = svg.getBoundingClientRect();
-  const w = rect.width || 640, h = rect.height || 240;
+  const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 50, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
 
@@ -5210,8 +5196,8 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
     `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ff5c77" stroke-width="0.7" opacity="0.35"/>`
   ).join("");
 
-  const legend = "";
   const hidden = state.fixLatency.hiddenSeries;
+  const legend = "";
 
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.innerHTML = `
@@ -5234,8 +5220,7 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
 }
 
 function drawFixNstatChart(svg, nsamples, fixResults) {
-  const rect = svg.getBoundingClientRect();
-  const w = rect.width || 640, h = rect.height || 240;
+  const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 26, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
 
@@ -5256,8 +5241,10 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
   const xLabelsHtml = fixChartXLabels(xTicks, h);
   const yLabelsHtml = fixChartYLabels(yTicks, pad, v => String(Math.round(v)));
 
+  const hidden = state.fixLatency.hiddenSeries;
+  const seriesKeys = ["retrans", "timeouts", "backlogdrop", "listendrop", "rcvqdrop"];
   const lines = keys.map((key, ki) => {
-    if (hidden.has(seriesKeys[ki])) return "";
+    if (hidden?.has(seriesKeys[ki])) return "";
     let path = "";
     for (let i = 0; i < nsamples.length; i++) {
       const px = x(nsamples[i].epochMs), py = y(nsamples[i].counters[key] || 0);
@@ -5271,8 +5258,6 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
   ).join("");
 
   const legend = "";
-  const hidden = state.fixLatency.hiddenSeries;
-  const seriesKeys = ["retrans", "timeouts", "backlogdrop", "listendrop", "rcvqdrop"];
 
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.innerHTML = `
@@ -9558,6 +9543,8 @@ function bindEvents() {
       if (state.chartsTab === tab) return;
       state.chartsTab = tab;
       render();
+      if (tab === "fix") setTimeout(drawFixCharts, 100);
+      if (tab === "jvm") setTimeout(drawJvmCharts, 100);
     });
   });
   document.querySelectorAll("[data-cm-search]").forEach(btn => {
@@ -9834,7 +9821,7 @@ function bindEvents() {
       openTopologyModal(state);
       renderKeepingWorkspacePosition();
     }
-    if (action === "pickJvmGcFile") { document.querySelector("#jvmGcFileInput")?.click(); }
+    if (action === "pickJvmGcFile") { (document.querySelector("#ingestGcFileInput") || document.querySelector("#jvmGcFileInput"))?.click(); }
     if (action === "pickPidstatFile") { document.querySelector("#pidstatFileInput")?.click(); }
     if (action === "pickNstatFile") { document.querySelector("#nstatFileInput")?.click(); }
     if (action === "parseJvmGcLog") {
@@ -9856,10 +9843,11 @@ function bindEvents() {
     if (action === "expandFixChart") { const id = event.currentTarget.dataset.fixChartId; state.fixLatency.expandedChart = state.fixLatency.expandedChart === id ? null : id; render(); requestAnimationFrame(drawFixCharts); }
     if (action === "fixTablePrev") { state.fixTable.page = Math.max(1, state.fixTable.page - 1); render(); }
     if (action === "fixTableNext") { state.fixTable.page++; render(); }
-    if (action === "pickFixFile") { document.querySelector("#fixFileInput")?.click(); }
-    if (action === "pickFixDir") { document.querySelector("#fixDirInput")?.click(); }
-    if (action === "pickFixVmstatFile") { document.querySelector("#fixVmstatFileInput")?.click(); }
-    if (action === "pickFixNstatFile") { document.querySelector("#fixNstatFileInput")?.click(); }
+    if (action === "pickAutoDir") { document.querySelector("#ingestAutoDir")?.click(); }
+    if (action === "pickFixFile") { (document.querySelector("#ingestFixFileInput") || document.querySelector("#fixFileInput"))?.click(); }
+    if (action === "pickFixDir") { const el = document.querySelector("#ingestFixDirInput") || document.querySelector("#fixDirInput"); if (el) el.click(); }
+    if (action === "pickFixVmstatFile") { (document.querySelector("#ingestVmstatFileInput") || document.querySelector("#fixVmstatFileInput"))?.click(); }
+    if (action === "pickFixNstatFile") { (document.querySelector("#ingestNstatFileInput") || document.querySelector("#fixNstatFileInput"))?.click(); }
     if (action === "clearFixLog") {
       state.fixLatency = { records: [], correlation: null, threshold: 5, fileStats: [], vmstat: null, nstat: null };
       state.fixTable = { page: 1, pageSize: 20, sortKey: "lag", sortDir: "desc" };
@@ -11118,6 +11106,50 @@ function bindEvents() {
     render();
     requestAnimationFrame(drawFixCharts);
   });
+  document.querySelector("#ingestAutoDir")?.addEventListener("change", async e => {
+    const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|out|gz|zip|ss)$/i.test(f.name));
+    if (!files.length) return;
+    _showBusy();
+    const classified = { ss: [], fix: [], gc: [], vmstat: [], nstat: [] };
+    for (const file of files) {
+      try {
+        const slice = await file.slice(0, 4096).text();
+        if (/^===\s*\d{4}-/.test(slice) && /Tcp/.test(slice)) classified.nstat.push(file);
+        else if (/^procs\s+---/.test(slice) || /^\s*\d+\s+\d+\s+\d+\s+\d+.*\d{4}-\d{2}-\d{2}/m.test(slice)) classified.vmstat.push(file);
+        else if (/GC\(\d+\)|Pause (Young|Full|G1)|\[gc[\],]|Using G1|Using ZGC|Using Shenandoah|gc,init/i.test(slice)) classified.gc.push(file);
+        else if (/FIXTcpConnection|\\|52=\d{8}/.test(slice)) classified.fix.push(file);
+        else if (/tcp\s+(ESTAB|LISTEN|TIME-WAIT|CLOSE-WAIT)/i.test(slice) || /^tcp\s/m.test(slice)) classified.ss.push(file);
+      } catch(err) {}
+    }
+    const summary = [];
+    // Load ss FIRST and wait for it to be parsed before loading other sources
+    if (classified.ss.length) {
+      const ssFile = classified.ss[0];
+      const ssText = await ssFile.text();
+      const cmEl = document.querySelector("#rawInput") || document.querySelector(".CodeMirror");
+      if (cmInstance) cmInstance.setValue(ssText);
+      else if (cmEl) cmEl.value = ssText;
+      state.raw = ssText; state.rawVersion = (state.rawVersion || 0) + 1; state.sourceName = ssFile.name;
+      state.cache = {};
+      document.querySelector("[data-action='parse']")?.click();
+      await new Promise(resolve => { const check = () => state.sockets.length > 0 ? resolve() : setTimeout(check, 300); check(); });
+      summary.push(`ss: ${ssFile.name}`);
+    }
+    if (classified.gc.length) { const file = classified.gc[0]; file.text().then(text => { const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; const lines = text.split("\n").filter(l => gcPattern.test(l)).join("\n"); const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; state.jvmGc.mode = "receiver"; }); summary.push(`GC: ${classified.gc[0].name}`); }
+    if (classified.vmstat.length) { classified.vmstat[0].text().then(text => { state.fixLatency.vmstat = parseVmstat(text).samples; render(); }); summary.push(`vmstat: ${classified.vmstat[0].name}`); }
+    if (classified.nstat.length) { classified.nstat[0].text().then(text => { state.fixLatency.nstat = parseNstatTimestamped(text).samples; render(); }); summary.push(`nstat: ${classified.nstat[0].name}`); }
+    if (classified.fix.length) { await ingestFixFiles(classified.fix); summary.push(`FIX: ${classified.fix.length} file(s)`); }
+    _hideBusy();
+    toast("Auto-detect complete", summary.length ? summary.join(" · ") : "No recognized files found");
+    render();
+    // Wait for ss to be fully parsed, then run correlations
+    const waitForSs = () => { if (state.sockets.length > 0) { setTimeout(() => { if (state.jvmGc.pauses.length) runJvmCorrelation(); if (state.fixLatency.records.length) runFixCorrelation(); render(); }, 500); } else { setTimeout(waitForSs, 500); } }; waitForSs();
+  });
+  document.querySelector("#ingestGcFileInput")?.addEventListener("change", e => { document.querySelector("#jvmGcFileInput")?.dispatchEvent || null; const el = document.querySelector("#jvmGcFileInput"); if (el) { el.files = e.target.files; el.dispatchEvent(new Event("change")); } else { const file = e.target.files?.[0]; if (!file) return; _showBusy(); const reader = file.stream().getReader(); const decoder = new TextDecoder(); let buffer = ""; let lines = ""; const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; function pump() { reader.read().then(({ done, value }) => { if (done) { if (buffer && gcPattern.test(buffer)) lines += buffer + "\n"; const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; runJvmCorrelation(); _hideBusy(); toast("GC log loaded", `${pauses.length} pauses from ${file.name}`); render(); return; } buffer += decoder.decode(value, { stream: true }); const parts = buffer.split("\n"); buffer = parts.pop(); for (const line of parts) { if (gcPattern.test(line)) lines += line + "\n"; } setTimeout(pump, 0); }); } pump(); } });
+  document.querySelector("#ingestVmstatFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { const { samples } = parseVmstat(text); state.fixLatency.vmstat = samples; toast("vmstat loaded", `${samples.length} samples from ${file.name}`); render(); }); });
+  document.querySelector("#ingestNstatFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { const { samples } = parseNstatTimestamped(text); state.fixLatency.nstat = samples; toast("nstat loaded", `${samples.length} samples from ${file.name}`); render(); }); });
+  document.querySelector("#ingestFixFileInput")?.addEventListener("change", e => { const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name)); ingestFixFiles(files); });
+  document.querySelector("#ingestFixDirInput")?.addEventListener("change", e => { const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name)); ingestFixFiles(files); });
   document.querySelector("#fixVmstatFileInput")?.addEventListener("change", e => {
     const file = e.target.files?.[0];
     if (!file) return;

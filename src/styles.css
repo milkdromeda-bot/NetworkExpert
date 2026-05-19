@@ -9894,3 +9894,12 @@ mark.guide-hl {
 .fix-chart-expanded { grid-column: 1 / -1; }
 .fix-chart-expanded .bdp-chart { height: 400px !important; }
 .fix-chart-hidden { display: none; }
+
+.ingest-extra-sources { display: flex; gap: 4px; align-items: center; margin-left: 4px; border-left: 1px solid var(--line); padding-left: 8px; }
+.ingest-extra-sources button { font-size: 11px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.ingest-extra-sources button:hover { border-color: var(--accent); color: var(--text); }
+.ingest-extra-sources button.chip-loaded { border-color: rgba(44,198,44,0.4); color: #2cc62c; }
+
+.ingest-toolbar-divider { width: 1px; height: 28px; background: linear-gradient(180deg, transparent, var(--line), transparent); margin: 0 8px; flex-shrink: 0; }
+
+[data-fix-chart] { min-height: 200px; width: 100%; display: block; }
