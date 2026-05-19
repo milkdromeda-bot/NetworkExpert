@@ -367,7 +367,7 @@ function renderDashboardPresetOptions(selectedId) {
 }
 function clampChartTooltipOpacity(value) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return 0.8;
+  if (!Number.isFinite(number)) return 0.3;
   return Math.max(0.2, Math.min(1, number));
 }
 
@@ -3647,6 +3647,16 @@ function renderJvmGcPanel() {
           <strong>nstat counters</strong>
           <em>Retrans: ${gc.nstat.retransSegs} · Timeouts: ${gc.nstat.timeouts} · ListenDrops: ${gc.nstat.listenDrops} · MemPressure: ${gc.nstat.tcpMemoryPressures} · RcvPruned: ${gc.nstat.rcvPruned}</em>
         </div>` : ""}
+        <details style="padding:6px 12px;border-radius:8px;background:rgba(140,183,255,0.06);border:1px solid rgba(140,183,255,0.12);font-size:11px;color:var(--muted);line-height:1.5;margin:0 0 0 0"><summary style="cursor:pointer;color:var(--text);font-weight:600">How to read</summary>
+          Each dot is a FIX message with lag > threshold. Dot color = <strong style="color:#ff5c77">correlation strength</strong> (not lag severity). 
+          <br/><span style="color:#ff5c77">● critical</span> = strong evidence of network/GC/CPU cause.<br/>
+          <span style="color:#ff9f43">● warning_high</span> = moderate-strong evidence.<br/>
+          <span style="color:#ffd166">● warning</span> = moderate evidence.<br/>
+          <span style="color:#39d6d6">● info</span> = weak.<br/>
+          <span style="color:#8c9aab">● none</span> = no cause found (healthy socket at spike time).<br/>
+          The scatter plot shows lag (X) vs correlation score (Y) — top-right = high lag with strong cause.
+          <br/><strong>Note:</strong> nstat counters are host-wide (all sockets), not per-connection. On a busy host with many connections, nstat retrans may be coincidental — ss per-socket evidence is more reliable.
+        </details>
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article>
@@ -4853,7 +4863,7 @@ function renderFixLatencyPanel() {
   return `<section class="panel jvm-gc-panel">
     <div class="panel-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px">
       <span style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap">FIX Latency Correlation</span>
-      ${hasRecords ? `<button class="jvm-clear-btn" data-action="clearFixLog" title="Clear FIX data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}
+      
 
       ${hasRecords ? `<div class="bdp-controls" style="margin-left:auto">
         <label><span>Lag threshold</span><select id="fixThresholdInput" style="width:auto"><option value="1"${fix.threshold===1?" selected":""}>1 ms</option><option value="2"${fix.threshold===2?" selected":""}>2 ms</option><option value="5"${fix.threshold===5?" selected":""}>5 ms (default)</option><option value="10"${fix.threshold===10?" selected":""}>10 ms</option><option value="20"${fix.threshold===20?" selected":""}>20 ms</option><option value="50"${fix.threshold===50?" selected":""}>50 ms</option><option value="100"${fix.threshold===100?" selected":""}>100 ms</option></select></label>
@@ -4887,6 +4897,16 @@ function renderFixLatencyPanel() {
             ${!fix.nstat ? '<button class="tiny-btn" data-action="pickFixNstatFile"><i class="ri-bar-chart-line"></i> + nstat</button>' : '<span class="chip" style="font-size:10px"><i class="ri-bar-chart-line"></i> nstat ✓</span>'}
           </span>
         </div>` : ""}
+        <details style="padding:6px 12px;border-radius:8px;background:rgba(140,183,255,0.06);border:1px solid rgba(140,183,255,0.12);font-size:11px;color:var(--muted);line-height:1.5;margin:0 0 0 0"><summary style="cursor:pointer;color:var(--text);font-weight:600">How to read</summary>
+          Each dot is a FIX message with lag > threshold. Dot color = <strong style="color:#ff5c77">correlation strength</strong> (not lag severity). 
+          <br/><span style="color:#ff5c77">● critical</span> = strong evidence of network/GC/CPU cause.<br/>
+          <span style="color:#ff9f43">● warning_high</span> = moderate-strong evidence.<br/>
+          <span style="color:#ffd166">● warning</span> = moderate evidence.<br/>
+          <span style="color:#39d6d6">● info</span> = weak.<br/>
+          <span style="color:#8c9aab">● none</span> = no cause found (healthy socket at spike time).<br/>
+          The scatter plot shows lag (X) vs correlation score (Y) — top-right = high lag with strong cause.
+          <br/><strong>Note:</strong> nstat counters are host-wide (all sockets), not per-connection. On a busy host with many connections, nstat retrans may be coincidental — ss per-socket evidence is more reliable.
+        </div>
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article class="${fix.expandedChart === "timeline" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
@@ -4909,7 +4929,7 @@ function renderFixLatencyPanel() {
                 <button class="chart-legend-item ${fix.hiddenSeries.has("sev_none") ? "is-muted" : ""}" data-fix-series="sev_none" title="Score 0: no symptom found. Click to toggle."><i style="--legend-color:#8c9aab"></i><span>none</span></button>
               </div>
             </article>
-            ${fix.vmstat ? `<article class="${fix.expandedChart === "vmstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
+            ${fix.vmstat ? `<article class="${fix.expandedChart === "vmstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : !fix.nstat ? "fix-chart-expanded" : ""}">
               <div class="bdp-chart-title"><strong>CPU + Run Queue (vmstat)</strong><span>timeline</span>${fixTools("vmstat")}</div>
               <svg class="chart bdp-chart" data-fix-chart="vmstat" role="img" aria-label="vmstat CPU timeline"></svg>
               <div class="chart-legend fix-chart-legend">
@@ -4917,6 +4937,7 @@ function renderFixLatencyPanel() {
                 <button class="chart-legend-item ${fix.hiddenSeries.has("sy") ? "is-muted" : ""}" data-fix-series="sy" title="Toggle user+system CPU %. Combined application + kernel time."><i style="--legend-color:#a855f7"></i><span>us+sy%</span></button>
                 <button class="chart-legend-item ${fix.hiddenSeries.has("wa") ? "is-muted" : ""}" data-fix-series="wa" title="Toggle I/O wait %. CPU idle waiting for disk. High values indicate storage bottleneck."><i style="--legend-color:#ff9f43"></i><span>+wa%</span></button>
                 <button class="chart-legend-item ${fix.hiddenSeries.has("runqueue") ? "is-muted" : ""}" data-fix-series="runqueue" title="Toggle run queue (r column). Processes waiting for CPU. Above CPU count = scheduling contention."><i style="--legend-color:#2cc62c"></i><span>runqueue</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("fixmarkers") ? "is-muted" : ""}" data-fix-series="fixmarkers" title="Toggle FIX spike markers. White vertical lines showing when FIX messages had lag > threshold."><i style="--legend-color:#ffffff"></i><span>FIX spikes</span></button>
               </div>
             </article>` : ""}
             ${fix.nstat ? `<article class="${fix.expandedChart === "nstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
@@ -4928,6 +4949,7 @@ function renderFixLatencyPanel() {
                 <button class="chart-legend-item ${fix.hiddenSeries.has("backlogdrop") ? "is-muted" : ""}" data-fix-series="backlogdrop" title="Toggle TcpExtTCPBacklogDrop/s. Packets dropped because socket backlog is full — application too slow to accept()."><i style="--legend-color:#a855f7"></i><span>BacklogDrop</span></button>
                 <button class="chart-legend-item ${fix.hiddenSeries.has("listendrop") ? "is-muted" : ""}" data-fix-series="listendrop" title="Toggle TcpExtListenDrops/s. Incoming connections dropped — listen queue overflow."><i style="--legend-color:#ffd166"></i><span>ListenDrop</span></button>
                 <button class="chart-legend-item ${fix.hiddenSeries.has("rcvqdrop") ? "is-muted" : ""}" data-fix-series="rcvqdrop" title="Toggle TcpExtTCPRcvQDrop/s. Packets dropped from receive queue — kernel memory pressure."><i style="--legend-color:#39d6d6"></i><span>RcvQDrop</span></button>
+                <button class="chart-legend-item ${fix.hiddenSeries.has("fixmarkers") ? "is-muted" : ""}" data-fix-series="fixmarkers" title="Toggle FIX spike markers. White vertical lines showing when FIX messages had lag > threshold."><i style="--legend-color:#ffffff"></i><span>FIX spikes</span></button>
               </div>
             </article>` : ""}
           </div>
@@ -5048,7 +5070,7 @@ function fixChartGrid(xTicks, yTicks, pad, w, h) {
 }
 
 function fixChartXLabels(xTicks, h) {
-  return xTicks.map(t => `<text x="${t.px}" y="${h - 8}" text-anchor="middle" fill="var(--muted)" font-size="10">${t.label}</text>`).join("");
+  return xTicks.map(t => `<text x="${t.px}" y="${h - 20}" text-anchor="middle" fill="var(--muted)" font-size="10">${t.label}</text>`).join("");
 }
 
 function fixChartYLabels(yTicks, pad, formatter) {
@@ -5108,7 +5130,7 @@ function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs
     ${gcPauses && !hidden.has("gczone") ? gcPauses.filter(p => { const ps = p.alignedEpochMs || p.epochMs || 0; return ps >= t0 - gcWindowMs && ps <= t1; }).map(p => { const ps = p.alignedEpochMs || p.epochMs || 0; const pe = ps + (p.durationMs || 0); const x1 = Math.max(pad.l, x(ps)); const x2 = Math.min(pad.l + plotW, x(pe)); const x3 = Math.min(pad.l + plotW, x(pe + gcWindowMs)); return `<rect x="${x1}" y="${pad.t}" width="${Math.max(1, x2 - x1)}" height="${plotH}" fill="rgba(255,92,119,0.5)"/><rect x="${x2}" y="${pad.t}" width="${Math.max(0, x3 - x2)}" height="${plotH}" fill="rgba(255,159,67,0.3)"/>`; }).join("") : ""}
     ${!hidden.has("recvq") ? `<path d="${recvQArea}" fill="rgba(59,130,246,0.12)" stroke="rgba(59,130,246,0.5)" stroke-width="1.2"/>` : ""}
     ${!hidden.has("lag") ? points : ""}
-    <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
+    <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
     <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">Lag (ms)</text>
     <text x="${w - 12}" y="${h / 2}" transform="rotate(90 ${w - 12} ${h / 2})" text-anchor="middle" fill="rgba(59,130,246,0.8)" font-size="11">Recv-Q (bytes)</text>
 
@@ -5116,7 +5138,7 @@ function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs
     <rect class="fix-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent"/>
     ${(() => { const sel = results.find(r => r.receiveMs === state.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.receiveMs), sy = yLag(sel.lagMs); return `<line x1="${sx}" y1="${pad.t}" x2="${sx}" y2="${pad.t + plotH}" stroke="#fff" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.9"/><circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx}" y="${pad.t - 6}" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms ${sel.cause || ""}</text>`; })()}
   `;
-  attachFixChartCrosshair(svg, pad, w, h, t0, span, results, r => `${r.lagMs.toFixed(1)}ms ${r.direction} ${r.msgType}`);
+  attachFixChartCrosshair(svg, pad, w, h, t0, span, results, r => `${r.lagMs.toFixed(1)}ms · ${r.direction} ${r.msgType} ${r.symbol} · ${r.endpoint} · Cause: ${r.cause || "unknown"} · Score: ${r.score ? r.score.toFixed(2) : "0"}`);
 }
 
 function drawFixScatterChart(svg, results) {
@@ -5191,12 +5213,11 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
   for (let i = 0; i < vmsamples.length; i++) {
     rPath += (i === 0 ? "M" : "L") + `${x(vmsamples[i].epochMs)},${yR(vmsamples[i].r)}`;
   }
-  // FIX spike markers
-  const markers = fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
-    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ff5c77" stroke-width="0.7" opacity="0.35"/>`
-  ).join("");
-
   const hidden = state.fixLatency.hiddenSeries;
+  // FIX spike markers
+  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
+    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/>`
+  ).join("");
   const legend = "";
 
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
@@ -5209,14 +5230,14 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
     ${!hidden.has("us") ? `<path d="${usPath}" fill="none" stroke="#3b82f6" stroke-width="2"/>` : ""}
     ${!hidden.has("runqueue") ? `<path d="${rPath}" fill="none" stroke="#2cc62c" stroke-width="2" stroke-dasharray="4,2"/>` : ""}
     ${cpuCores > 0 ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${yR(cpuCores)}" y2="${yR(cpuCores)}" stroke="#ff5c77" stroke-width="1" stroke-dasharray="6,4" opacity="0.7"/><text x="${w - pad.r - 4}" y="${yR(cpuCores) - 4}" text-anchor="end" fill="#ff5c77" font-size="9">${cpuCores} CPUs</text>` : ""}
-    <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
+    <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
     <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">CPU %</text>
     <text x="${w - 12}" y="${h / 2}" transform="rotate(90 ${w - 12} ${h / 2})" text-anchor="middle" fill="#2cc62c" font-size="11">Run Queue</text>
 
     ${legend}
     <rect class="fix-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent"/>
   `;
-  attachFixChartCrosshair(svg, pad, w, h, t0, span, vmsamples, s => `r=${s.r} us=${s.us}% sy=${s.sy}% wa=${s.wa}% cs=${formatNumber(s.cs)}`);
+  attachFixChartCrosshair(svg, pad, w, h, t0, span, vmsamples, s => `r=${s.r} · us=${s.us}% · sy=${s.sy}% · wa=${s.wa}% · idle=${s.id}% · cs=${formatNumber(s.cs)} · bo=${s.bo}`);
 }
 
 function drawFixNstatChart(svg, nsamples, fixResults) {
@@ -5253,8 +5274,8 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
     return path ? `<path d="${path}" fill="none" stroke="${colors[ki]}" stroke-width="1.5" opacity="0.85"/>` : "";
   }).join("");
 
-  const markers = fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
-    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ff5c77" stroke-width="0.7" opacity="0.25"/>`
+  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
+    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/>`
   ).join("");
 
   const legend = "";
@@ -5265,7 +5286,7 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
     ${grid}${xLabelsHtml}${yLabelsHtml}
     ${markers}
     ${lines}
-    <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
+    <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="var(--muted)" font-size="11">Time (UTC)</text>
     <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">Count / second</text>
 
     ${legend}
@@ -5277,31 +5298,42 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
 function attachFixChartCrosshair(svg, pad, w, h, t0, span, data, labelFn) {
   const zone = svg.querySelector(".fix-hover-zone");
   if (!zone || !data.length) return;
-  let crosshairEl = svg.querySelector(".fix-crosshair-g");
-  if (!crosshairEl) {
-    crosshairEl = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    crosshairEl.classList.add("fix-crosshair-g");
-    crosshairEl.style.pointerEvents = "none";
-    crosshairEl.innerHTML = `<line class="fix-xh-line" y1="${pad.t}" y2="${h - pad.b}" stroke="var(--accent)" stroke-width="0.8" opacity="0.6"/><text class="fix-xh-label" y="${pad.t - 4}" fill="var(--text)" font-size="10" text-anchor="middle"></text><text class="fix-xh-time" y="${h - pad.b + 14}" fill="var(--muted)" font-size="10" text-anchor="middle"></text>`;
-    svg.appendChild(crosshairEl);
-  }
-  crosshairEl.style.display = "none";
+  let g = svg.querySelector(".fix-crosshair-g");
+  if (g) g.remove();
+  g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.classList.add("fix-crosshair-g");
+  g.style.pointerEvents = "none";
+  g.style.display = "none";
+  g.innerHTML = `<line class="xh-v" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffd166" stroke-width="1" stroke-dasharray="4,3" opacity="0.8"/><line class="xh-h" x1="${pad.l}" x2="${w - pad.r}" stroke="#ffd166" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/><rect class="xh-bg" rx="6" ry="6" fill="rgba(14,17,22,0.88)" stroke="rgba(140,183,255,0.25)" stroke-width="1"/><text class="xh-title" font-size="12" font-weight="700" fill="#edf4ff"></text><g class="xh-rows"></g>`;
+  svg.appendChild(g);
   zone.addEventListener("mousemove", e => {
     const rect = svg.getBoundingClientRect();
     const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
     const frac = Math.max(0, Math.min(1, (mx - pad.l) / (w - pad.l - pad.r)));
     const epoch = t0 + frac * span;
     const closest = data.reduce((best, item) => Math.abs((item.epochMs || item.receiveMs) - epoch) < Math.abs((best.epochMs || best.receiveMs) - epoch) ? item : best, data[0]);
     const cx = pad.l + (((closest.epochMs || closest.receiveMs) - t0) / span) * (w - pad.l - pad.r);
-    crosshairEl.style.display = "";
-    crosshairEl.querySelector(".fix-xh-line").setAttribute("x1", cx);
-    crosshairEl.querySelector(".fix-xh-line").setAttribute("x2", cx);
-    crosshairEl.querySelector(".fix-xh-label").setAttribute("x", cx);
-    crosshairEl.querySelector(".fix-xh-label").textContent = labelFn(closest);
-    crosshairEl.querySelector(".fix-xh-time").setAttribute("x", cx);
-    crosshairEl.querySelector(".fix-xh-time").textContent = fixTimeLabel(closest.epochMs || closest.receiveMs);
+    g.style.display = "";
+    g.querySelector(".xh-v").setAttribute("x1", cx);
+    g.querySelector(".xh-v").setAttribute("x2", cx);
+    g.querySelector(".xh-h").setAttribute("y1", my);
+    g.querySelector(".xh-h").setAttribute("y2", my);
+    const label = labelFn(closest);
+    const time = fixTimeLabel(closest.epochMs || closest.receiveMs);
+    const lines = label.split(" · ");
+    const tooltipX = cx + 14 + 160 > w ? cx - 170 : cx + 14;
+    const tooltipY = Math.max(pad.t + 4, Math.min(h - pad.b - (lines.length * 16 + 30), my - 20));
+    const titleEl = g.querySelector(".xh-title");
+    titleEl.setAttribute("x", tooltipX + 10); titleEl.setAttribute("y", tooltipY + 18); titleEl.textContent = time;
+    const rowsG = g.querySelector(".xh-rows");
+    rowsG.innerHTML = lines.map((line, i) => `<text x="${tooltipX + 10}" y="${tooltipY + 34 + i * 16}" font-size="11" fill="#c4d0de"><tspan fill="#8cb7ff">● </tspan>${line}</text>`).join("");
+    const bgEl = g.querySelector(".xh-bg");
+    const tw = Math.max(150, Math.max(time.length, ...lines.map(l => l.length)) * 7 + 20);
+    const th = lines.length * 16 + 28;
+    bgEl.setAttribute("x", tooltipX); bgEl.setAttribute("y", tooltipY); bgEl.setAttribute("width", tw); bgEl.setAttribute("height", th);
   });
-  zone.addEventListener("mouseleave", () => { crosshairEl.style.display = "none"; });
+  zone.addEventListener("mouseleave", () => { g.style.display = "none"; });
 }
 
 function renderActiveTab() {

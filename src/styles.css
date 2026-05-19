@@ -9903,3 +9903,6 @@ mark.guide-hl {
 .ingest-toolbar-divider { width: 1px; height: 28px; background: linear-gradient(180deg, transparent, var(--line), transparent); margin: 0 8px; flex-shrink: 0; }
 
 [data-fix-chart] { min-height: 200px; width: 100%; display: block; }
+
+.jvm-gc-panel .jvm-chart-section { margin-top: 0; padding-top: 0; }
+.jvm-gc-panel .panel-body > details + .jvm-chart-section { margin-top: 1px; }
