@@ -182,6 +182,26 @@ export const COLUMN_HELP = {
     summary: "Retransmission timer count from ss timer data.",
     detail: "This reflects active retransmission recovery state exposed in timer:(...). It is a compact signal that ACKs are not arriving as expected.",
     use: "Correlate with RTO, backoff, RTT variance, cwnd, and interface or path loss counters."
+  },
+  wscale: {
+    summary: "TCP Window Scale factors negotiated at handshake: wscale:<snd>:<rcv>.",
+    detail: "What it means: multiplier applied to the 16-bit window field to support large windows (>64KB). What it does not prove: a high wscale alone does not mean the window is actually large — check rcv_space and actual advertised window. Confirm with: BDP analysis, rcv_space, rcv_ssthresh, and whether rwnd_limited is reported.",
+    use: "Interpret with BDP, rcv_space, and path RTT. Mismatched wscale between peers can limit throughput on high-BDP paths."
+  },
+  rcv_ssthresh: {
+    summary: "Linux TCP receive-side autotuning threshold — the current cap on the advertised receive window.",
+    detail: "What it means: the kernel limits the advertised window to this value to avoid over-committing memory. A low or falling rcv_ssthresh means the kernel is throttling the sender. What it does not prove: it does not prove the application is slow — the kernel may be protecting memory. Confirm with: Recv-Q, skmem.r vs skmem.rb, rcv_space, and application CPU/scheduling evidence.",
+    use: "Compare with rcv_space and Recv-Q. If rcv_ssthresh < rcv_space, the kernel is actively clamping the window."
+  },
+  rwnd_limited: {
+    summary: "Percentage of time the sender was limited by the receiver's advertised window.",
+    detail: "What it means: the sender had data to send but the receiver's window was too small — classic backpressure. What it does not prove: it does not prove the receiver is broken — it may be intentional flow control. Confirm with: Recv-Q on the receiver, rcv_space, rcv_ssthresh, application CPU, and GC pauses.",
+    use: "High rwnd_limited + high Recv-Q on receiver = slow consumer. High rwnd_limited + low Recv-Q = intentional flow control or small buffer configuration."
+  },
+  backoff: {
+    summary: "TCP retransmission backoff exponent — effective RTO = rto × 2^backoff.",
+    detail: "What it means: TCP has retransmitted and is waiting exponentially longer between attempts. Any non-zero backoff deserves attention. What it does not prove: it does not prove the path is dead — a single lost ACK can trigger backoff. Confirm with: retransmission count, RTO value, RTT stability, and whether the peer is still responding.",
+    use: "Prioritize sockets with backoff > 0 plus high RTO, Send-Q buildup, or persist timer."
   }
 };
 
