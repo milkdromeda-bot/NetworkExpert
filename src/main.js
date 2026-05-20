@@ -5398,8 +5398,11 @@ function renderCaptureQualityReport() {
         </div>
       </div>
       <div class="capture-quality-score" aria-label="Capture quality score ${report.score} out of 100">
-        <strong>${formatNumber(report.score)}</strong>
-        <small>/100</small>
+        <svg viewBox="0 0 120 120" width="90" height="90">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10" stroke-linecap="round" transform="rotate(-225 60 60)" stroke-dasharray="236 314"/>
+          <circle cx="60" cy="60" r="50" fill="none" stroke="${report.score >= 70 ? '#2cc62c' : report.score >= 40 ? '#ffd166' : '#ff5c77'}" stroke-width="10" stroke-linecap="round" transform="rotate(-225 60 60)" stroke-dasharray="${Math.round(report.score * 2.36)} 314" style="transition:stroke-dasharray 0.5s"/>
+          <text x="60" y="66" text-anchor="middle" fill="var(--text)" font-size="22" font-weight="700">${report.score}%</text>
+        </svg>
       </div>
     </section>
 
@@ -6280,9 +6283,10 @@ function renderTimelineStoriesView(stories) {
       const patternTypes = [...new Set(stories.map(s => s.title))];
       const scope = socketCount === 1 ? `1 socket affected` : `${socketCount} sockets affected`;
       const peerLabel = socketCount === 1 && stories[0].socket ? (stories[0].socket.peer || stories[0].socketKey) : "";
-      return `<div class="stories-summary"><i class="ri-git-merge-line"></i> <b>${stories.length} ${stories.length === 1 ? "story" : "stories"}</b> � ${scope}${socketCount > 1 ? ` � ${patternTypes.length} distinct ${patternTypes.length === 1 ? "pattern" : "patterns"} (${escapeHtml(patternTypes.join(", "))})` : peerLabel ? ` � ${escapeHtml(peerLabel)}` : ""}</div>`;
+      const socketNav = socketCount > 1 ? `<div class="stories-socket-nav">${socketKeys.map((sk, i) => { const s = stories.find(st => st.socketKey === sk); const label = s?.socket?.details?.process ? `${s.socket.details.process.name}:${s.socket.details.process.pid}` : sk.slice(0, 24); const peer = s?.socket?.peer || ""; const active = (!state.storySocketFilter && i === 0) || state.storySocketFilter === sk; return `<button class="story-socket-pill ${active ? "active" : ""}" data-action="filterStorySocket" data-socket-key="${escapeHtml(sk)}" title="${escapeHtml(sk)}">${escapeHtml(label)} → ${escapeHtml(peer.slice(0, 20))}</button>`; }).join("")}</div>` : "";
+      return `${socketNav}<div class="stories-summary"><i class="ri-git-merge-line"></i> <b>${stories.length} ${stories.length === 1 ? "story" : "stories"}</b> � ${scope}${socketCount > 1 ? ` � ${patternTypes.length} distinct ${patternTypes.length === 1 ? "pattern" : "patterns"} (${escapeHtml(patternTypes.join(", "))})` : peerLabel ? ` � ${escapeHtml(peerLabel)}` : ""}</div>`;
     })() : ""}
-    ${stories.slice(0, 6).map(story => `<article class="timeline-story">
+    ${(() => { const filtered = state.storySocketFilter ? stories.filter(s => s.socketKey === state.storySocketFilter) : stories; return filtered.slice(0, 6); })().map(story => `<article class="timeline-story">
       <div class="story-header">
         <strong>${escapeHtml(story.title)}</strong>
         <span class="story-socket" title="${escapeHtml(story.socketKey)}">${escapeHtml((() => { const p = story.socket?.details?.process; const local = p ? `${p.name}:${p.pid}` : "local"; const peer = story.socket?.peer || story.socketKey.slice(0, 28); return `${local} \u2192 ${peer}`; })())}</span>
@@ -9883,6 +9887,7 @@ function bindEvents() {
     if (action === "fixTablePrev") { state.fixTable.page = Math.max(1, state.fixTable.page - 1); render(); }
     if (action === "fixTableNext") { state.fixTable.page++; render(); }
     if (action === "openMetricIntelligence") { state.helpColumn = event.currentTarget.dataset.field; state.modal = "columnHelp"; render(); }
+    if (action === "filterStorySocket") { state.storySocketFilter = event.currentTarget.dataset.socketKey; render(); }
     if (action === "pickAutoDir") { document.querySelector("#ingestAutoDir")?.click(); }
     if (action === "pickFixFile") { (document.querySelector("#ingestFixFileInput") || document.querySelector("#fixFileInput"))?.click(); }
     if (action === "pickFixDir") { const el = document.querySelector("#ingestFixDirInput") || document.querySelector("#fixDirInput"); if (el) el.click(); }

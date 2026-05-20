@@ -10007,3 +10007,8 @@ mark.guide-hl {
 .ss-editor-theme-neon .CodeMirror-linenumber { color: #444; }
 .ss-editor-theme-neon .CodeMirror-cursor { border-left-color: #00ff88; }
 .ss-editor-theme-neon .CodeMirror-selected { background: rgba(0, 255, 136, 0.12); }
+
+.stories-socket-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+.story-socket-pill { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+.story-socket-pill:hover { border-color: var(--accent); color: var(--text); }
+.story-socket-pill.active { background: rgba(140,183,255,0.12); border-color: var(--accent); color: var(--accent); font-weight: 600; }
