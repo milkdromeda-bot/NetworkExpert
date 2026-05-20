@@ -79,7 +79,8 @@ const SS_EDITOR_THEMES = [
   { id: "slate", label: "Slate", title: "Balanced slate tones with low saturation" },
   { id: "sand", label: "Sand", title: "Warm muted amber highlights without glare" },
   { id: "paper", label: "Paper", title: "Soft light editor for bright rooms" },
-  { id: "contrast", label: "Contrast", title: "Readable contrast without neon colors" }
+  { id: "contrast", label: "Contrast", title: "Readable contrast without neon colors" },
+  { id: "neon", label: "Neon", title: "High-visibility fluorescent on dark background" }
 ];
 const DEFAULT_SS_EDITOR_THEME = "pastel";
 
@@ -3153,9 +3154,8 @@ function renderIngestPage() {
   return html`
     <section class="ingest-hero">
       <div>
-        <h2>Import an ss collection</h2>
-        <p>Paste captured output or open a file. Use <strong>Auto-detect dir</strong> to load an entire directory at once.</p>
-        <p style="font-size:11px;color:var(--muted);margin-top:4px">Supported: <strong>ss</strong> (.log/.txt/.gz/.zip) · <strong>GC</strong> (Java 17+ unified logging) · <strong>vmstat</strong> (vmstat -t 1) · <strong>nstat</strong> (timestamped per-second) · <strong>FIX</strong> (connector logs with tag 52)</p>
+        <h2>Import</h2>
+        <p style="font-size:11px;color:var(--muted)">Supported: <strong>ss</strong> · <strong>GC log</strong> · <strong>vmstat</strong> · <strong>nstat</strong> · <strong>FIX logs</strong> — use Auto-detect dir to load all at once</p>
       </div>
     </section>
     <section class="panel ingest-source-panel ss-editor-theme-${escapeHtml(editorTheme)}">
@@ -3622,7 +3622,7 @@ function renderJvmGcPanel() {
         <button class="mini" data-chart-zoom="panRight" data-jvm-zoom title="Pan right">${icons.arrowRight}</button>
       </div><span class="jvm-sep"></span>` : ""}
       <div class="bdp-controls" style="margin-left:auto">
-        <label><span>Mode</span><select id="jvmCorrelationMode"><option value="receiver"${(gc.mode || "receiver") === "receiver" ? " selected" : ""}>Receiver (local GC)</option><option value="sender"${gc.mode === "sender" ? " selected" : ""}>Sender (remote GC)</option></select></label>
+
         <label style="margin-left:10px"><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">? Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">? Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">? Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">? Critical</option></select></label>
         <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
         <label style="margin-left:10px"><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
@@ -3874,7 +3874,7 @@ function runJvmCorrelation() {
     safepoints: gc.safepoints,
     history,
     clockOffsetMs: gc.clockOffsetMs,
-    mode: gc.mode || "receiver"
+    mode: "receiver"
   });
   if (state.fixLatency.records.length) runFixCorrelation();
 }
@@ -4880,7 +4880,7 @@ function renderFixLatencyPanel() {
       ${!hasRecords ? `<div class="jvm-gc-import"><p>No FIX logs loaded. Use <strong>Auto-detect dir</strong> or the <strong>FIX</strong> button in the Import tab to load FIX connector logs.</p></div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "none")}</span>
-          <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:520px;max-height:280px;overflow-y:auto;columns:2;column-gap:18px"><span class="tooltip-kicker">FIX Latency Correlation — How to read</span><strong>Messages</strong><p>Total FIX messages parsed from all loaded files.</p><strong>Spikes</strong><p>Messages where lag (server receive time − tag 52 SendingTime) exceeds the configured threshold. These are the candidates for root-cause investigation.</p><strong>With ss evidence</strong><p>Spikes for which a matching TCP socket was found in the ss snapshots (by IP:port). This means we could inspect the socket state at the time of the spike.</p><strong>Endpoint match %</strong><p>Proportion of spikes where the FIX connection IP:port was found in ss data. 0% means ss was captured on a different host or the socket was not included.</p><strong>Cause breakdown</strong><p><b style="color:#3b82f6">Network</b>: ss shows retransmissions, RTT spike, cwnd collapse, or backoff at spike time.<br/><b style="color:#a855f7">Kernel</b>: nstat shows backlog drops, listen overflows, or RcvQ drops.<br/><b style="color:#ff9f43">CPU</b>: vmstat shows high run queue, CPU saturation, or I/O wait.<br/><b style="color:#2cc62c">GC</b>: a JVM GC pause overlaps the spike.<br/><b style="color:#8c9aab">Unknown</b>: no symptom found in any source — likely connector thread-pool scheduling or application-level delay.</p><strong>GC window</strong><p>A FIX spike is attributed to GC if it occurs during the pause or within this window after the pause ends. The JVM connector cannot read the socket during Stop-The-World, and needs time to drain the backlog after resuming. Shorter window = stricter attribution (only spikes very close to the pause). Longer window = catches backlog drain effects.</p><strong>If all causes are Unknown</strong><p>The network is innocent. The TCP socket was healthy at spike time (recvQ=0, retrans=0, RTT stable, cwnd normal). The lag is caused by something above TCP: thread scheduling, GC, or application processing. Load vmstat/nstat to investigate further.</p></span></span>
+          <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:520px;max-height:280px;overflow-y:auto;columns:2;column-gap:18px"><span class="tooltip-kicker">FIX Latency Correlation — How to read</span><strong>Messages</strong><p>Total FIX messages parsed from all loaded files.</p><strong>Spikes</strong><p>Messages where lag (server receive time − tag 52 SendingTime) exceeds the configured threshold. These are the candidates for root-cause investigation.</p><strong>With ss evidence</strong><p>Spikes for which a matching TCP socket was found in the ss snapshots (by IP:port). This means we could inspect the socket state at the time of the spike.</p><strong>Endpoint match %</strong><p>Proportion of spikes where the FIX connection IP:port was found in ss data. 0% means ss was captured on a different host or the socket was not included.</p><strong>Cause breakdown</strong><p><b style="color:#3b82f6">Network</b>: ss shows retransmissions, RTT spike, cwnd collapse, or backoff at spike time.<br/><b style="color:#a855f7">Kernel</b>: nstat shows backlog drops, listen overflows, or RcvQ drops.<br/><b style="color:#ff9f43">CPU</b>: vmstat shows high run queue, CPU saturation, or I/O wait.<br/><b style="color:#2cc62c">GC</b>: a JVM GC pause overlaps the spike.<br/><b style="color:#8c9aab">Unknown</b>: no symptom found in any source — likely application thread-pool scheduling or application-level delay.</p><strong>GC window</strong><p>A FIX spike is attributed to GC if it occurs during the pause or within this window after the pause ends. The JVM connector cannot read the socket during Stop-The-World, and needs time to drain the backlog after resuming. Shorter window = stricter attribution (only spikes very close to the pause). Longer window = catches backlog drain effects.</p><strong>If all causes are Unknown</strong><p>The network is innocent. The TCP socket was healthy at spike time (recvQ=0, retrans=0, RTT stable, cwnd normal). The lag is caused by something above TCP: thread scheduling, GC, or application processing. Load vmstat/nstat to investigate further.</p></span></span>
           <strong>${summary?.totalRecords || 0} messages · ${summary?.totalSpikes || 0} spikes (lag > ${fix.threshold}ms) · ${summary?.correlatedCount || 0} with ss evidence</strong>
           <em>Max score: ${(summary?.maxScore || 0).toFixed(2)} � Endpoint match: ${((summary?.endpointMatchRate || 0) * 100).toFixed(0)}%</em>
           ${stats ? `<span style="margin-left:auto;font-size:11px;color:var(--soft)">Median: ${stats.median.toFixed(1)}ms � P95: ${stats.p95.toFixed(1)}ms � P99: ${stats.p99.toFixed(1)}ms � Max: ${stats.max.toFixed(1)}ms</span>` : ""}
@@ -6509,7 +6509,7 @@ function renderFieldDocCard(key, text) {
   const body = sentences.length > 1
     ? `<p>${escapeHtml(sentences[0])}</p><ul>${sentences.slice(1).map(sentence => `<li>${escapeHtml(sentence)}</li>`).join("")}</ul>`
     : `<p>${escapeHtml(text)}</p>`;
-  return `<article class="field-card field-doc-card"><strong>${escapeHtml(key)}</strong>${body}${renderFieldHealth(key)}</article>`;
+  const firstSentence = String(text || "").split(/(?<=\.)\s+/)[0] || ""; return `<div class="field-row" data-action="openMetricIntelligence" data-field="${escapeHtml(key)}" title="Click for full metric intelligence"><strong>${escapeHtml(key)}</strong><span class="field-desc">${escapeHtml(firstSentence)}</span></div>`;
 }
 
 function renderFieldHealth(key) {
@@ -9709,6 +9709,12 @@ function bindEvents() {
       state.raw = generateIncidentDemoSample();
       state.ingestRawExpanded = false;
       setSourceName("JVM GC stall incident (demo)");
+      // Generate synthetic GC pauses for the demo
+      const demoBase = Date.now() - 60000;
+      state.jvmGc.pauses = Array.from({ length: 8 }, (_, i) => ({ id: i, epochMs: demoBase + i * 8000, durationMs: i === 5 ? 450 : 5 + Math.random() * 15, type: i === 5 ? "Full" : "Young", cause: i === 5 ? "Heap exhausted" : "G1 Evacuation Pause" }));
+      state.jvmGc.safepoints = [];
+      state.jvmGc.mode = "receiver";
+      state.jvmGc.rawLog = "[demo]";
       state.selectedId = null;
       setActiveInvestigation(state, null);
       state.showSsOptions = false;
@@ -9875,6 +9881,7 @@ function bindEvents() {
     if (action === "expandFixChart") { const id = event.currentTarget.dataset.fixChartId; state.fixLatency.expandedChart = state.fixLatency.expandedChart === id ? null : id; render(); requestAnimationFrame(drawFixCharts); }
     if (action === "fixTablePrev") { state.fixTable.page = Math.max(1, state.fixTable.page - 1); render(); }
     if (action === "fixTableNext") { state.fixTable.page++; render(); }
+    if (action === "openMetricIntelligence") { state.helpColumn = event.currentTarget.dataset.field; state.modal = "columnHelp"; render(); }
     if (action === "pickAutoDir") { document.querySelector("#ingestAutoDir")?.click(); }
     if (action === "pickFixFile") { (document.querySelector("#ingestFixFileInput") || document.querySelector("#fixFileInput"))?.click(); }
     if (action === "pickFixDir") { const el = document.querySelector("#ingestFixDirInput") || document.querySelector("#fixDirInput"); if (el) el.click(); }
@@ -10907,6 +10914,8 @@ function bindEvents() {
       const opt = event.currentTarget.dataset.opt;
       state.ssOptionHelpKey = opt;
       state.command = toggleCommandOption(state.command, opt, event.currentTarget.checked);
+      const cmdEl = document.querySelector(".ss-command-text");
+      if (cmdEl) { cmdEl.textContent = state.command; return; }
       renderKeepingWorkspacePosition();
     });
   });

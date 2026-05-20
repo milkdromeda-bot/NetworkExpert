@@ -20,7 +20,10 @@ export function createGuideView(context) {
       ["Quick kernel summary", envCommand("ss -s")],
       ["Top listening ports", envCommand("ss -Hlnptu")],
       [isAnalystRole() ? "Ops handoff: host-side evidence" : "Host-side LXD evidence", hostEvidence],
-      ["Compressed long-running collection", envCommand("t=10; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done | gzip -c >> ss-timeseries.log.gz")]
+      ["Compressed long-running collection", envCommand("t=10; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done | gzip -c >> ss-timeseries.log.gz")],
+      ["vmstat — CPU and scheduling (1s interval)", "vmstat -t 1 > vmstat.log"],
+      ["nstat — per-second TCP kernel counters", "while true; do nstat -r >/dev/null; sleep 1; echo \"=== $(date --iso-8601=ns) ===\"; nstat -z | egrep 'TcpRetransSegs|TcpExtTCPSynRetrans|TcpExtTCPTimeouts|TcpExtTCPBacklogDrop|TcpExtListenOverflows|TcpExtListenDrops|TcpExtTCPRcvQDrop|TcpExtPruneCalled|TcpExtTCPAbort|TcpExtTCP.*ZeroWindow|TcpExtTCPSACKReorder|IpInDiscards|IpOutDiscards'; done | tee -a nstat-critical.log"],
+      ["Complete correlation bundle (all sources)", "# Run all in parallel on the target host:\nvmstat -t 1 > vmstat.log &\nwhile true; do nstat -r >/dev/null; sleep 1; echo \"=== $(date --iso-8601=ns) ===\"; nstat -z | egrep 'Tcp|Ip'; done > nstat.log &\nt=0.1; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done > ss.log &\n# Then load the directory with Auto-detect dir"]
     ];
     const sections = [
       { key: "best", icon: "ri-lightbulb-line", label: "Best Practices" },
@@ -170,6 +173,31 @@ export function createGuideView(context) {
         ]
       },
       {
+        name: "FIX Latency Correlation",
+        icon: "ri-exchange-line",
+        purpose: "Correlate FIX protocol message latency (tag 52 vs server receive time) with TCP socket state, kernel counters, CPU scheduling, and GC pauses to identify the root cause of trading message delays.",
+        features: [
+          "Parse FIX application logs (.log, .txt, .gz, .zip) — supports multi-file and directory loading",
+          "Auto-detect directory: load ss + GC + vmstat + nstat + FIX from a single folder",
+          "Endpoint matching: correlates FIX session IP:port with ss socket peers (IPv4, IPv6, IPv4-mapped)",
+          "Multi-source correlation: ss (per-socket retrans, RTT, Recv-Q, cwnd), nstat (host-wide TCP counters/s), vmstat (CPU runqueue, scheduling), GC (JVM pauses)",
+          "Cause classification: Network / Kernel / CPU / GC / Unknown with confidence score 0–1",
+          "4 interactive charts: Lag timeline + Recv-Q overlay, Lag vs Score scatter, CPU + Run Queue, TCP Drops & Retrans",
+          "GC freeze zones: visual overlay showing JVM Stop-The-World periods on the timeline",
+          "Per-chart zoom/pan/reset, clickable legends to show/hide series, crosshair tooltips",
+          "Configurable lag threshold (1–100ms), GC window (auto or manual), CPU cores for runqueue threshold",
+          "Click table rows to highlight the corresponding point on charts"
+        ],
+        workflow: "Load ss file → load FIX logs (or use Auto-detect dir) → optionally add vmstat/nstat/GC → set lag threshold → review cause breakdown → zoom into spike clusters → click table rows to locate on charts → use legends to isolate series.",
+        tips: [
+          "nstat counters are host-wide (all sockets). On a busy host, nstat retrans correlation may be coincidental — ss per-socket evidence is more reliable.",
+          "If all causes are 'Unknown', the network is innocent. The TCP socket was healthy at spike time. Look at application thread-pool scheduling or process-level delays.",
+          "Use 'auto' GC window — it calculates 2× average pause duration automatically from the GC log.",
+          "Set CPU cores to your actual logical CPU count for accurate runqueue threshold detection.",
+          "Dot colors represent correlation strength (not lag severity): critical = strong cause evidence, none = healthy socket at spike time."
+        ]
+      },
+      {
         name: "Advisor",
         icon: "ri-compass-3-line",
         purpose: "Investigation context and tail-latency analysis for the selected socket — guides the next diagnostic step.",
@@ -191,7 +219,7 @@ export function createGuideView(context) {
       <section class="guide-monitoring-hero">
         <span class="tooltip-kicker">Monitoring view</span>
         <strong>Real-time correlation and deep metric analysis</strong>
-        <p>The Monitoring view provides four specialized sub-tabs for different investigation depths. Use Metrics for broad overview, BDP for throughput bottleneck analysis, JVM Stall for GC correlation, and Advisor for guided investigation of a specific socket.</p>
+        <p>The Monitoring view provides five specialized sub-tabs for different investigation depths. Use Metrics for broad overview, BDP for throughput bottleneck analysis, JVM Stall for GC correlation, FIX Latency for trading message delay root-cause analysis, and Advisor for guided investigation of a specific socket.</p>
       </section>
       <div class="guide-monitoring-grid">
         ${tabs.map(t => `<article class="guide-card guide-monitoring-card">
