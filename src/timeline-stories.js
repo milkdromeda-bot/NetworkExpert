@@ -72,6 +72,25 @@ const STORY_PATTERNS = [
       { key: "sendQ-present", test: (prev, curr) => curr.sendQ > 0, label: "Send-Q shows queued data" },
       { key: "no-retrans", test: (prev, curr) => curr.retrans === 0 && curr.rto < 1000, label: "no loss/retransmission — not a network issue" }
     ]
+  },
+  {
+    id: "zero-window-event",
+    title: "Zero window announced",
+    conclusion: "The receiver advertised a zero window — it cannot accept more data until the application drains the buffer.",
+    steps: [
+      { key: "recvQ-high", test: (prev, curr) => curr.recvQ > 65536, label: "Recv-Q accumulates" },
+      { key: "rcv-space-zero", test: (prev, curr) => curr.rcv_space <= 0 || (prev.rcv_space > 0 && curr.rcv_space < 256), label: "rcv_space drops to zero" },
+      { key: "persist-appears", test: (prev, curr) => curr.timerName === "persist" && prev.timerName !== "persist", label: "persist timer starts (sender probing)" }
+    ]
+  },
+  {
+    id: "process-disappeared",
+    title: "Process disappeared",
+    conclusion: "The owning process is no longer attached — the socket may be orphaned or the application crashed.",
+    steps: [
+      { key: "process-gone", test: (prev, curr) => prev.processName && !curr.processName, label: "process detaches from socket" },
+      { key: "state-change", test: (prev, curr) => curr.state !== prev.state && /CLOSE-WAIT|FIN-WAIT|TIME-WAIT/.test(curr.state), label: "connection enters closing state" }
+    ]
   }
 ];
 
@@ -94,7 +113,7 @@ function buildSocketTimeline(snapshots, socketKey) {
         return sk && socketKey.includes(sk);
       });
     if (!socket) {
-      rows.push({ epochMs: snap.epochMs, present: false, state: null, sendQ: 0, recvQ: 0, rto: 0, cwnd: 0, backoff: 0, retrans: 0, timerName: "", "skmem.d": 0, "skmem.r": 0, rcv_space: 0, rwnd_limited_pct: 0 });
+      rows.push({ epochMs: snap.epochMs, present: false, state: null, sendQ: 0, recvQ: 0, rto: 0, cwnd: 0, backoff: 0, retrans: 0, timerName: "", "skmem.d": 0, "skmem.r": 0, rcv_space: 0, rwnd_limited_pct: 0, processName: "" });
       continue;
     }
     rows.push({
@@ -111,7 +130,8 @@ function buildSocketTimeline(snapshots, socketKey) {
       "skmem.d": metricValue(socket, "skmem.d") || 0,
       "skmem.r": metricValue(socket, "skmem.r") || 0,
       rcv_space: metricValue(socket, "rcv_space") || 0,
-      rwnd_limited_pct: metricValue(socket, "rwnd_limited_pct") || 0
+      rwnd_limited_pct: metricValue(socket, "rwnd_limited_pct") || 0,
+      processName: socket.details?.process?.name || ""
     });
   }
   return rows;
