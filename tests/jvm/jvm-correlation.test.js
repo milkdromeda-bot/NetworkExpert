@@ -92,6 +92,23 @@ test('correlateJvmStalls: pause with recvQ rise = positive score', () => {
   assert.ok(res.results[0].symptoms.detected);
 });
 
+test('correlateJvmStalls: local JVM evidence remains receiver-side Recv-Q based', () => {
+  const pauses = [{ epochMs: 1000, durationMs: 50, type: 'Young' }];
+  const history = [{ epochMs: 800, recvQ: 0 }, { epochMs: 1200, recvQ: 50000 }];
+  const res = correlateJvmStalls({ pauses, history });
+  const signals = res.results[0].symptoms.signals.map(signal => signal.signal);
+  assert.ok(signals.includes('recvQ_rise'));
+  assert.ok(res.results[0].score > 0);
+});
+
+test('correlateJvmStalls: obsolete sender mode is ignored', () => {
+  const pauses = [{ epochMs: 1000, durationMs: 50, type: 'Young' }];
+  const history = [{ epochMs: 800, sendQ: 0, recvQ: 0 }, { epochMs: 1200, sendQ: 50000, recvQ: 0 }];
+  const res = correlateJvmStalls({ pauses, history, mode: 'sender' });
+  assert.strictEqual(res.results[0].symptoms.detected, false);
+  assert.strictEqual(res.results[0].score, 0);
+});
+
 test('correlateJvmStalls: pause with rcv_space drop = positive score', () => {
   const pauses = [{ epochMs: 1000, durationMs: 50, type: 'Young' }];
   const history = [{ epochMs: 800, rcv_space: 100000 }, { epochMs: 1200, rcv_space: 50000 }];

@@ -3660,12 +3660,12 @@ function renderJvmGcPanel() {
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article>
-              <div class="bdp-chart-title"><strong>${gc.mode === "sender" ? "Send-Q + RTT" : "Recv-Q"} + GC pauses</strong><span>timeline</span></div>
+              <div class="bdp-chart-title"><strong>Recv-Q + GC pauses</strong><span>local receiver timeline</span></div>
               <svg class="chart bdp-chart" data-jvm-chart="recvq" role="img" aria-label="JVM GC correlation chart"></svg>
               ${renderJvmLegend("timeline")}
             </article>
             <article>
-              <div class="bdp-chart-title"><strong>Pause duration vs Δ${gc.mode === "sender" ? "Send-Q" : "Recv-Q"}</strong><span>scatter</span></div>
+              <div class="bdp-chart-title"><strong>Pause duration vs Delta Recv-Q</strong><span>scatter</span></div>
               <svg class="chart bdp-chart" data-jvm-chart="scatter" role="img" aria-label="GC pause scatter plot"></svg>
               ${renderJvmLegend("scatter")}
             </article>
@@ -3718,7 +3718,7 @@ function jvmLegendSeries(kind) {
     ];
   }
   return [
-    { key: "recvq", label: state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q", color: state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc", tip: state.jvmGc.mode === "sender" ? "TCP send queue depth in bytes. Rises when the remote receiver cannot drain data � indicates the remote GC stall is blocking ACKs." : "TCP receive queue depth in bytes. Rises when the application cannot drain incoming data fast enough � a key slow consumer signal." },
+    { key: "recvq", label: "Recv-Q", color: "#7dd3fc", tip: "TCP receive queue depth in bytes. Rises when the local JVM cannot drain incoming data fast enough - a key slow consumer signal." },
     { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1�20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
     { key: "gc_mixed", label: "Mixed GC", color: "#fbbf24", tip: "G1 mixed collections evacuating both young and old regions. Typically longer than young GC and may indicate heap pressure building up." },
     { key: "gc_full", label: "Full / Remark", color: "#ef4444", tip: "Full GC, Remark, or Cleanup pauses. These are the longest and most disruptive. Full GC indicates heap exhaustion or fragmentation." },
@@ -3873,8 +3873,7 @@ function runJvmCorrelation() {
     pauses: windowPauses,
     safepoints: gc.safepoints,
     history,
-    clockOffsetMs: gc.clockOffsetMs,
-    mode: "receiver"
+    clockOffsetMs: gc.clockOffsetMs
   });
   if (state.fixLatency.records.length) runFixCorrelation();
 }
@@ -3913,19 +3912,12 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   const t1 = history[history.length - 1].epochMs;
   const span = Math.max(1, t1 - t0);
   const x = t => pad.l + ((t - t0) / span) * plotW;
-  const senderMode = state.jvmGc.mode === "sender";
-  const primaryMetric = senderMode ? "sendQ" : "recvQ";
-  const primaryLabel = senderMode ? "Send-Q (bytes)" : "Recv-Q (bytes)";
-  const primaryColor = senderMode ? "#38bdf8" : "#7dd3fc";
+  const primaryMetric = "recvQ";
+  const primaryLabel = "Recv-Q (bytes)";
+  const primaryColor = "#7dd3fc";
   const maxPrimary = Math.max(1, ...history.map(s => s[primaryMetric] || 0));
   const y = value => pad.t + plotH - (value / maxPrimary) * plotH;
   const line = history.map((sample, index) => `${index ? "L" : "M"}${x(sample.epochMs).toFixed(1)},${y(sample[primaryMetric] || 0).toFixed(1)}`).join(" ");
-  // Secondary line: RTT in sender mode
-  const secondaryLine = senderMode ? (() => {
-    const maxRtt = Math.max(1, ...history.map(s => s.rtt || 0));
-    const y2 = v => pad.t + plotH - (v / maxRtt) * plotH;
-    return history.map((s, i) => `${i ? "L" : "M"}${x(s.epochMs).toFixed(1)},${y2(s.rtt || 0).toFixed(1)}`).join(" ");
-  })() : null;
   const pauseTypeColor = type => {
     if (type === "Young") return "#4ade80";
     if (type === "Mixed") return "#fbbf24";
@@ -3973,33 +3965,6 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     const timeStr = a.epochMs ? new Date(a.epochMs).toISOString().slice(11, 23) : "";
     return `<text x="${a.ax.toFixed(1)}" y="${ay}" text-anchor="middle" fill="${a.color}" font-size="9" font-weight="700">${escapeHtml(a.label)}</text>${timeStr ? `<text x="${a.ax.toFixed(1)}" y="${ay + 10}" text-anchor="middle" fill="${a.color}" font-size="8" opacity="0.7">${timeStr}</text>` : ""}`;
   }).join("");
-  // Detect Send-Q plateaus > 0 lasting more than 3 seconds
-  let plateauAnnotations = "";
-  if (senderMode) {
-    const plateaus = [];
-    let start = null;
-    for (let i = 0; i < history.length; i++) {
-      const s = history[i];
-      if ((s.sendQ || 0) > 0) {
-        if (!start) start = s;
-      } else {
-        if (start && s.epochMs - start.epochMs >= 3000) {
-          plateaus.push({ startMs: start.epochMs, endMs: history[i - 1].epochMs, value: start.sendQ });
-        }
-        start = null;
-      }
-    }
-    if (start && history[history.length - 1].epochMs - start.epochMs >= 3000) {
-      plateaus.push({ startMs: start.epochMs, endMs: history[history.length - 1].epochMs, value: start.sendQ });
-    }
-    plateauAnnotations = plateaus.map(p => {
-      const px1 = x(p.startMs), px2 = x(p.endMs);
-      const midX = (px1 + px2) / 2;
-      return `<rect x="${px1.toFixed(1)}" y="${pad.t}" width="${(px2 - px1).toFixed(1)}" height="${plotH}" fill="#ff5c77" opacity=".08"/>` +
-        `<line x1="${px1.toFixed(1)}" x2="${px2.toFixed(1)}" y1="${pad.t + 14}" y2="${pad.t + 14}" stroke="#ff5c77" stroke-width="2" stroke-dasharray="6 3"/>` +
-        `<text x="${midX.toFixed(1)}" y="${pad.t + 12}" text-anchor="middle" fill="#ff5c77" font-size="9" font-weight="700">Send-Q plateau ${((p.endMs - p.startMs) / 1000).toFixed(1)}s</text>`;
-    }).join("");
-  }
   // Detect TCP state changes from raw timestamped snapshots
   const stateChanges = [];
   const rawSnaps = parsedTimestampSnapshots();
@@ -4037,10 +4002,8 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     ${yTicksSvg}
     ${bars}
     ${annotationsSvg}
-    ${plateauAnnotations}
     ${stateChangesSvg}
     ${jvmSeriesHidden("recvq") ? "" : `<path d="${line}" fill="none" stroke="${primaryColor}" stroke-width="2.4"/>`}
-    ${secondaryLine && !jvmSeriesHidden("recvq") ? `<path d="${secondaryLine}" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4 3" opacity=".7"/>` : ""}
     <text x="${w / 2}" y="${h - 7}" text-anchor="middle" fill="#8c9aab" font-size="11">Time (${escapeHtml(resolvedTimeZone())})</text>
     <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">${escapeHtml(primaryLabel)}</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
@@ -4064,7 +4027,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="${chartBgColor() === `#f0f3f7` ? `#1a2533cc` : `#ffffffaa`}" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
-      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${primaryColor}" font-size="10.5">${senderMode ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(primaryMetric, sample[primaryMetric] || 0))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${primaryColor}" font-size="10.5">Recv-Q: ${escapeHtml(formatMetricValue(primaryMetric, sample[primaryMetric] || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${jvmPauseColor(r.score)}" font-size="10.5">GC #${r.pause.id} ${r.pause.durationMs.toFixed(1)}ms score ${r.score.toFixed(2)}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">${escapeHtml(r.symptoms?.signals?.map(s => s.signal).join(", ") || "none")}</text>
     `;
@@ -4079,7 +4042,7 @@ function drawJvmScatterChartInteractive(svg, results) {
   const plotW = w - pad.l - pad.r;
   const plotH = h - pad.t - pad.b;
   const points = results.filter(result => result.symptoms.detected).map(result => {
-    const delta = result.symptoms.signals.find(signal => signal.signal === (state.jvmGc.mode === "sender" ? "sendQ_rise" : "recvQ_rise"))?.delta || 0;
+    const delta = result.symptoms.signals.find(signal => signal.signal === "recvQ_rise")?.delta || 0;
     return {
       id: result.pause.id,
       type: result.pause.type,
@@ -4115,7 +4078,7 @@ function drawJvmScatterChartInteractive(svg, results) {
     ${yTicksSvg}
     ${dots}
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#8c9aab" font-size="11">Pause duration (ms)</text>
-    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">ΔRecv-Q (bytes)</text>
+    <text x="16" y="${h / 2}" transform="rotate(-90 16 ${h / 2})" text-anchor="middle" fill="#8c9aab" font-size="11">Delta Recv-Q (bytes)</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
@@ -4153,7 +4116,7 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="${chartBgColor() === `#f0f3f7` ? `#1a2533cc` : `#ffffffaa`}" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${pad.t + 8}" width="${tooltipW}" height="78" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${pad.t + 25}" fill="#edf4ff" font-size="11" font-weight="800">${escapeHtml(preciseDateTimeLabel(sample.epochMs))}</text>
-      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", sample[state.jvmGc.mode === "sender" ? "sendQ" : "recvQ"] || 0))}</text>
+      <text x="${tooltipX + 9}" y="${pad.t + 43}" fill="#7dd3fc" font-size="10.5">Recv-Q: ${escapeHtml(formatMetricValue("recvQ", sample.recvQ || 0))}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 59}" fill="${pause ? jvmPauseColor(pause.score) : "#94a3b8"}" font-size="10.5">Nearest GC: ${pause ? escapeHtml(`#${pause.pause.id} ${pause.pause.durationMs.toFixed(1)}ms score ${pause.score.toFixed(2)}`) : "n/a"}</text>
       <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">Signals: ${escapeHtml(pause?.symptoms?.signals?.map(signal => signal.signal).join(", ") || "none")}</text>
     `;
@@ -4218,7 +4181,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="#7dd3fc" font-size="10.5">Delta Recv-Q: ${escapeHtml(formatMetricValue("recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
     // Sync to timeline chart
@@ -4298,7 +4261,7 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="76" rx="7" fill="${chartBgColor() === `#f0f3f7` ? `#ffffff` : `#0b1018`}" fill-opacity="${chartTooltipOpacity()}" stroke="#52657a"/>
       <text x="${tooltipX + 9}" y="${tooltipY + 18}" fill="#edf4ff" font-size="11" font-weight="800">GC #${escapeHtml(String(point.id))} - ${escapeHtml(point.type)}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 36}" fill="${jvmPauseColor(point.score)}" font-size="10.5">${point.durationMs.toFixed(1)} ms, score ${point.score.toFixed(2)}</text>
-      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="${state.jvmGc.mode === "sender" ? "#38bdf8" : "#7dd3fc"}" font-size="10.5">Δ${state.jvmGc.mode === "sender" ? "Send-Q" : "Recv-Q"}: ${escapeHtml(formatMetricValue(state.jvmGc.mode === "sender" ? "sendQ" : "recvQ", point.delta))}</text>
+      <text x="${tooltipX + 9}" y="${tooltipY + 52}" fill="#7dd3fc" font-size="10.5">Delta Recv-Q: ${escapeHtml(formatMetricValue("recvQ", point.delta))}</text>
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
   };
@@ -9713,7 +9676,6 @@ function bindEvents() {
       const demoBase = Date.now() - 60000;
       state.jvmGc.pauses = Array.from({ length: 8 }, (_, i) => ({ id: i, epochMs: demoBase + i * 8000, durationMs: i === 5 ? 450 : 5 + Math.random() * 15, type: i === 5 ? "Full" : "Young", cause: i === 5 ? "Heap exhausted" : "G1 Evacuation Pause" }));
       state.jvmGc.safepoints = [];
-      state.jvmGc.mode = "receiver";
       state.jvmGc.rawLog = "[demo]";
       state.selectedId = null;
       setActiveInvestigation(state, null);
@@ -10975,15 +10937,6 @@ function bindEvents() {
     });
   });
   document.querySelector("#chartTimeZoneSelect")?.addEventListener("change", e => { state.prefs.chartTimeZone = e.target.value; savePrefs(); renderKeepingWorkspacePosition(); });
-  document.querySelector("#jvmCorrelationModeImport")?.addEventListener("change", e => {
-    state.jvmGc.mode = e.target.value;
-  });
-  document.querySelector("#jvmCorrelationMode")?.addEventListener("change", e => {
-    state.jvmGc.mode = e.target.value;
-    runJvmCorrelation();
-    render();
-    requestAnimationFrame(drawJvmCharts);
-  });
   document.querySelector("#jvmSyncCrosshair")?.addEventListener("change", e => {
     state.jvmGc.syncCrosshair = e.target.checked;
   });
@@ -11176,7 +11129,7 @@ function bindEvents() {
       await new Promise(resolve => { const check = () => state.sockets.length > 0 ? resolve() : setTimeout(check, 300); check(); });
       summary.push(`ss: ${ssFile.name}`);
     }
-    if (classified.gc.length) { const file = classified.gc[0]; file.text().then(text => { const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; const lines = text.split("\n").filter(l => gcPattern.test(l)).join("\n"); const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; state.jvmGc.mode = "receiver"; }); summary.push(`GC: ${classified.gc[0].name}`); }
+    if (classified.gc.length) { const file = classified.gc[0]; file.text().then(text => { const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; const lines = text.split("\n").filter(l => gcPattern.test(l)).join("\n"); const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; }); summary.push(`GC: ${classified.gc[0].name}`); }
     if (classified.vmstat.length) { classified.vmstat[0].text().then(text => { state.fixLatency.vmstat = parseVmstat(text).samples; render(); }); summary.push(`vmstat: ${classified.vmstat[0].name}`); }
     if (classified.nstat.length) { classified.nstat[0].text().then(text => { state.fixLatency.nstat = parseNstatTimestamped(text).samples; render(); }); summary.push(`nstat: ${classified.nstat[0].name}`); }
     if (classified.fix.length) { await ingestFixFiles(classified.fix); summary.push(`FIX: ${classified.fix.length} file(s)`); }

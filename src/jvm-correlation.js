@@ -91,34 +91,6 @@ function detectSymptoms(before, after) {
 }
 
 /**
- * Detect sender-side TCP symptoms when GC is on the remote receiver.
- */
-function detectSenderSymptoms(before, after) {
-  if (!before.length || !after.length) return { detected: false, signals: [] };
-  const b = before[before.length - 1];
-  const a = after[0];
-  const signals = [];
-
-  const dSendQ = (a.sendQ || 0) - (b.sendQ || 0);
-  if (dSendQ > 0) signals.push({ signal: "sendQ_rise", delta: dSendQ });
-
-  const dRtt = (a.rtt || 0) - (b.rtt || 0);
-  if (dRtt > 5) signals.push({ signal: "rtt_spike", delta: dRtt });
-
-  const dCwnd = (a.cwnd || 0) - (b.cwnd || 0);
-  if (dCwnd < 0) signals.push({ signal: "cwnd_drop", delta: dCwnd });
-
-  const dPacing = (a.pacing_rate || 0) - (b.pacing_rate || 0);
-  if (dPacing < 0 && b.pacing_rate > 0) signals.push({ signal: "pacing_drop", delta: dPacing });
-
-  if ((a.rwnd || a.rcv_wnd || 0) < (b.rwnd || b.rcv_wnd || 0)) signals.push({ signal: "rwnd_drop", delta: (a.rwnd || a.rcv_wnd || 0) - (b.rwnd || b.rcv_wnd || 0) });
-
-  if (a.retrans > b.retrans) signals.push({ signal: "retrans_increase", delta: (a.retrans || 0) - (b.retrans || 0) });
-
-  return { detected: signals.length > 0, signals };
-}
-
-/**
  * Check counter-evidence that TCP symptoms are NOT caused by GC.
  */
 function counterEvidence(before, after) {
@@ -185,10 +157,9 @@ function scoreSeverity(score, pause) {
  * @param {number} opts.clockOffsetMs - Clock skew
  * @returns {Object} Correlation results
  */
-export function correlateJvmStalls({ pauses, safepoints = [], history, windows = DEFAULT_WINDOWS, clockOffsetMs = 0, mode = "receiver" }) {
+export function correlateJvmStalls({ pauses, safepoints = [], history, windows = DEFAULT_WINDOWS, clockOffsetMs = 0 }) {
   const aligned = alignTimestamps(pauses, history, clockOffsetMs);
   const alignedSp = alignTimestamps(safepoints.map(s => ({ ...s, durationMs: s.totalMs })), history, clockOffsetMs);
-  const detect = mode === "sender" ? detectSenderSymptoms : detectSymptoms;
   const results = [];
 
   for (const pause of aligned) {
@@ -196,7 +167,7 @@ export function correlateJvmStalls({ pauses, safepoints = [], history, windows =
     if (!t) continue;
     const { before, after } = snapshotsInWindow(history, t, windows.beforeMs, windows.afterShortMs);
     const afterLong = snapshotsInWindow(history, t, 0, windows.afterLongMs).after;
-    const symptoms = detect(before, after.length ? after : afterLong);
+    const symptoms = detectSymptoms(before, after.length ? after : afterLong);
     const pressure = bufferPressure(pause, before);
     const counter = counterEvidence(before, after.length ? after : afterLong);
     const score = correlationScore(symptoms, pressure, counter, pause);
