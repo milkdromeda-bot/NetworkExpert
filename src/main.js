@@ -780,6 +780,7 @@ function renderExportMenu(scope = "analysis") {
       <button data-export-action="incident-html"><i class="ri-file-code-line"></i><span>Full incident report HTML</span><small>Complete analysis: stories, matrix, playbooks, evidence</small></button>
       <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><small>PDF, CSV, JSON and chart PNGs</small></button>
       <button data-export-action="jira"><i class="ri-clipboard-line"></i><span>Copy Jira report</span><small>Wiki markup for ticket</small></button>
+      ${state.fixLatency.correlation?.results?.length ? `<button data-export-action="fix-csv"><i class="ri-file-excel-line"></i><span>FIX spikes CSV</span><small>Spikes with correlations for Excel/Jupyter</small></button>` : ""}
     </div>
   </span>`;
 }
@@ -9353,6 +9354,19 @@ function exportIncidentReportHtml() {
   toast("Report exported", "Standalone HTML incident report downloaded.");
 }
 
+function exportFixSpikeCsv() {
+  const results = state.fixLatency.correlation?.results;
+  if (!results?.length) { toast("No FIX data", "Load FIX logs first.", "warn"); return; }
+  const header = "timestamp,lag_ms,direction,msgType,symbol,sender,target,endpoint,thread,score,severity,cause,signals,endpoint_matched";
+  const rows = results.map(r => [new Date(r.receiveMs).toISOString(), r.lagMs.toFixed(1), r.direction, r.msgType, r.symbol, r.sender, r.target, r.endpoint, r.thread, r.score.toFixed(3), r.severity, r.cause || "", `"${(r.signals || []).join(";")}"`, r.endpointMatched ? "yes" : "no"].join(","));
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `fix-spikes-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  URL.revokeObjectURL(a.href);
+  toast("CSV exported", `${results.length} spikes with correlations exported.`);
+}
+
 function openIncidentReport() {
   if (!state.sockets.length) {
     toast("No data to export", "Import or parse a capture before generating an incident report.", "warn");
@@ -10608,6 +10622,7 @@ function bindEvents() {
     if (action === "incident-html") exportIncidentReportHtml();
     if (action === "pack") exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger"));
     if (action === "jira") { copyTextToClipboard(buildJiraReport()); toast("Jira report copied", "Paste into a Jira ticket description or comment."); }
+    if (action === "fix-csv") { exportFixSpikeCsv(); }
   }));
   document.querySelectorAll("[data-action-menu]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
