@@ -9342,7 +9342,7 @@ function exportIncidentReportHtml() {
   const pb = topHyp ? resolvePlaybook(playbookForHypothesis(topHyp.id), state.sockets.find(s => s.id === topHyp.topSocketId)) : null;
   const narrativeData = state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null;
   const summaryText = buildAiSummary({ matrix: matrixData, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, captureQuality: quality, hypotheses: hyps, comparison: narrativeData });
-  const html = generateIncidentReport({ sourceName: state.sourceName, captureQuality: quality, matrix: matrixData, hypotheses: hyps, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, playbook: pb, comparison: narrativeData, aiSummary: summaryText, theme: state.prefs.theme || "dark" });
+  const html = generateIncidentReport({ sourceName: state.sourceName, captureQuality: quality, matrix: matrixData, hypotheses: hyps, stories: storiesData, multiSocket: multiData, rateAlerts: rateData, playbook: pb, comparison: narrativeData, aiSummary: summaryText, theme: state.prefs.theme || "dark", fixLatency: state.fixLatency.correlation?.summary ? { summary: state.fixLatency.correlation.summary, topSpikes: state.fixLatency.correlation.results?.slice(0, 10) } : null, jvmGc: state.jvmGc.correlation?.summary ? { summary: state.jvmGc.correlation.summary, analysisWindow: state.jvmGc.analysisWindow } : null });
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

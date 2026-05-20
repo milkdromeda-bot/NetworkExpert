@@ -1,4 +1,4 @@
-export function buildIncidentReportHtml({ sourceName, captureQuality, matrix, hypotheses, stories, multiSocket, rateAlerts, playbook, comparison, aiSummary, timestamp, theme }) {
+export function buildIncidentReportHtml({ sourceName, captureQuality, matrix, hypotheses, stories, multiSocket, rateAlerts, playbook, comparison, aiSummary, timestamp, theme, fixLatency, jvmGc }) {
   const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const now = timestamp || new Date().toISOString();
   const light = theme === "light";
@@ -88,5 +88,14 @@ ${multiSocketSection}
 ${rateSection}
 ${hypothesesSection}
 ${playbookSection}
+${fixLatency ? `<section class="ir-section"><h2>FIX Latency Correlation</h2>
+<p><strong>${fixLatency.summary.totalRecords}</strong> messages · <strong>${fixLatency.summary.totalSpikes}</strong> spikes · <strong>${fixLatency.summary.correlatedCount}</strong> with ss evidence · Endpoint match: <strong>${Math.round((fixLatency.summary.endpointMatchRate || 0) * 100)}%</strong></p>
+<p>Cause breakdown: Network: ${fixLatency.summary.causeCounts?.network || 0} · GC: ${fixLatency.summary.causeCounts?.gc || 0} · Kernel: ${fixLatency.summary.causeCounts?.kernel || 0} · CPU: ${fixLatency.summary.causeCounts?.cpu || 0} · Unknown: ${fixLatency.summary.causeCounts?.unknown || 0}</p>
+${fixLatency.topSpikes?.length ? `<h3>Top spikes</h3><table><thead><tr><th>Time</th><th>Lag</th><th>Endpoint</th><th>Cause</th><th>Score</th><th>Signals</th></tr></thead><tbody>${fixLatency.topSpikes.map(s => `<tr><td>${new Date(s.receiveMs).toISOString().slice(11, 23)}</td><td><strong>${s.lagMs.toFixed(1)}ms</strong></td><td>${esc(s.endpoint)}</td><td>${esc(s.cause || "unknown")}</td><td>${s.score.toFixed(2)}</td><td>${esc(s.signals?.join(", ") || "")}</td></tr>`).join("")}</tbody></table>` : ""}
+</section>` : ""}
+${jvmGc ? `<section class="ir-section"><h2>JVM GC Correlation</h2>
+<p>Correlated pauses: <strong>${jvmGc.summary.correlatedCount || 0}</strong> / ${jvmGc.summary.totalPauses || 0} · Max score: <strong>${(jvmGc.summary.maxScore || 0).toFixed(2)}</strong> · Severity: ${esc(jvmGc.summary.overallSeverity || "none")}</p>
+${jvmGc.analysisWindow ? `<p>Analysis window: ${new Date(jvmGc.analysisWindow.start).toISOString().slice(11, 19)} → ${new Date(jvmGc.analysisWindow.end).toISOString().slice(11, 19)} UTC (${jvmGc.analysisWindow.filteredPauses}/${jvmGc.analysisWindow.totalPauses} pauses in period)</p>` : ""}
+</section>` : ""}
 </body></html>`;
 }
