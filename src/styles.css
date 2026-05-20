@@ -10012,3 +10012,33 @@ mark.guide-hl {
 .story-socket-pill { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s; }
 .story-socket-pill:hover { border-color: var(--accent); color: var(--text); }
 .story-socket-pill.active { background: rgba(140,183,255,0.12); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* Quality metrics Grafana-style colors */
+.capture-quality-metrics article:nth-child(1) strong { color: #00e5ff; }
+.capture-quality-metrics article:nth-child(2) strong { color: #76ff03; }
+.capture-quality-metrics article:nth-child(3) strong { color: #ffd740; }
+.capture-quality-metrics article:nth-child(4) strong { color: #ff80ab; }
+.capture-quality-metrics article:nth-child(5) strong { color: #b388ff; }
+.capture-quality-metrics article:nth-child(6) strong { color: #64ffda; }
+.capture-quality-metrics article:nth-child(1) span { color: #00b8d4; }
+.capture-quality-metrics article:nth-child(2) span { color: #64dd17; }
+.capture-quality-metrics article:nth-child(3) span { color: #ffab00; }
+.capture-quality-metrics article:nth-child(4) span { color: #ff4081; }
+.capture-quality-metrics article:nth-child(5) span { color: #7c4dff; }
+.capture-quality-metrics article:nth-child(6) span { color: #1de9b6; }
+.capture-quality-metrics article { border-color: rgba(100, 120, 150, 0.3); background: linear-gradient(180deg, rgba(20, 28, 40, 0.95), rgba(8, 12, 20, 0.98)); }
+
+/* Quality metrics light mode */
+[data-theme="light"] .capture-quality-metrics article { background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,248,255,0.98)); border-color: rgba(100, 130, 180, 0.2); }
+[data-theme="light"] .capture-quality-metrics article:nth-child(1) strong { color: #0277bd; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(2) strong { color: #2e7d32; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(3) strong { color: #f57f17; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(4) strong { color: #c2185b; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(5) strong { color: #5e35b1; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(6) strong { color: #00897b; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(1) span { color: #01579b; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(2) span { color: #1b5e20; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(3) span { color: #e65100; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(4) span { color: #880e4f; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(5) span { color: #4527a0; }
+[data-theme="light"] .capture-quality-metrics article:nth-child(6) span { color: #004d40; }
