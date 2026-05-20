@@ -5571,15 +5571,24 @@ function renderDiagnosticHypothesis(item) {
       ${item.processes.length ? `<span><i class="ri-cpu-line"></i> ${escapeHtml(item.processes.join(", "))}</span>` : ""}
       ${item.peers.length ? `<span><i class="ri-exchange-line"></i> ${escapeHtml(item.peers.join(", "))}</span>` : ""}
     </div>
+    <div class="diagnosis-confidence-summary" style="font-size:11px;color:var(--muted);padding:4px 0;border-top:1px solid var(--line);margin-top:4px">
+      <span style="color:#2cc62c" title="Signals supporting this hypothesis"><i class="ri-check-line"></i> ${item.confidenceDetail?.strong?.length || item.evidence.length} present</span>
+      <span style="color:#ff9f43;margin-left:10px" title="Counter-evidence weakening this hypothesis"><i class="ri-close-line"></i> ${item.confidenceDetail?.contra?.length || item.counterEvidence.length} counter</span>
+      <span style="color:#8c9aab;margin-left:10px" title="Expected signals not found in this capture"><i class="ri-question-line"></i> ${item.confidenceDetail?.missing?.length || 0} missing</span>
+    </div>
     <div class="advisor-columns">
       <div>
-        <b>Evidence</b>
-        <ul>${item.evidence.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>
+        <b style="color:#2cc62c">Signals present</b>
+        <ul>${item.evidence.length ? item.evidence.map(entry => `<li>${escapeHtml(entry)}</li>`).join("") : "<li>No strong signal.</li>"}</ul>
       </div>
       <div>
-        <b>Counter-evidence</b>
-        <ul>${item.counterEvidence.length ? item.counterEvidence.map(entry => `<li>${escapeHtml(entry)}</li>`).join("") : "<li>None obvious in this capture.</li>"}</ul>
+        <b style="color:#ff9f43">Counter-evidence</b>
+        <ul>${item.counterEvidence.length ? item.counterEvidence.map(entry => `<li>${escapeHtml(entry)}</li>`).join("") : "<li>None obvious.</li>"}</ul>
       </div>
+      ${item.confidenceDetail?.missing?.length ? `<div>
+        <b style="color:#8c9aab">Missing evidence</b>
+        <ul>${item.confidenceDetail.missing.map(entry => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>
+      </div>` : ""}
     </div>
     <details>
       <summary><i class="ri-terminal-box-line"></i> Validation commands</summary>
