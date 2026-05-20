@@ -1,5 +1,5 @@
 import { metricValue, parseSs } from "./parser.js";
-import { parsedTimestampSnapshots, timestampBlocks } from "./timeline.js";
+import { parsedTimestampSnapshots, socketIdentityKey, timestampBlocks } from "./timeline.js";
 
 const REQUIRED_FEATURES = [
   { key: "timestamps", label: "Timestamped snapshots", weight: 16 },
@@ -302,11 +302,103 @@ function detectTimestampIrregularities(intervalsMs) {
   return { gaps, duplicates, jitter };
 }
 
-function buildDataIntegrityWarnings(snapshots, intervalsMs, stats) {
+function summarizeSocketCoverage(snapshots, fallbackSockets = []) {
+  const seen = new Map();
+  const stateByEndpoint = new Map();
+  let totalRows = 0;
+  for (const snapshot of snapshots) {
+    const sockets = snapshot.sockets || [];
+    totalRows += sockets.length;
+    for (const socket of sockets) {
+      const key = socketIdentityKey(socket);
+      const entry = seen.get(key) || {
+        key,
+        local: socket.local || "",
+        peer: socket.peer || "",
+        firstSeenMs: snapshot.epochMs,
+        lastSeenMs: snapshot.epochMs,
+        snapshots: 0,
+        states: new Set()
+      };
+      entry.snapshots += 1;
+      entry.lastSeenMs = snapshot.epochMs;
+      if (socket.state) entry.states.add(socket.state);
+      seen.set(key, entry);
+
+      const endpointKey = `${socket.local || ""}|${socket.peer || ""}`;
+      const states = stateByEndpoint.get(endpointKey) || new Set();
+      if (socket.state) states.add(socket.state);
+      stateByEndpoint.set(endpointKey, states);
+    }
+  }
+
+  if (!seen.size && fallbackSockets.length) {
+    for (const socket of fallbackSockets) {
+      const key = socketIdentityKey(socket);
+      seen.set(key, {
+        key,
+        local: socket.local || "",
+        peer: socket.peer || "",
+        firstSeenMs: 0,
+        lastSeenMs: 0,
+        snapshots: 1,
+        states: new Set(socket.state ? [socket.state] : [])
+      });
+    }
+    totalRows = fallbackSockets.length;
+  }
+
+  const entries = [...seen.values()];
+  const oneShot = entries.filter(entry => entry.snapshots === 1);
+  const statefulEndpoints = [...stateByEndpoint.entries()].filter(([, states]) => states.size > 1);
+  const maxSnapshots = snapshots.length || 1;
+  const continuityScores = entries.map(entry => entry.snapshots / maxSnapshots);
+  return {
+    uniqueSockets: entries.length,
+    totalRows,
+    oneShotSockets: oneShot.length,
+    oneShotRatio: entries.length ? oneShot.length / entries.length : 0,
+    avgSnapshotsPerSocket: entries.length ? average(entries.map(entry => entry.snapshots)) : 0,
+    medianContinuity: median(continuityScores),
+    endpointsWithStateTransitions: statefulEndpoints.length,
+    examples: oneShot.slice(0, 3).map(entry => `${entry.local} -> ${entry.peer}`),
+    stateTransitionExamples: statefulEndpoints.slice(0, 3).map(([endpoint, states]) => `${endpoint.replace("|", " -> ")} (${[...states].join(" -> ")})`)
+  };
+}
+
+function buildDiagnosisReadiness(featureCards, dataIntegrity) {
+  const byKey = Object.fromEntries(featureCards.map(card => [card.key, card]));
+  const statusOf = key => byKey[key]?.status || "missing";
+  const hasHighIntegrityIssue = dataIntegrity.some(issue => issue.severity === "high");
+  const card = (key, label, required, helpful, detailOk, detailPartial) => {
+    const missingRequired = required.filter(item => statusOf(item) === "missing");
+    const partialRequired = required.filter(item => statusOf(item) === "partial");
+    const missingHelpful = helpful.filter(item => statusOf(item) === "missing");
+    const status = missingRequired.length ? "weak" : (partialRequired.length || missingHelpful.length || hasHighIntegrityIssue) ? "partial" : "strong";
+    return {
+      key,
+      label,
+      status,
+      detail: status === "strong" ? detailOk : detailPartial,
+      blockers: [...missingRequired, ...partialRequired].map(item => byKey[item]?.label || item),
+      helpfulMissing: missingHelpful.map(item => byKey[item]?.label || item)
+    };
+  };
+
+  return [
+    card("slowConsumer", "Slow consumer / Zero Window", ["timestamps", "snapshotDepth", "tcpInfo", "timers", "socketMemory"], ["process", "identity", "counters"], "Strong enough to correlate Recv-Q, rcv_space, skmem, timers, and process context.", "Slow-consumer diagnosis must stay cautious until queue, memory, timer, and trend evidence are complete."),
+    card("networkCongestion", "Network congestion / loss", ["timestamps", "snapshotDepth", "tcpInfo", "counters"], ["timers", "duration", "identity"], "Strong enough to compare RTT/RTO, retransmission counters, cwnd, rates, and time evolution.", "Congestion/loss diagnosis needs repeated TCP internals and counters; avoid blaming the network from one snapshot."),
+    card("bdpWindow", "BDP / window-limited throughput", ["timestamps", "snapshotDepth", "tcpInfo", "counters"], ["duration", "cadence"], "Strong enough to compute observed throughput, BDP, and window-limited theoretical throughput.", "BDP/window analysis needs reliable byte deltas, RTT, rcv_space, and repeated timestamps."),
+    card("lifecycle", "Socket lifecycle / reconnects", ["timestamps", "snapshotDepth", "identity"], ["process", "cgroup"], "Strong enough to track one socket across state changes and distinguish reconnects from state transitions.", "Lifecycle analysis is fragile without sk/ino identity and repeated timestamped snapshots.")
+  ];
+}
+
+function buildDataIntegrityWarnings(snapshots, intervalsMs, stats, command = "", coverage = {}) {
   const warnings = [];
   const counterResets = detectCounterResets(snapshots);
   const identityChanges = detectIdentityChanges(snapshots);
   const irregularities = detectTimestampIrregularities(intervalsMs);
+  const requestedIntervalMs = commandSleepIntervalMs(command);
 
   if (counterResets.length) {
     warnings.push({ type: "counter-reset", severity: "high", message: `${counterResets.length} counter reset(s) detected across snapshots — socket may have been recreated or kernel recycled the sk.`, details: counterResets.slice(0, 3) });
@@ -325,6 +417,16 @@ function buildDataIntegrityWarnings(snapshots, intervalsMs, stats) {
   }
   if (stats.medianIntervalMs > 0 && stats.medianIntervalMs < 100 && !stats.highPrecisionTimestamps) {
     warnings.push({ type: "no-ms-precision", severity: "high", message: "Sub-100ms sampling without millisecond timestamps — intervals cannot be measured accurately.", details: [] });
+  }
+
+  if (requestedIntervalMs > 0 && stats.medianIntervalMs > requestedIntervalMs * 2.5) {
+    warnings.push({ type: "cadence-drift", severity: "medium", message: `Observed median cadence is ${Math.round(stats.medianIntervalMs)} ms while command requests ${Math.round(requestedIntervalMs)} ms - collection overhead or host load may hide short events.`, details: [] });
+  }
+  if ((coverage.uniqueSockets || 0) >= 5 && (coverage.oneShotRatio || 0) > 0.5) {
+    warnings.push({ type: "socket-churn", severity: "medium", message: `${Math.round(coverage.oneShotRatio * 100)}% of socket identities appear in only one snapshot - lifecycle churn may limit per-socket trend confidence.`, details: coverage.examples || [] });
+  }
+  if ((coverage.endpointsWithStateTransitions || 0) > 0) {
+    warnings.push({ type: "state-transitions", severity: "low", message: `${coverage.endpointsWithStateTransitions} endpoint(s) show TCP state transitions; treat them as one lifecycle before counting sockets.`, details: coverage.stateTransitionExamples || [] });
   }
 
   return warnings;
@@ -368,6 +470,12 @@ function buildMessages({ score, grade, featureCards, stats, raw, snapshots, comm
   if (dataIntegrity.some(i => i.type === "counter-reset")) {
     recommendations.push("Counter resets suggest socket recycling — correlate with connection lifecycle before trusting delta calculations.");
   }
+  if (dataIntegrity.some(i => i.type === "cadence-drift")) {
+    recommendations.push("Observed cadence is slower than requested; increase sleep interval or write to a fast local file before chasing sub-second events.");
+  }
+  if (dataIntegrity.some(i => i.type === "socket-churn" || i.type === "state-transitions")) {
+    recommendations.push("Review socket lifecycle before counting rows as independent sockets; prefer sk/ino identity over local/peer alone.");
+  }
   if (dataIntegrity.some(i => i.type === "no-ms-precision")) {
     recommendations.push("Use date --iso-8601=ns for sub-second captures to get accurate interval measurements.");
   }
@@ -387,7 +495,9 @@ export function analyzeCaptureQuality({ raw = "", sockets = [], sourceName = "",
   const durationMs = epochs.length >= 2 ? epochs[epochs.length - 1] - epochs[0] : 0;
   const detected = detectFeatures({ raw: text, command, sockets: parsedSockets, snapshots, blocks, intervalsMs, durationMs });
   const featureCards = buildFeatureCards({ features: detected.features, commandSignals: detected.commandSignals, stats: detected.stats });
-  const dataIntegrity = buildDataIntegrityWarnings(snapshots, intervalsMs, detected.stats);
+  const coverage = summarizeSocketCoverage(snapshots, parsedSockets);
+  const dataIntegrity = buildDataIntegrityWarnings(snapshots, intervalsMs, detected.stats, command, coverage);
+  const diagnosticReadiness = buildDiagnosisReadiness(featureCards, dataIntegrity);
   const integrityPenalty = Math.min(15, dataIntegrity.filter(i => i.severity === "high").length * 5 + dataIntegrity.filter(i => i.severity === "medium").length * 2);
   const score = Math.max(0, Math.min(100, featureCards.reduce((sum, card) => sum + card.points, 0) - integrityPenalty));
   const grade = qualityGrade(score);
@@ -419,9 +529,18 @@ export function analyzeCaptureQuality({ raw = "", sockets = [], sourceName = "",
       minSocketsPerSnapshot: socketCounts.length ? Math.min(...socketCounts) : parsedSockets.length,
       maxSocketsPerSnapshot: socketCounts.length ? Math.max(...socketCounts) : parsedSockets.length,
       highPrecisionTimestamps: detected.stats.highPrecisionTimestamps,
-      observedRateRows: observedRateRows.length
+      observedRateRows: observedRateRows.length,
+      requestedIntervalMs: commandSleepIntervalMs(command),
+      cadenceDriftRatio: commandSleepIntervalMs(command) > 0 && detected.stats.medianIntervalMs > 0 ? detected.stats.medianIntervalMs / commandSleepIntervalMs(command) : 0,
+      uniqueSocketIdentities: coverage.uniqueSockets,
+      oneShotSocketIdentities: coverage.oneShotSockets,
+      oneShotSocketRatio: coverage.oneShotRatio,
+      medianSocketContinuity: coverage.medianContinuity,
+      endpointsWithStateTransitions: coverage.endpointsWithStateTransitions
     },
     featureCards,
+    diagnosticReadiness,
+    socketCoverage: coverage,
     dataIntegrity,
     strengths: messages.strengths,
     warnings: messages.warnings,

@@ -186,7 +186,7 @@ test("capture quality warns about sub-100ms sampling without ms precision", () =
 });
 
 test("capture quality exposes dataIntegrity array even when clean", () => {
-  const report = analyzeCaptureQuality({ raw: fullCapture(), command: FULL_COMMAND });
+  const report = analyzeCaptureQuality({ raw: fullCapture(), command: "while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep 11; done" });
 
   assert.equal(Array.isArray(report.dataIntegrity), true);
   assert.equal(report.dataIntegrity.length, 0);
@@ -202,4 +202,52 @@ test("capture quality penalizes score for high-severity integrity issues", () =>
   const dirtyReport = analyzeCaptureQuality({ raw, command: FULL_COMMAND });
 
   assert.equal(dirtyReport.score < cleanReport.score, true);
+});
+
+test("capture quality exposes diagnostic readiness by investigation type", () => {
+  const report = analyzeCaptureQuality({ raw: fullCapture(), command: FULL_COMMAND });
+
+  assert.equal(report.diagnosticReadiness.length, 4);
+  assert.equal(report.diagnosticReadiness.find(item => item.key === "slowConsumer").status, "strong");
+  assert.equal(report.diagnosticReadiness.find(item => item.key === "bdpWindow").detail.includes("BDP"), true);
+});
+
+test("capture quality reports cadence drift between requested and observed interval", () => {
+  const raw = [
+    fullSnapshot("2026-05-15T10:37:15,000+00:00", 1000),
+    fullSnapshot("2026-05-15T10:37:20,000+00:00", 2000),
+    fullSnapshot("2026-05-15T10:37:25,000+00:00", 3000)
+  ].join("\n");
+  const report = analyzeCaptureQuality({ raw, command: "while true; do date --iso-8601=ns; ss -HOntepmi -a -A all; sleep 1; done" });
+
+  assert.equal(report.dataIntegrity.some(issue => issue.type === "cadence-drift"), true);
+  assert.equal(report.metrics.requestedIntervalMs, 1000);
+  assert.equal(report.metrics.cadenceDriftRatio >= 5, true);
+});
+
+test("capture quality reports socket churn when identities are one-shot", () => {
+  const raw = Array.from({ length: 5 }, (_, index) =>
+    `2026-05-15T10:37:${String(15 + index).padStart(2, "0")},000+00:00
+tcp ESTAB 0 0 10.0.0.${10 + index}:50000 10.0.0.20:443 users:(("java",pid=42,fd=7)) timer:(keepalive,116min,0) ino:${1000 + index} sk:${index.toString(16)} skmem:(r0,rb1000,t0,tb1000,f0,w0,o0,bl0,d0) cubic rtt:1/0.1 cwnd:10 bytes_sent:${index + 1} bytes_received:${index + 1}`
+  ).join("\n");
+  const report = analyzeCaptureQuality({ raw, command: FULL_COMMAND });
+
+  assert.equal(report.socketCoverage.uniqueSockets, 5);
+  assert.equal(report.socketCoverage.oneShotSockets, 5);
+  assert.equal(report.dataIntegrity.some(issue => issue.type === "socket-churn"), true);
+});
+
+test("capture quality reports endpoint state transitions separately from socket count", () => {
+  const raw = [
+    `2026-05-15T10:37:15,000+00:00
+tcp ESTAB 0 10 10.0.0.10:50000 10.0.0.20:443 timer:(on,200ms,0) ino:123 sk:abc skmem:(r0,rb1000,t0,tb1000,f0,w0,o0,bl0,d0) cubic rtt:1/0.1 cwnd:10 bytes_sent:1 bytes_received:1`,
+    `2026-05-15T10:37:16,000+00:00
+tcp FIN-WAIT-1 0 10 10.0.0.10:50000 10.0.0.20:443 timer:(on,200ms,0) ino:123 sk:abc skmem:(r0,rb1000,t0,tb1000,f0,w0,o0,bl0,d0) cubic rtt:1/0.1 cwnd:10 bytes_sent:2 bytes_received:1`,
+    `2026-05-15T10:37:17,000+00:00
+tcp FIN-WAIT-1 0 10 10.0.0.10:50000 10.0.0.20:443 timer:(on,200ms,0) ino:123 sk:abc skmem:(r0,rb1000,t0,tb1000,f0,w0,o0,bl0,d0) cubic rtt:1/0.1 cwnd:10 bytes_sent:3 bytes_received:1`
+  ].join("\n");
+  const report = analyzeCaptureQuality({ raw, command: FULL_COMMAND });
+
+  assert.equal(report.metrics.endpointsWithStateTransitions, 1);
+  assert.equal(report.dataIntegrity.some(issue => issue.type === "state-transitions"), true);
 });

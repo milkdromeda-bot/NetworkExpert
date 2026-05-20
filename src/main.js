@@ -5333,8 +5333,8 @@ function formatQualityDuration(ms) {
   return `${numberFormatterWith(1, 1).format(numeric / 60_000)} min`;
 }
 
-function renderCaptureQualityMetric(label, value, hint = "") {
-  return `<article>
+function renderCaptureQualityMetric(label, value, hint = "", className = "") {
+  return `<article${className ? ` class="${escapeHtml(className)}"` : ""}>
     <span>${escapeHtml(label)}</span>
     <strong>${escapeHtml(value)}</strong>
     ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
@@ -5353,6 +5353,20 @@ function renderCaptureQualityFeature(card) {
   </article>`;
 }
 
+function renderCaptureQualityReadiness(item) {
+  const icon = item.status === "strong" ? "ri-shield-check-line" : item.status === "partial" ? "ri-error-warning-line" : "ri-shield-cross-line";
+  const blockers = item.blockers?.length ? `<small>Blocking gaps: ${escapeHtml(item.blockers.join(", "))}</small>` : "";
+  const helpful = item.helpfulMissing?.length ? `<small>Helpful next: ${escapeHtml(item.helpfulMissing.join(", "))}</small>` : "";
+  return `<article class="capture-quality-readiness ${escapeHtml(item.status)}">
+    <i class="${icon}" aria-hidden="true"></i>
+    <div>
+      <strong>${escapeHtml(item.label)}</strong>
+      <p>${escapeHtml(item.detail)}</p>
+      ${blockers || helpful ? `<div class="capture-quality-readiness-notes">${blockers}${helpful}</div>` : ""}
+    </div>
+  </article>`;
+}
+
 function renderCaptureQualityList(title, items, empty, className = "") {
   return `<section class="capture-quality-list ${escapeHtml(className)}">
     <h4>${escapeHtml(title)}</h4>
@@ -5365,7 +5379,12 @@ function renderCaptureQualityReport() {
   const m = report.metrics;
   const okFeatures = report.featureCards.filter(card => card.status === "ok").length;
   const weakFeatures = report.featureCards.filter(card => card.status === "missing").length;
-  const cadenceHint = m.intervalCount ? `min ${formatQualityDuration(m.minIntervalMs)}, max ${formatQualityDuration(m.maxIntervalMs)}` : "Need repeated timestamps";
+  const cadenceHintBase = m.intervalCount ? `min ${formatQualityDuration(m.minIntervalMs)}, max ${formatQualityDuration(m.maxIntervalMs)}` : "Need repeated timestamps";
+  const cadenceHint = m.requestedIntervalMs
+    ? `${cadenceHintBase} - command sleep ${formatQualityDuration(m.requestedIntervalMs)}${m.cadenceDriftRatio ? ` (${numberFormatterWith(1, 1).format(m.cadenceDriftRatio)}x)` : ""}`
+    : cadenceHintBase;
+  const continuity = m.medianSocketContinuity ? `${Math.round(m.medianSocketContinuity * 100)}% median continuity` : "no continuity signal";
+  const socketCoverageHint = `${formatNumber(m.uniqueSocketIdentities)} unique / ${formatNumber(m.oneShotSocketIdentities)} one-shot - ${continuity}`;
   return `<div class="capture-quality-shell">
     <section class="capture-quality-hero ${escapeHtml(report.grade)}">
       <div>
@@ -5390,6 +5409,17 @@ function renderCaptureQualityReport() {
       ${renderCaptureQualityMetric("Cadence", formatQualityDuration(m.medianIntervalMs), cadenceHint)}
       ${renderCaptureQualityMetric("Parsed sockets", formatNumber(m.parsedSocketCount), `${formatNumber(m.activeSocketRows)} row(s) across snapshots`)}
       ${renderCaptureQualityMetric("Rows with rates", formatNumber(m.observedRateRows), "delivery/pacing/send evidence")}
+      ${renderCaptureQualityMetric("Socket coverage", formatNumber(m.uniqueSocketIdentities), socketCoverageHint, "collection-check")}
+    </section>
+
+    <section class="capture-quality-panel capture-quality-readiness-panel">
+      <header>
+        <strong>Diagnostic readiness</strong>
+        <span>what this capture can support safely</span>
+      </header>
+      <div class="capture-quality-readiness-grid">
+        ${report.diagnosticReadiness.map(renderCaptureQualityReadiness).join("")}
+      </div>
     </section>
 
     <section class="capture-quality-grid">
