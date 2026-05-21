@@ -258,6 +258,7 @@ export function createGuideView(context) {
   }
   
   function renderGuideUseCases() {
+    const quickRef = `<div class="guide-quick-ref" style="margin-bottom:16px;overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--line)"><th style="text-align:left;padding:6px 10px;color:var(--muted)">Pattern</th><th style="text-align:left;padding:6px 10px;color:var(--muted)">Detected via ss</th><th style="text-align:left;padding:6px 10px;color:var(--muted)">Root cause side</th></tr></thead><tbody><tr><td style="padding:5px 10px"><b>slow-consumer</b></td><td style="padding:5px 10px">Consumer (Recv-Q local)</td><td style="padding:5px 10px">Consumer (slow application)</td></tr><tr><td style="padding:5px 10px"><b>path-blackhole</b></td><td style="padding:5px 10px">Sender (RTO / backoff)</td><td style="padding:5px 10px">Network (intermediate equipment)</td></tr><tr><td style="padding:5px 10px"><b>peer-stopped-reading</b></td><td style="padding:5px 10px">Sender (Send-Q / persist)</td><td style="padding:5px 10px">Consumer (frozen application)</td></tr><tr><td style="padding:5px 10px"><b>congestion-event</b></td><td style="padding:5px 10px">Sender (retrans / cwnd)</td><td style="padding:5px 10px">Network (saturated link)</td></tr><tr><td style="padding:5px 10px"><b>buffer-exhaustion</b></td><td style="padding:5px 10px">Consumer (skmem.d / drops)</td><td style="padding:5px 10px">Kernel (memory pressure)</td></tr></tbody></table></div>`;
     const cases = [
       {
         title: "1. Slow consumer or congested send path",
@@ -441,7 +442,7 @@ export function createGuideView(context) {
       { key: "intelligence", label: "Intelligence & analysis", icon: "ri-brain-line" },
       { key: "workflow", label: "Workflow & operations", icon: "ri-route-line" }
     ];
-    return `<div class="usecase-grouped">${groups.map((g, gi) => {
+    return `${quickRef}<div class="usecase-grouped">${groups.map((g, gi) => {
       const items = cases.filter(c => c.group === g.key);
       return `<details class="usecase-group" ${gi === 0 ? "open" : ""}>
         <summary><i class="${g.icon}"></i> ${escapeHtml(g.label)} <span class="usecase-count">${items.length}</span></summary>
