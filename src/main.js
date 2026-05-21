@@ -1556,6 +1556,24 @@ function makeFinding({ id, severity, title, pattern, sockets, confidence, why, n
   };
 }
 
+function buildCorrelationMatrix() {
+  const history = state.history;
+  if (!history || history.length < 20) return null;
+  const metrics = ["rtt", "sendQ", "recvQ", "cwnd", "rto", "retrans", "skmem.r", "skmem.d"];
+  const data = metrics.map(m => history.map(h => h[m] || 0));
+  function pearson(a, b) {
+    const n = a.length; if (n < 5) return 0;
+    const ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n;
+    let num = 0, da = 0, db = 0;
+    for (let i = 0; i < n; i++) { const x = a[i] - ma, y = b[i] - mb; num += x * y; da += x * x; db += y * y; }
+    const denom = Math.sqrt(da) * Math.sqrt(db);
+    return denom ? num / denom : 0;
+  }
+  const cells = metrics.map((_, i) => metrics.map((_, j) => i === j ? 1 : pearson(data[i], data[j])));
+  function color(v) { const abs = Math.abs(v); if (abs < 0.3) return "transparent"; return v > 0 ? `rgba(255,92,119,${abs})` : `rgba(59,130,246,${abs})`; }
+  return `<table style="border-collapse:collapse;font-size:11px"><thead><tr><th></th>${metrics.map(m => `<th style="padding:3px 6px;color:var(--muted);font-weight:400">${m}</th>`).join("")}</tr></thead><tbody>${cells.map((row, i) => `<tr><td style="padding:3px 6px;font-weight:600;color:var(--text)">${metrics[i]}</td>${row.map(v => `<td style="padding:3px 6px;text-align:center;background:${color(v)};border-radius:3px">${v === 1 ? "" : v.toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+
 function detectTrends() {
   const history = state.history;
   if (!history || history.length < 10) return [];
@@ -6263,7 +6281,9 @@ function renderServiceMap() {
 function renderExpertInformation() {
   const items = buildExpertInformation();
   if (!items.length) return `<div class="empty">No expert information matches the current filters.</div>`;
+  const corrMatrix = buildCorrelationMatrix();
   return `<div class="expert-workbench">
+    ${corrMatrix ? `<details class="correlation-matrix-section" style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px"><i class="ri-grid-line"></i> Auto-correlation matrix (Pearson)</summary><div style="overflow-x:auto;margin-top:8px">${corrMatrix}</div></details>` : ""}
     <div class="anomaly-controls">
       <select id="anomalySeverity"><option value="all">all severities</option>${["critical", "high", "medium", "low"].map(v => `<option value="${v}" ${state.anomalyFilters.severity === v ? "selected" : ""}>${v}</option>`).join("")}</select>
       <select id="anomalyMetric"><option value="all">all metrics</option>${[...new Set(state.anomalies.map(item => item.metric).filter(Boolean))].sort().map(v => `<option value="${escapeHtml(v)}" ${state.anomalyFilters.metric === v ? "selected" : ""}>${escapeHtml(v)}</option>`).join("")}</select>
