@@ -10087,3 +10087,5 @@ mark.guide-hl {
 @keyframes pulse-trend { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
 .table-wrap { max-height: calc(100vh - 300px); overflow-y: auto; overflow-x: auto; }
+
+.breadcrumb { font-size: 11px; color: var(--muted); padding: 4px 12px; border-bottom: 1px solid var(--line); }

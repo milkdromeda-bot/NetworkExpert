@@ -2766,6 +2766,7 @@ function _renderSync() {
           <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>
         </div>
       </header>
+      <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → ${state.activeTab}` : state.view === "charts" ? `Monitoring → ${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : "Advisor"}` : "Guide"}</nav>
       ${state.view !== "charts" ? renderInvestigationContext() : ""}
       ${state.view === "ingest" ? `<main class="workspace wide">${renderIngestPage()}</main>` : ""}
       ${state.view === "analysis" ? `<main class="workspace wide">${renderAnalysisPage()}</main>` : ""}
