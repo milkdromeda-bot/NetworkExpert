@@ -10042,3 +10042,12 @@ mark.guide-hl {
 [data-theme="light"] .capture-quality-metrics article:nth-child(4) span { color: #880e4f; }
 [data-theme="light"] .capture-quality-metrics article:nth-child(5) span { color: #4527a0; }
 [data-theme="light"] .capture-quality-metrics article:nth-child(6) span { color: #004d40; }
+
+/* Google Drive style context menu */
+.gdrive-menu { padding: 6px 0 !important; min-width: 340px; overflow: hidden; }
+.gdrive-menu button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 12px; border: none; background: none; color: var(--text); font-size: 13px; font-weight: 400; cursor: pointer; border-radius: 0; text-align: left; }
+.gdrive-menu button:hover { background: rgba(140,183,255,0.1); }
+.gdrive-menu button i { font-size: 16px; width: 20px; color: var(--muted); flex-shrink: 0; }
+.gdrive-menu button span { flex: 1; white-space: nowrap; }
+.gdrive-menu kbd { font-size: 11px; color: var(--muted); font-family: inherit; background: none; border: none; padding: 0; margin-left: auto; }
+.gdrive-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 12px; }

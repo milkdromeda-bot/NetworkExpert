@@ -774,13 +774,12 @@ function renderExportMenu(scope = "analysis") {
     : "";
   return `<span class="export-menu-wrap">
     <button data-export-menu="${escapeHtml(scope)}" title="Export report or evidence pack">${icons.pack} Export</button>
-    <div class="row-menu export-menu ${open ? "open" : ""}" ${pos}>
-      <button data-action="saveCharts"><i class="ri-image-line"></i><span>Export PNG</span><small>Save visible charts as image</small></button>
-      <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>Executive summary PDF</span><small>Short printable overview for stakeholders</small></button>
-      <button data-export-action="incident-html"><i class="ri-file-code-line"></i><span>Full incident report HTML</span><small>Complete analysis: stories, matrix, playbooks, evidence</small></button>
-      <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><small>PDF, CSV, JSON and chart PNGs</small></button>
-      <button data-export-action="jira"><i class="ri-clipboard-line"></i><span>Copy Jira report</span><small>Wiki markup for ticket</small></button>
-      ${state.fixLatency.correlation?.results?.length ? `<button data-export-action="fix-csv"><i class="ri-file-excel-line"></i><span>FIX spikes CSV</span><small>Spikes with correlations for Excel/Jupyter</small></button>` : ""}
+    <div class="row-menu export-menu gdrive-menu ${open ? "open" : ""}" ${pos}>
+      <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>Executive summary PDF</span><kbd>Ctrl+Shift+P</kbd></button>
+      <button data-export-action="incident-html"><i class="ri-file-code-line"></i><span>Full incident report HTML</span><kbd>Ctrl+Shift+H</kbd></button>
+      <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><kbd>Ctrl+Shift+Z</kbd></button>
+      <button data-export-action="jira"><i class="ri-clipboard-line"></i><span>Copy Jira report</span><kbd>Ctrl+Shift+J</kbd></button>
+      ${state.fixLatency.correlation?.results?.length ? `<button data-export-action="fix-csv"><i class="ri-file-excel-line"></i><span>FIX spikes CSV</span><kbd>Ctrl+Shift+F</kbd></button>` : ""}
     </div>
   </span>`;
 }
@@ -11494,6 +11493,17 @@ document.querySelector("#app").addEventListener("click", event => {
     renderKeepingWorkspacePosition();
     return;
   }
+});
+
+
+// Keyboard shortcuts for export
+document.addEventListener("keydown", e => {
+  if (!e.ctrlKey || !e.shiftKey) return;
+  if (e.key === "P") { e.preventDefault(); openIncidentReport(); }
+  if (e.key === "H") { e.preventDefault(); exportIncidentReportHtml(); }
+  if (e.key === "Z") { e.preventDefault(); exportEvidencePack().catch(() => {}); }
+  if (e.key === "J") { e.preventDefault(); copyTextToClipboard(buildJiraReport()); toast("Jira report copied", "Paste into a Jira ticket."); }
+  if (e.key === "F") { e.preventDefault(); exportFixSpikeCsv(); }
 });
 
 render();
