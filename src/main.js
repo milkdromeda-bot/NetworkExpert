@@ -2742,6 +2742,7 @@ function _renderSync() {
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
+          ${(() => { const t = detectTrends(); return t.length ? `<span class="status-pill trend-badge" title="${t.map(x => x.metric + " overflow in ~" + x.eta + " min").join(", ")}"><i class="ri-timer-flash-line" style="color:#ff9f43"></i> ${t.length} trend${t.length > 1 ? "s" : ""}</span>` : ""; })()}
           ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
           <button class="icon" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><i class="${state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line"}"></i></button>
           <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>

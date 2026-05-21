@@ -10082,3 +10082,6 @@ mark.guide-hl {
 .cmd-palette-hint { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
 
 .cmd-palette-results button.active { background: rgba(140,183,255,0.15); }
+
+.trend-badge { background: rgba(255,159,67,0.12) !important; border-color: rgba(255,159,67,0.3) !important; color: #ff9f43 !important; animation: pulse-trend 2s infinite; }
+@keyframes pulse-trend { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
