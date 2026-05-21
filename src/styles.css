@@ -10045,7 +10045,7 @@ mark.guide-hl {
 
 /* Google Drive style context menu */
 .gdrive-menu { padding: 6px 0 !important; min-width: 340px; overflow: hidden; }
-.gdrive-menu button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 12px; border: none; background: none; color: var(--text); font-size: 13px; font-weight: 400; cursor: pointer; border-radius: 0; text-align: left; }
+.gdrive-menu button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 5px 12px; border: none; background: none; color: rgba(255,255,255,0.88); font-size: 14px; font-weight: 300; letter-spacing: 0.01em; cursor: pointer; border-radius: 0; text-align: left; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 .gdrive-menu button:hover { background: rgba(140,183,255,0.1); }
 .gdrive-menu button i { font-size: 16px; width: 20px; color: var(--muted); flex-shrink: 0; }
 .gdrive-menu button span { flex: 1; white-space: nowrap; }
