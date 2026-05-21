@@ -9488,11 +9488,16 @@ async function importFile(file) {
   state.view = "analysis";
   state.activeTab = "advisor";
   resetDerivedCaches({ raw: true });
+  // Yield to UI before heavy computation
+  render();
+  await new Promise(r => setTimeout(r, 50));
+  const t0 = performance.now();
   if (hasTimestampedRawData()) {
     recompute();
   } else {
     recomputeFromSockets();
   }
+  toast("Analysis complete", `${state.sockets.length} sockets in ${((performance.now() - t0) / 1000).toFixed(1)}s.`);
   toast("Import complete", `${formatNumber(state.sockets.length)} sockets parsed from ${file.name}.`);
   render();
 }
