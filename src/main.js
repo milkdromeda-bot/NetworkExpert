@@ -3407,7 +3407,7 @@ function renderChartsPage() {
       </div>
     </section>
     <section class="chart-grid cols-${columns} density-${layout.density}">
-      ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}${state.expandedChart === m ? " chart-expanded" : ""}" data-chart-card="${m}">
+      ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}${state.expandedChart === m ? " chart-expanded" : ""}" data-chart-card="${m}" draggable="true">
         ${state.storyMarkerPct != null && (!state.storyMarkerMetric || state.storyMarkerMetric === m) ? `<div class="story-marker-overlay" style="padding-left:${state.storyMarkerPct}%"><div class="story-marker-line"><span class="story-marker-label">${escapeHtml(state.storyMarkerTime || "")} ${escapeHtml((state.storyMarkerLabel || "").slice(0, 20))}</span></div></div>` : ""}
         <div class="panel-head">
           <div class="panel-title chart-title-wrap">
@@ -5088,12 +5088,14 @@ function drawFixHeatmap(canvas, results) {
   const ctx = canvas.getContext("2d");
   ctx.scale(2, 2);
   ctx.clearRect(0, 0, w, h);
+  const pad = { l: 50, r: 10, t: 10, b: 20 };
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
   const t0 = results[0].receiveMs, t1 = results[results.length - 1].receiveMs;
   const tSpan = t1 - t0 || 1;
   const maxLag = Math.max(...results.map(r => r.lagMs), 1);
-  const cols = Math.min(60, results.length);
-  const rows = 8;
-  const cellW = w / cols, cellH = h / rows;
+  const cols = Math.max(10, Math.min(80, Math.ceil(tSpan / 1000)));
+  const rows = 6;
+  const cellW = plotW / cols, cellH = plotH / rows;
   const grid = Array.from({ length: rows }, () => new Array(cols).fill(0));
   for (const r of results) {
     const col = Math.min(cols - 1, Math.floor(((r.receiveMs - t0) / tSpan) * cols));
@@ -5106,11 +5108,20 @@ function drawFixHeatmap(canvas, results) {
       const intensity = grid[r][c] / maxCount;
       if (intensity > 0) {
         const hue = 60 - intensity * 60;
-        ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${0.2 + intensity * 0.8})`;
-        ctx.fillRect(c * cellW, r * cellH, cellW - 0.5, cellH - 0.5);
+        ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${0.3 + intensity * 0.7})`;
+        ctx.fillRect(pad.l + c * cellW, pad.t + r * cellH, cellW - 1, cellH - 1);
       }
     }
   }
+  // Y axis (lag)
+  ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.font = "9px sans-serif"; ctx.textAlign = "right";
+  ctx.fillText(`${maxLag.toFixed(0)}ms`, pad.l - 4, pad.t + 9);
+  ctx.fillText("0ms", pad.l - 4, pad.t + plotH);
+  // X axis (time)
+  ctx.textAlign = "center";
+  ctx.fillText(fixTimeLabel(t0), pad.l, h - 2);
+  ctx.fillText(fixTimeLabel(t0 + tSpan / 2), pad.l + plotW / 2, h - 2);
+  ctx.fillText(fixTimeLabel(t1), pad.l + plotW, h - 2);
 }
 
 function fixTimeLabel(epochMs) {
@@ -5290,9 +5301,17 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
   }
   const hidden = state.fixLatency.hiddenSeries;
   // FIX spike markers
-  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map((r, i) =>
-    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/><text x="${x(r.receiveMs)}" y="${pad.t - 3}" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="8">(${i + 1}) ${fixTimeLabel(r.receiveMs).slice(0, 12)}</text>`
-  ).join("");
+  const markers = hidden.has("fixmarkers") ? "" : (() => {
+    const spikes = fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1);
+    const minGapPx = 30;
+    let lastX = -Infinity, groupIdx = 0;
+    return spikes.map((r, i) => {
+      const px = x(r.receiveMs);
+      if (px - lastX < minGapPx) return `<line x1="${px}" y1="${pad.t}" x2="${px}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.3" opacity="0.15"/>`;
+      lastX = px; groupIdx++;
+      return `<line x1="${px}" y1="${pad.t}" x2="${px}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/><text x="${px}" y="${pad.t - 3}" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="8">(${groupIdx}) ${fixTimeLabel(r.receiveMs).slice(0, 12)}</text>`;
+    }).join("");
+  })();
   const legend = "";
 
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
@@ -5349,9 +5368,17 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
     return path ? `<path d="${path}" fill="none" stroke="${colors[ki]}" stroke-width="1.5" opacity="0.85"/>` : "";
   }).join("");
 
-  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map((r, i) =>
-    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/><text x="${x(r.receiveMs)}" y="${pad.t - 3}" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="8">(${i + 1}) ${fixTimeLabel(r.receiveMs).slice(0, 12)}</text>`
-  ).join("");
+  const markers = hidden.has("fixmarkers") ? "" : (() => {
+    const spikes = fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1);
+    const minGapPx = 30;
+    let lastX = -Infinity, groupIdx = 0;
+    return spikes.map((r, i) => {
+      const px = x(r.receiveMs);
+      if (px - lastX < minGapPx) return `<line x1="${px}" y1="${pad.t}" x2="${px}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.3" opacity="0.15"/>`;
+      lastX = px; groupIdx++;
+      return `<line x1="${px}" y1="${pad.t}" x2="${px}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/><text x="${px}" y="${pad.t - 3}" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="8">(${groupIdx}) ${fixTimeLabel(r.receiveMs).slice(0, 12)}</text>`;
+    }).join("");
+  })();
 
   const legend = "";
 
@@ -8743,7 +8770,16 @@ function captureIncidentReportCharts(limit = 5) {
         true
       );
     }
-    document.querySelectorAll("[data-chart-card]").forEach(card => {
+    // Drag & drop chart reorder
+  let _draggedChart = null;
+  document.querySelectorAll("[data-chart-card]").forEach(card => {
+    card.addEventListener("dragstart", e => { _draggedChart = card; card.style.opacity = "0.4"; e.dataTransfer.effectAllowed = "move"; });
+    card.addEventListener("dragend", () => { if (_draggedChart) _draggedChart.style.opacity = ""; _draggedChart = null; document.querySelectorAll("[data-chart-card]").forEach(c => c.classList.remove("drag-over")); });
+    card.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; card.classList.add("drag-over"); });
+    card.addEventListener("dragleave", () => { card.classList.remove("drag-over"); });
+    card.addEventListener("drop", e => { e.preventDefault(); card.classList.remove("drag-over"); if (!_draggedChart || _draggedChart === card) return; const parent = card.parentElement; const cards = [...parent.querySelectorAll("[data-chart-card]")]; const fromIdx = cards.indexOf(_draggedChart); const toIdx = cards.indexOf(card); if (fromIdx < toIdx) parent.insertBefore(_draggedChart, card.nextSibling); else parent.insertBefore(_draggedChart, card); const metrics = cards.map(c => c.dataset.chartCard); const reordered = [...metrics]; reordered.splice(fromIdx, 1); reordered.splice(toIdx, 0, metrics[fromIdx]); state.prefs.visibleMetrics = reordered; });
+  });
+  document.querySelectorAll("[data-chart-card]").forEach(card => {
       if (captures.length >= limit) return;
       const metric = card.dataset.chartCard;
       const svg = card.querySelector("[data-mini-chart]");
