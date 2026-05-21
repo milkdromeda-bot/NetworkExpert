@@ -4913,7 +4913,7 @@ function renderFixLatencyPanel() {
       </div>` : ""}
     </div>
     <div class="panel-body">
-      <input type="file" id="fixFileInput" accept=".log,.txt,.gz,.zip" multiple style="display:none"/>
+      <input type="file" id="fixFileInput" accept="*" multiple style="display:none"/>
       <input type="file" id="fixDirInput" webkitdirectory style="display:none"/>
       <input type="file" id="fixVmstatFileInput" accept=".log,.txt,.out" style="display:none"/>
       <input type="file" id="fixNstatFileInput" accept=".log,.txt,.out" style="display:none"/>
@@ -11338,11 +11338,11 @@ function bindEvents() {
     requestAnimationFrame(drawFixCharts);
   }
   document.querySelector("#fixFileInput")?.addEventListener("change", e => {
-    const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name));
+    const files = Array.from(e.target.files || []);
     ingestFixFiles(files);
   });
   document.querySelector("#fixDirInput")?.addEventListener("change", e => {
-    const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name));
+    const files = Array.from(e.target.files || []);
     ingestFixFiles(files);
   });
   document.querySelector("#fixThresholdInput")?.addEventListener("change", e => {
