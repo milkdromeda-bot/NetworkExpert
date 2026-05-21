@@ -10074,7 +10074,11 @@ mark.guide-hl {
 .cmd-palette-head kbd { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--muted); }
 .cmd-palette-results { max-height: 320px; overflow-y: auto; padding: 6px; }
 .cmd-palette-results button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: none; background: none; color: var(--text); font-size: 13px; cursor: pointer; border-radius: 6px; text-align: left; }
+.cmd-palette-results button span { flex: 1; }
+.cmd-palette-results button kbd { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--muted); margin-left: auto; }
 .cmd-palette-results button:hover { background: rgba(140,183,255,0.1); }
 .cmd-palette-results button i { color: var(--muted); font-size: 15px; }
 .cmd-palette-results button small { margin-left: auto; color: var(--muted); font-size: 11px; }
 .cmd-palette-hint { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.cmd-palette-results button.active { background: rgba(140,183,255,0.15); }
