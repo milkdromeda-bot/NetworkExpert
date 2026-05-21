@@ -204,7 +204,7 @@ let state = {
   jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0, pidstat: null, nstat: null, cpuCorrelation: null },
   jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
   peerCapture: { raw: "", sockets: [], sourceName: "" },
-  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 0, showGcZones: true, expandedChart: null, hiddenSeries: new Set(["us", "sy"]), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, zoom: { timeline: { start: 0, end: 1 }, scatter: { start: 0, end: 1 }, vmstat: { start: 0, end: 1 }, nstat: { start: 0, end: 1 } } },
+  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 0, showGcZones: true, expandedChart: null, hiddenSeries: new Set(["us", "sy"]), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, playing: false, zoom: { timeline: { start: 0, end: 1 }, scatter: { start: 0, end: 1 }, vmstat: { start: 0, end: 1 }, nstat: { start: 0, end: 1 } } },
   fixTable: { page: 1, pageSize: 20, sortKey: "score", sortDir: "desc", causeFilter: "", selectedEpoch: null },
   advisorFindings: [],
   bandwidthIndex: {},
@@ -936,6 +936,7 @@ function recompute() {
   evaluateAlertRules();
   state.analysisDirty = false;
   resetDerivedCaches();
+  pushAnomalyAlerts();
 }
 
 function parseAnalysisSockets() {
@@ -955,6 +956,19 @@ function recomputeFromSockets() {
   evaluateAlertRules();
   state.analysisDirty = false;
   resetDerivedCaches();
+  pushAnomalyAlerts();
+}
+
+function pushAnomalyAlerts() {
+  if (!state.prefs.autoToast) return;
+  const critical = state.anomalies.filter(a => a.severity === "critical" || a.severity === "high");
+  if (!critical.length) return;
+  const top = critical.slice(0, 3);
+  setTimeout(() => {
+    top.forEach((a, i) => {
+      setTimeout(() => toast(`⚠ ${a.title}`, a.detail || a.metric || "", "danger"), i * 800);
+    });
+  }, 300);
 }
 
 function scheduleIpIntelEnrichment() {
@@ -4842,10 +4856,9 @@ function bindColumnHelpTooltips() {
   });
 }
 
-function runFixCorrelation() {
+function runFixCorrelation(callback) {
   const fix = state.fixLatency;
-  if (!fix.records.length) { fix.correlation = null; return; }
-  // Build flat history from all sockets across all snapshots (with peer field)
+  if (!fix.records.length) { fix.correlation = null; if (callback) callback(); return; }
   const snapshots = parsedTimestampSnapshots();
   const history = [];
   for (const snap of snapshots) {
@@ -4864,7 +4877,7 @@ function runFixCorrelation() {
       });
     }
   }
-  fix.correlation = correlateFixLatency({
+  const params = {
     records: fix.records,
     history,
     threshold: fix.threshold,
@@ -4873,7 +4886,22 @@ function runFixCorrelation() {
     gcPauses: state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses,
     gcWindowMs: fix.gcWindowMs || (() => { const pauses = state.jvmGc.pauses; if (!pauses.length) return 200; const durations = pauses.map(p => p.durationMs || 0).filter(d => d > 0); if (!durations.length) return 200; const avg = durations.reduce((s, d) => s + d, 0) / durations.length; return Math.round(Math.max(50, avg * 2)); })(),
     cpuCores: fix.cpuCores
-  });
+  };
+  if (fix.records.length > 10000 && window.Worker) {
+    const worker = new Worker(new URL("./parse-worker.js", import.meta.url), { type: "module" });
+    worker.postMessage({ type: "correlateFixLatency", payload: params });
+    worker.onmessage = msg => {
+      worker.terminate();
+      if (msg.data.type === "correlateFixLatency:done") {
+        fix.correlation = msg.data.payload;
+      }
+      if (callback) callback();
+      else { render(); setTimeout(drawFixCharts, 50); }
+    };
+    return;
+  }
+  fix.correlation = correlateFixLatency(params);
+  if (callback) callback();
 }
 
 function fixPagedRows() {
@@ -4895,7 +4923,7 @@ function fixPagedRows() {
 
 function renderFixLatencyPanel() {
   const fix = state.fixLatency;
-  const fixTools = (id) => `<span class="chart-card-tools"><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomIn" title="Zoom in">${icons.zoomIn}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomOut" title="Zoom out">${icons.zoomOut}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="resetZoom" title="Reset">${icons.reset}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panLeft" title="Pan left">${icons.arrowLeft}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panRight" title="Pan right">${icons.arrowRight}</button><button class="mini" data-action="expandFixChart" data-fix-chart-id="${id}" title="${fix.expandedChart === id ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === id ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}"></i></button></span>`;
+  const fixTools = (id) => `<span class="chart-card-tools"><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomIn" title="Zoom in">${icons.zoomIn}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomOut" title="Zoom out">${icons.zoomOut}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="resetZoom" title="Reset">${icons.reset}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panLeft" title="Pan left">${icons.arrowLeft}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panRight" title="Pan right">${icons.arrowRight}</button><button class="mini" data-action="fixPlayback" title="Playback"><i class="${state.fixLatency.playing ? "ri-pause-line" : "ri-play-line"}"></i></button><button class="mini" data-action="expandFixChart" data-fix-chart-id="${id}" title="${fix.expandedChart === id ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === id ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}"></i></button></span>`;
   const hasRecords = fix.records.length > 0;
   const corr = fix.correlation;
   const summary = corr?.summary;
@@ -4948,6 +4976,7 @@ function renderFixLatencyPanel() {
           The scatter plot shows lag (X) vs correlation score (Y) — top-right = high lag with strong cause.
           <br/><strong>Note:</strong> nstat counters are host-wide (all sockets), not per-connection. On a busy host with many connections, nstat retrans may be coincidental — ss per-socket evidence is more reliable.
         </div>
+        ${buildMultiSourceSummary(fix)}
         <div class="jvm-chart-section">
           <div class="bdp-chart-grid jvm-chart-grid">
             <article class="${fix.expandedChart === "timeline" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
@@ -5316,6 +5345,111 @@ function drawFixScatterChart(svg, results) {
     ${(() => { const sel = results.find(r => r.receiveMs === state.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.lagMs), sy = y(sel.score); return `<circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx + 10}" y="${sy - 4}" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms</text>`; })()}
   `;
 }
+function renderWhatIfSimulation() {
+  const rows = state.history;
+  if (!rows || rows.length < 2) return "";
+  const drops = dropRateSummary(rows);
+  if (!drops || !drops.totalDropDelta) return "";
+  const socket = state.sockets.find(s => s.id === state.selectedId) || state.sockets[0];
+  if (!socket) return "";
+  const currentRb = metricValue(socket, "skmem.rb") || 212992;
+  const currentRcvSpace = metricValue(socket, "rcv_space") || 65536;
+  const multiplier = state.whatIfMultiplier || 2;
+  // Estimate: drops happen when recvQ > rcv_space. With bigger buffer, fewer overflows.
+  let dropsAvoided = 0;
+  const threshold = currentRcvSpace;
+  const newThreshold = threshold * multiplier;
+  for (let i = 1; i < rows.length; i++) {
+    const recvQ = rows[i].recvQ || rows[i]["recvQ"] || 0;
+    if (recvQ > threshold && recvQ <= newThreshold) dropsAvoided++;
+  }
+  const pct = drops.totalDropDelta > 0 ? Math.min(100, Math.round((dropsAvoided / drops.totalDropDelta) * 100)) : 0;
+  return `<div class="advisor-whatif" style="margin:8px 0;padding:10px 14px;border-radius:8px;background:rgba(77,222,138,0.06);border:1px solid rgba(77,222,138,0.2)">
+    <strong style="color:#4cde8a"><i class="ri-flask-line"></i> What-if simulation</strong>
+    <div style="margin-top:6px;font-size:12px;color:var(--text)">
+      If <code>rcv_space</code> was <strong><select id="whatIfMultiplier" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:1px 4px;font-size:12px">
+        <option value="2"${multiplier===2?" selected":""}>2×</option><option value="4"${multiplier===4?" selected":""}>4×</option><option value="8"${multiplier===8?" selected":""}>8×</option><option value="16"${multiplier===16?" selected":""}>16×</option>
+      </select></strong> larger (${formatBytesHuman(currentRcvSpace)} → ${formatBytesHuman(currentRcvSpace * multiplier)}):
+      <div style="margin-top:4px;font-size:13px"><strong style="color:${pct > 50 ? "#4cde8a" : pct > 0 ? "#ffd166" : "#8c9aab"}">${pct}%</strong> of drops potentially avoided (${dropsAvoided}/${drops.totalDropDelta})</div>
+      <div style="margin-top:2px;font-size:10px;color:var(--muted)">Current skmem.rb=${formatBytesHuman(currentRb)} · Suggested: <code>sysctl net.core.rmem_max=${currentRb * multiplier}</code></div>
+    </div>
+  </div>`;
+}
+
+let _fixPlaybackTimer = null;
+function toggleFixPlayback() {
+  const fix = state.fixLatency;
+  if (fix.playing) {
+    fix.playing = false;
+    if (_fixPlaybackTimer) { cancelAnimationFrame(_fixPlaybackTimer); _fixPlaybackTimer = null; }
+    return;
+  }
+  if (!fix.correlation?.results?.length) return;
+  fix.playing = true;
+  const results = fix.correlation.results;
+  const t0 = Math.min(...results.map(r => r.receiveMs));
+  const t1 = Math.max(...results.map(r => r.receiveMs));
+  const duration = 10000; // 10s playback
+  const startReal = performance.now();
+  function tick() {
+    if (!fix.playing) return;
+    const elapsed = performance.now() - startReal;
+    const frac = Math.min(1, elapsed / duration);
+    const epoch = t0 + frac * (t1 - t0);
+    syncFixCrosshairs(epoch, null);
+    // Also update heatmap overlay
+    document.querySelectorAll("[data-fix-heatmap]").forEach(c => {
+      if (c._heatmapCrosshairAttached) {
+        const overlay = c.parentElement?.querySelector(".heatmap-overlay");
+        if (overlay) overlay.innerHTML = `<div style="position:absolute;left:${frac * 100}%;top:0;bottom:20px;width:2px;background:#ffd166"></div>`;
+      }
+    });
+    if (frac >= 1) { fix.playing = false; syncFixCrosshairs(null, null); return; }
+    _fixPlaybackTimer = requestAnimationFrame(tick);
+  }
+  _fixPlaybackTimer = requestAnimationFrame(tick);
+}
+
+function buildMultiSourceSummary(fix) {
+  if (!fix.correlation?.results?.length || (!fix.vmstat?.length && !fix.nstat?.length)) return "";
+  const results = fix.correlation.results;
+  const groups = fixSpikeGroups(results, 2000);
+  const events = [];
+  for (const g of groups.slice(0, 5)) {
+    const peakSpike = g.spikes.reduce((best, s) => s.lagMs > best.lagMs ? s : best, g.spikes[0]);
+    const t = peakSpike.receiveMs;
+    const parts = [`FIX lag ${peakSpike.lagMs.toFixed(1)}ms`];
+    if (fix.vmstat?.length) {
+      const vm = fix.vmstat.reduce((best, s) => Math.abs(s.epochMs - t) < Math.abs(best.epochMs - t) ? s : best, fix.vmstat[0]);
+      if (Math.abs(vm.epochMs - t) < 5000) {
+        const cpu = vm.us + vm.sy + vm.wa;
+        if (cpu > 50) parts.push(`CPU ${cpu}%`);
+        if (vm.r > 4) parts.push(`runqueue ${vm.r}`);
+      }
+    }
+    if (fix.nstat?.length) {
+      const ns = fix.nstat.reduce((best, s) => Math.abs(s.epochMs - t) < Math.abs(best.epochMs - t) ? s : best, fix.nstat[0]);
+      if (Math.abs(ns.epochMs - t) < 5000) {
+        const retrans = ns.counters?.TcpRetransSegs || 0;
+        const prev = fix.nstat[Math.max(0, fix.nstat.indexOf(ns) - 1)];
+        const delta = prev ? retrans - (prev.counters?.TcpRetransSegs || 0) : 0;
+        if (delta > 0) parts.push(`retrans +${formatNumber(delta)}`);
+      }
+    }
+    if (parts.length > 1) {
+      const time = fixTimeLabel(t);
+      const cause = peakSpike.cause || "unknown";
+      events.push(`<li><strong>${time}</strong> — ${parts.join(" + ")} → <em>${cause}</em></li>`);
+    }
+  }
+  if (!events.length) return "";
+  return `<div class="bdp-context-line" style="margin:8px 0;padding:8px 12px;border-radius:8px;background:rgba(93,183,255,0.06);border:1px solid rgba(93,183,255,0.15)">
+    <div style="font-weight:700;font-size:12px;color:var(--text);margin-bottom:4px"><i class="ri-links-line"></i> Multi-source correlation</div>
+    <ul style="margin:0;padding:0 0 0 16px;font-size:11px;color:var(--soft);line-height:1.7">${events.join("")}</ul>
+  </div>`;
+}
+
+
 
 function fixSpikeGroups(fixResults, gapMs = 2000) {
   if (!fixResults.length) return [];
@@ -5921,6 +6055,7 @@ function renderAdvisor() {
     ${hidden > 0 ? `<div class="advisor-note"><i class="ri-filter-3-line"></i> ${formatNumber(hidden)} lower-level anomaly signals are compressed into higher-value findings to keep the action list readable.</div>` : ""}
     ${state.peerCapture.correlations?.length ? `<div class="advisor-peer-correlation" style="margin:8px 0;padding:8px 12px;border-radius:6px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25)"><strong style="color:#3b82f6"><i class="ri-links-line"></i> Multi-host correlation (${state.peerCapture.sourceName})</strong>${state.peerCapture.correlations.slice(0, 5).map(c => `<div style="margin-top:6px;font-size:12px;color:var(--text)"><span style="color:var(--muted)">${escapeHtml(c.localSocket.local)} → ${escapeHtml(c.localSocket.peer)}</span><br/>${c.localSendQ > 0 && c.peerRecvQ > 0 ? `<span style="color:#ff9f43">⚠ Local Send-Q: <b>${formatNumber(c.localSendQ)}</b> bytes — Peer Recv-Q: <b>${formatNumber(c.peerRecvQ)}</b> bytes → <em>peer is not reading fast enough</em></span>` : c.localRecvQ > 0 && c.peerSendQ > 0 ? `<span style="color:#ff9f43">⚠ Local Recv-Q: <b>${formatNumber(c.localRecvQ)}</b> bytes — Peer Send-Q: <b>${formatNumber(c.peerSendQ)}</b> bytes → <em>local app is not reading fast enough</em></span>` : `<span style="color:#2cc62c">✓ Both sides healthy (queues empty)</span>`}</div>`).join("")}</div>` : ""}
     ${(() => { const trends = detectTrends(); return trends.length ? `<div class="advisor-trends" style="margin:8px 0;padding:8px 12px;border-radius:6px;background:rgba(255,159,67,0.08);border:1px solid rgba(255,159,67,0.25)"><strong style="color:#ff9f43"><i class="ri-timer-flash-line"></i> Predictive alerts</strong>${trends.map(t => `<div style="margin-top:4px;font-size:12px;color:var(--text)"><b>${t.metric}</b> growing ${t.rate}/window — current ${formatNumber(t.current)} ${t.unit}, overflow in <b style="color:#ff5c77">~${t.eta} min</b></div>`).join("")}</div>` : ""; })()}
+    ${renderWhatIfSimulation()}
     <div class="advisor-grid">
       ${findings.map(renderAdvisorFinding).join("")}
     </div>
@@ -9852,6 +9987,26 @@ function bindEvents() {
   document.onkeydown = handleGlobalKeydown;
   bindSmartChartTooltips();
   bindColumnHelpTooltips();
+  // Virtual table scroll
+  document.querySelector("[data-virtual-table]")?.addEventListener("scroll", function() {
+    const prev = state.table._scrollTop || 0;
+    state.table._scrollTop = this.scrollTop;
+    if (Math.abs(this.scrollTop - prev) > 16) {
+      const allRows = sortedFilteredSockets();
+      const columns = visibleColumns();
+      const ROW_HEIGHT = 32;
+      const visibleCount = Math.ceil(600 / ROW_HEIGHT) + 4;
+      const startIdx = Math.max(0, Math.floor(this.scrollTop / ROW_HEIGHT) - 2);
+      const endIdx = Math.min(allRows.length, startIdx + visibleCount);
+      const tbody = this.querySelector("tbody");
+      if (tbody) {
+        const slice = allRows.slice(startIdx, endIdx);
+        const topPad = startIdx * ROW_HEIGHT;
+        const bottomPad = Math.max(0, (allRows.length - endIdx) * ROW_HEIGHT);
+        tbody.innerHTML = `<tr style="height:${topPad}px" aria-hidden="true"></tr>${slice.map(s => `<tr data-socket="${escapeHtml(s.id)}" class="${s.id === state.selectedId ? "selected" : ""}" style="height:${ROW_HEIGHT}px"><td>${renderRowActions(s)}</td>${columns.map(col => `<td class="${state.table.pinned.includes(col.key) ? "pinned-cell" : ""}">${col.render(s)}</td>`).join("")}<td class="table-settings-cell"></td></tr>`).join("")}<tr style="height:${bottomPad}px" aria-hidden="true"></tr>`;
+      }
+    }
+  });
   document.querySelectorAll("[data-charts-tab]").forEach(btn => {
     btn.addEventListener("click", event => {
       const tab = event.currentTarget.dataset.chartsTab;
@@ -10184,6 +10339,7 @@ function bindEvents() {
       render();
     }
     if (action === "expandFixChart") { const id = event.currentTarget.dataset.fixChartId; state.fixLatency.expandedChart = state.fixLatency.expandedChart === id ? null : id; render(); setTimeout(drawFixCharts, 50); }
+    if (action === "fixPlayback") { toggleFixPlayback(); }
     if (action === "fixTablePrev") { state.fixTable.page = Math.max(1, state.fixTable.page - 1); render(); }
     if (action === "fixTableNext") { state.fixTable.page++; render(); }
     if (action === "openMetricIntelligence") { state.helpColumn = event.currentTarget.dataset.field; state.modal = "columnHelp"; render(); }
@@ -11610,6 +11766,10 @@ function bindEvents() {
     runFixCorrelation();
     render();
     requestAnimationFrame(drawFixCharts);
+  });
+  document.querySelector("#whatIfMultiplier")?.addEventListener("change", e => {
+    state.whatIfMultiplier = parseInt(e.target.value, 10) || 2;
+    render();
   });
   document.querySelector("#fixShowGcZones")?.addEventListener("change", e => {
     state.fixLatency.showGcZones = e.target.checked;

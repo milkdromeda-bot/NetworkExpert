@@ -1,9 +1,10 @@
 /**
  * Web Worker for heavy ss parsing operations.
- * Offloads parseSs + analysis from the main thread.
+ * Offloads parseSs + analysis + FIX correlation from the main thread.
  */
 import { parseSs, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
+import { correlateFixLatency } from "./fix-correlation.js";
 
 self.onmessage = function(e) {
   const { type, payload } = e.data;
@@ -24,6 +25,15 @@ self.onmessage = function(e) {
       self.postMessage({ type: "analyze:done", payload: { sockets: withRisks } });
     } catch (err) {
       self.postMessage({ type: "analyze:error", payload: { message: err.message } });
+    }
+  }
+
+  if (type === "correlateFixLatency") {
+    try {
+      const result = correlateFixLatency(payload);
+      self.postMessage({ type: "correlateFixLatency:done", payload: result });
+    } catch (err) {
+      self.postMessage({ type: "correlateFixLatency:error", payload: { message: err.message } });
     }
   }
 

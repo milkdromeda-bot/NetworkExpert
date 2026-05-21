@@ -14,8 +14,33 @@ export function renderSocketTableView({
 }) {
   if (!state.sockets.length) return `<div class="empty">Paste ss output, then run parsing.</div>`;
   const allRows = sortedFilteredSockets();
-  const page = pagedRows(allRows);
   const columns = visibleColumns();
+  const ROW_HEIGHT = 32;
+  const useVirtual = allRows.length > 200;
+
+  if (useVirtual) {
+    const visibleCount = Math.ceil(600 / ROW_HEIGHT) + 4;
+    const scrollTop = state.table._scrollTop || 0;
+    const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - 2);
+    const endIdx = Math.min(allRows.length, startIdx + visibleCount);
+    const topPad = startIdx * ROW_HEIGHT;
+    const bottomPad = Math.max(0, (allRows.length - endIdx) * ROW_HEIGHT);
+    const slice = allRows.slice(startIdx, endIdx);
+    return html`${renderGridControls(allRows.length)}<div class="table-wrap table-wrap--settings table-virtual" data-virtual-table="1" style="max-height:600px;overflow-y:auto"><table>
+      <thead><tr><th class="action-head">Actions</th>${columns.map(col => renderHeader(col)).join("")}<th class="table-settings-head">${renderTableSettingsTrigger()}</th></tr></thead>
+      <tbody>
+        <tr style="height:${topPad}px" aria-hidden="true"></tr>
+        ${slice.map(s => `<tr data-socket="${escapeHtml(s.id)}" class="${s.id === state.selectedId ? "selected" : ""}" style="height:${ROW_HEIGHT}px">
+          <td>${renderRowActions(s)}</td>
+          ${columns.map(col => `<td class="${state.table.pinned.includes(col.key) ? "pinned-cell" : ""}">${col.render(s)}</td>`).join("")}
+          <td class="table-settings-cell"></td>
+        </tr>`).join("")}
+        <tr style="height:${bottomPad}px" aria-hidden="true"></tr>
+      </tbody>
+    </table>${renderTableSettingsMenu()}</div>`;
+  }
+
+  const page = pagedRows(allRows);
   const pager = renderPagination(allRows.length, page.totalPages, page.start);
   const topPager = ["top", "both"].includes(state.prefs.paginationPosition) ? pager : "";
   const bottomPager = ["bottom", "both"].includes(state.prefs.paginationPosition) ? pager : "";
