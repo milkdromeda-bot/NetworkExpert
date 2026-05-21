@@ -11034,7 +11034,20 @@ function bindEvents() {
     const direction = event.currentTarget.dataset.chartMoveDir;
     state.openChartMoveMetric = null;
     state.openChartMovePos = null;
-    if (moveVisibleChartMetric(metric, direction)) renderKeepingWorkspacePosition();
+    if (moveVisibleChartMetric(metric, direction)) {
+      // Swap DOM elements instead of full re-render
+      const cards = [...document.querySelectorAll("[data-chart-card]")];
+      const card = cards.find(c => c.dataset.chartCard === metric);
+      if (card && card.parentElement) {
+        const parent = card.parentElement;
+        const idx = cards.indexOf(card);
+        const targetIdx = direction === "left" || direction === "up" ? idx - 1 : idx + 1;
+        const target = cards[targetIdx];
+        if (target) { direction === "left" || direction === "up" ? parent.insertBefore(card, target) : parent.insertBefore(target, card); }
+      }
+      // Close menu without full render
+      document.querySelectorAll(".chart-move-menu.open").forEach(m => m.classList.remove("open"));
+    }
   }));
   document.querySelectorAll("[data-percentile-row]").forEach(row => {
     const showCrosshair = () => {
@@ -11701,13 +11714,19 @@ if (!localStorage.getItem("theme")) {
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => { state.prefs.theme = e.matches ? "dark" : "light"; document.documentElement.dataset.theme = state.prefs.theme; render(); });
 }
 
+// Undo stack
+const _undoStack = [];
+function pushUndo() { _undoStack.push({ activeTab: state.activeTab, selectedId: state.selectedId, chartZoom: { ...state.chartZoom }, view: state.view }); if (_undoStack.length > 20) _undoStack.shift(); }
+function popUndo() { const prev = _undoStack.pop(); if (prev) { Object.assign(state, prev); render(); toast("Undo", "Reverted to previous state."); } }
+
 // Keyboard shortcuts
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
   const sockets = state.sockets;
-  if (e.key === "j" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const next = sockets[Math.min(sockets.length - 1, idx + 1)]; if (next) { state.selectedId = next.id; render(); } }
-  if (e.key === "k" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const prev = sockets[Math.max(0, idx - 1)]; if (prev) { state.selectedId = prev.id; render(); } }
-  if (e.key === "r" && !e.ctrlKey && !e.metaKey) { state.chartZoom = { start: 0, end: 1 }; render(); }
+  if (e.key === "j" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const next = sockets[Math.min(sockets.length - 1, idx + 1)]; if (next) { pushUndo(); state.selectedId = next.id; render(); } }
+  if (e.key === "k" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const prev = sockets[Math.max(0, idx - 1)]; if (prev) { pushUndo(); state.selectedId = prev.id; render(); } }
+  if (e.key === "r" && !e.ctrlKey && !e.metaKey) { pushUndo(); state.chartZoom = { start: 0, end: 1 }; render(); }
+  if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) { e.preventDefault(); popUndo(); }
   if (e.key === "k" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); toggleCommandPalette(); }
   if (e.key === "?" && !e.ctrlKey) { state.modal = state.modal === "shortcuts" ? null : "shortcuts"; render(); }
 });
