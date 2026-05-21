@@ -203,6 +203,7 @@ let state = {
   hiddenJvmSeries: new Set(),
   jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0, pidstat: null, nstat: null, cpuCorrelation: null },
   jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
+  peerCapture: { raw: "", sockets: [], sourceName: "" },
   fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 0, showGcZones: true, expandedChart: null, hiddenSeries: new Set(), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, zoom: { timeline: { start: 0, end: 1 }, scatter: { start: 0, end: 1 }, vmstat: { start: 0, end: 1 }, nstat: { start: 0, end: 1 } } },
   fixTable: { page: 1, pageSize: 20, sortKey: "score", sortDir: "desc", causeFilter: "", selectedEpoch: null },
   advisorFindings: [],
@@ -3223,6 +3224,7 @@ function renderIngestPage() {
           <input id="ingestFixFileInput" type="file" accept=".log,.txt,.gz,.zip" multiple style="display:none"/>
           <input id="ingestFixDirInput" type="file" webkitdirectory style="display:none"/>
           <input id="ingestAutoDir" type="file" webkitdirectory style="display:none"/>
+          <input id="ingestPeerSsInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip" style="display:none"/>
           <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open ss file</button>
           <button data-action="pickAutoDir" title="Load a directory — auto-detects ss, FIX, GC, vmstat, nstat files"><i class="ri-folder-search-line"></i> Auto-detect dir</button>
           <span class="ingest-extra-sources">
@@ -3230,6 +3232,7 @@ function renderIngestPage() {
             <button data-action="pickFixVmstatFile" class="${state.fixLatency.vmstat?.length ? "chip-loaded" : ""}" title="Load vmstat for CPU correlation"><i class="ri-cpu-line"></i> vmstat${state.fixLatency.vmstat?.length ? ` ${state.fixLatency.vmstat.length}s` : ""}</button>
             <button data-action="pickFixNstatFile" class="${state.fixLatency.nstat?.length ? "chip-loaded" : ""}" title="Load nstat for kernel TCP counter correlation"><i class="ri-bar-chart-line"></i> nstat${state.fixLatency.nstat?.length ? ` ${state.fixLatency.nstat.length}s` : ""}</button>
             <button data-action="pickFixFile" class="${state.fixLatency.records.length ? "chip-loaded" : ""}" title="Load FIX log files or directory"><i class="ri-exchange-line"></i> FIX${state.fixLatency.records.length ? ` ${formatNumber(state.fixLatency.records.length)}` : ""}</button>
+            <button data-action="pickPeerSs" class="${state.peerCapture.sockets.length ? "chip-loaded" : ""}" title="Load ss from the peer/remote side for multi-host correlation"><i class="ri-links-line"></i> Peer ss${state.peerCapture.sockets.length ? " ✓" : ""}</button>
           </span>
           <span class="ingest-toolbar-divider"></span>
           <div class="pill-toggle" data-active="${activePanel === "capture" ? "1" : "0"}">
@@ -5728,6 +5731,7 @@ function renderAdvisor() {
       </div>
     </section>
     ${hidden > 0 ? `<div class="advisor-note"><i class="ri-filter-3-line"></i> ${formatNumber(hidden)} lower-level anomaly signals are compressed into higher-value findings to keep the action list readable.</div>` : ""}
+    ${state.peerCapture.correlations?.length ? `<div class="advisor-peer-correlation" style="margin:8px 0;padding:8px 12px;border-radius:6px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25)"><strong style="color:#3b82f6"><i class="ri-links-line"></i> Multi-host correlation (${state.peerCapture.sourceName})</strong>${state.peerCapture.correlations.slice(0, 5).map(c => `<div style="margin-top:6px;font-size:12px;color:var(--text)"><span style="color:var(--muted)">${escapeHtml(c.localSocket.local)} → ${escapeHtml(c.localSocket.peer)}</span><br/>${c.localSendQ > 0 && c.peerRecvQ > 0 ? `<span style="color:#ff9f43">⚠ Local Send-Q: <b>${formatNumber(c.localSendQ)}</b> bytes — Peer Recv-Q: <b>${formatNumber(c.peerRecvQ)}</b> bytes → <em>peer is not reading fast enough</em></span>` : c.localRecvQ > 0 && c.peerSendQ > 0 ? `<span style="color:#ff9f43">⚠ Local Recv-Q: <b>${formatNumber(c.localRecvQ)}</b> bytes — Peer Send-Q: <b>${formatNumber(c.peerSendQ)}</b> bytes → <em>local app is not reading fast enough</em></span>` : `<span style="color:#2cc62c">✓ Both sides healthy (queues empty)</span>`}</div>`).join("")}</div>` : ""}
     ${(() => { const trends = detectTrends(); return trends.length ? `<div class="advisor-trends" style="margin:8px 0;padding:8px 12px;border-radius:6px;background:rgba(255,159,67,0.08);border:1px solid rgba(255,159,67,0.25)"><strong style="color:#ff9f43"><i class="ri-timer-flash-line"></i> Predictive alerts</strong>${trends.map(t => `<div style="margin-top:4px;font-size:12px;color:var(--text)"><b>${t.metric}</b> growing ${t.rate}/window — current ${formatNumber(t.current)} ${t.unit}, overflow in <b style="color:#ff5c77">~${t.eta} min</b></div>`).join("")}</div>` : ""; })()}
     <div class="advisor-grid">
       ${findings.map(renderAdvisorFinding).join("")}
@@ -9955,6 +9959,7 @@ function bindEvents() {
     if (action === "fixTableNext") { state.fixTable.page++; render(); }
     if (action === "openMetricIntelligence") { state.helpColumn = event.currentTarget.dataset.field; state.modal = "columnHelp"; render(); }
     if (action === "filterStorySocket") { state.storySocketFilter = event.currentTarget.dataset.socketKey; render(); }
+    if (action === "pickPeerSs") { document.querySelector("#ingestPeerSsInput")?.click(); }
     if (action === "pickAutoDir") { document.querySelector("#ingestAutoDir")?.click(); }
     if (action === "pickFixFile") { (document.querySelector("#ingestFixFileInput") || document.querySelector("#fixFileInput"))?.click(); }
     if (action === "pickFixDir") { const el = document.querySelector("#ingestFixDirInput") || document.querySelector("#fixDirInput"); if (el) el.click(); }
@@ -11211,6 +11216,23 @@ function bindEvents() {
     runFixCorrelation();
     render();
     requestAnimationFrame(drawFixCharts);
+  });
+  document.querySelector("#ingestPeerSsInput")?.addEventListener("change", async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const { parseSs } = await import("./parser.js");
+    const sockets = parseSs(text);
+    state.peerCapture = { raw: text, sockets, sourceName: file.name };
+    // Auto-correlate: match local sockets with peer sockets by inverted 4-tuple
+    const correlations = [];
+    for (const local of state.sockets) {
+      const peer = sockets.find(s => s.local?.includes(local.peerAddress?.host) && s.peer?.includes(local.localAddress?.host));
+      if (peer) correlations.push({ localSocket: local, peerSocket: peer, localSendQ: local.sendQ, peerRecvQ: peer.recvQ, localRecvQ: local.recvQ, peerSendQ: peer.sendQ });
+    }
+    state.peerCapture.correlations = correlations;
+    toast("Peer ss loaded", `${sockets.length} sockets from ${file.name}. ${correlations.length} cross-host correlation(s) found.`);
+    render();
   });
   document.querySelector("#ingestAutoDir")?.addEventListener("change", async e => {
     const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|out|gz|zip|ss)$/i.test(f.name));
