@@ -2557,13 +2557,15 @@ tr:hover, tr.selected { background: #101a27; }
 }
 .table-column-toggle-row {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 20px 1fr 24px;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 6px 7px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 8px;
   border-radius: 4px;
   color: #dce4ef;
+  font-size: 12px;
+  overflow: hidden;
 }
 .table-column-toggle-row:hover,
 .table-column-toggle-row.active {
@@ -10051,3 +10053,14 @@ mark.guide-hl {
 .gdrive-menu button span { flex: 1; white-space: nowrap; }
 .gdrive-menu kbd { font-size: 11px; color: var(--muted); font-family: inherit; background: none; border: none; padding: 0; margin-left: auto; }
 .gdrive-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 12px; }
+
+/* Compact table settings panel */
+.table-settings-menu-head { padding: 6px 10px !important; }
+.table-settings-menu-head strong { font-size: 12px; }
+.table-settings-menu-head small { font-size: 10px; }
+.table-settings-actions button { font-size: 11px !important; padding: 4px 8px !important; }
+.table-settings-search { padding: 4px 8px !important; }
+.table-settings-search input { font-size: 12px; }
+
+
+.table-column-toggle-row .col-pin { font-size: 12px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }

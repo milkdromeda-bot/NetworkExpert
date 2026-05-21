@@ -306,7 +306,7 @@ applyDefaultDashboardPreset();
 
 const icons = {
   activity: `<i class="ri-pulse-line"></i>`,
-  settings: `<i class="ri-settings-3-line"></i>`,
+  settings: `<i class="ri-more-2-fill"></i>`,
   book: `<i class="ri-book-open-line"></i>`,
   upload: `<i class="ri-folder-open-line"></i>`,
   load: `<i class="ri-folder-open-line"></i>`,
@@ -1555,6 +1555,21 @@ function makeFinding({ id, severity, title, pattern, sockets, confidence, why, n
   };
 }
 
+function baselineDeviations() {
+  if (!state.baseline?.history?.length || !state.history?.length) return [];
+  const deviations = [];
+  const metrics = ["rtt", "sendQ", "recvQ", "retrans", "rto"];
+  for (const m of metrics) {
+    const baseVals = state.baseline.history.map(d => d[m] || 0).filter(v => v > 0);
+    const currVals = state.history.map(d => d[m] || 0).filter(v => v > 0);
+    if (!baseVals.length || !currVals.length) continue;
+    const baseP95 = baseVals.sort((a, b) => a - b)[Math.floor(baseVals.length * 0.95)] || 0;
+    const currP95 = currVals.sort((a, b) => a - b)[Math.floor(currVals.length * 0.95)] || 0;
+    if (baseP95 > 0 && currP95 > baseP95 * 2) deviations.push({ metric: m, baseP95, currP95, ratio: (currP95 / baseP95).toFixed(1) });
+  }
+  return deviations;
+}
+
 function buildAdvisorFindings() {
   if (!state.sockets.length) return [];
   const findings = [];
@@ -2521,7 +2536,9 @@ function evaluateAlertRules() {
 }
 
 function createBaseline() {
-  return createBaselineSnapshot(state, { metricValue, socketBandwidth, socketKey });
+  const baseline = createBaselineSnapshot(state, { metricValue, socketBandwidth, socketKey });
+  baseline.history = state.history?.slice(0, 2000) || [];
+  return baseline;
 }
 
 function buildComparison() {
@@ -6414,6 +6431,7 @@ function renderComparison() {
       </div>
     </div>`;
   }
+  const deviations = baselineDeviations();
   const s = comparison.summary;
   const rows = comparison.rows.slice(0, 80);
   return `<div class="compare-workbench">
@@ -6424,6 +6442,7 @@ function renderComparison() {
         <p>Baseline captured ${escapeHtml(new Date(state.baseline.createdAt).toLocaleString(resolvedNumberLocale()))}</p>
       </div>
       <div class="toolbar"><button data-action="setBaseline"><i class="ri-scales-3-line"></i> Replace baseline</button><button data-action="clearBaseline">${icons.clear} Clear baseline</button></div>
+      ${deviations.length ? `<div class="compare-deviations" style="margin-top:8px;padding:6px 10px;border-radius:6px;background:rgba(255,92,119,0.08);border:1px solid rgba(255,92,119,0.2)"><strong style="color:#ff5c77"><i class="ri-alarm-warning-line"></i> ${deviations.length} metric(s) deviated from baseline</strong><div style="margin-top:4px;font-size:11px;color:var(--muted)">${deviations.map(d => `<span style="margin-right:12px"><b>${d.metric}</b>: P95 ${d.baseP95.toFixed(1)} → ${d.currP95.toFixed(1)} (×${d.ratio})</span>`).join("")}</div></div>` : ""}
     </div>
     <div class="expert-strip">
       <article><span>Before</span><strong>${formatNumber(s.before)}</strong></article>
@@ -7887,6 +7906,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     ${showMetricSeries && style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
     ${showMetricSeries && (style === "points" || style === "xy") ? points : ""}
     ${annotationOverlay}
+    ${state.baseline?.history?.length && !chartSeriesHidden(metric, "baseline") ? (() => { const bh = state.baseline.history; const bValues = bh.map(d => d[metric] || 0); if (!bValues.some(v => v > 0)) return ""; const bLine = bValues.map((v, i) => `${i ? "L" : "M"}${(pad.l + (i / Math.max(1, bh.length - 1)) * (w - pad.l - pad.r)).toFixed(1)},${y(v).toFixed(1)}`).join(" "); return `<path d="${bLine}" fill="none" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.6"/>`; })() : ""}
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <g class="crosshair-layer" data-crosshair-layer="1" pointer-events="none"></g>
