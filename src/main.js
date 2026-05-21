@@ -2678,7 +2678,7 @@ function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
 function renderOnboarding() {
   const steps = [
     { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo. Timestamped captures with <code>date --iso-8601=ns</code> unlock timeline and stories." },
-    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> � the tool builds a Root Cause Matrix, causal stories, velocity alerts, and multi-socket correlation. An AI summary tells you what happened in plain language." },
+    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> - the tool builds a Root Cause Matrix, causal stories, velocity alerts, and multi-socket correlation. An AI summary tells you what happened in plain language." },
     { icon: "ri-route-line", title: "Act with confidence", desc: "Each hypothesis includes a <b>Playbook</b> with commands for local, peer, and host. Compare before/after captures. Export a full incident report in one click." }
   ];
   const step = steps[state.onboarding] || steps[0];
@@ -2768,6 +2768,7 @@ function _renderSync() {
       </main>` : ""}
       ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
     </div>
+    ${state.modal === "commandPalette" ? `<div class="cmd-palette-overlay" data-action="closeCmdPalette"><div class="cmd-palette" onclick="event.stopPropagation()"><div class="cmd-palette-head"><i class="ri-search-line"></i><input id="cmdPaletteInput" type="text" placeholder="Search sockets, metrics, commands..." value="${escapeHtml(state.commandPaletteQuery || "")}" autocomplete="off"/><kbd>Esc</kbd></div><div class="cmd-palette-results">${(() => { const q = (state.commandPaletteQuery || "").toLowerCase(); if (!q) return "<div class=cmd-palette-hint>Type to search sockets, metrics, tabs, or commands</div>"; const results = []; state.sockets.filter(s => (s.peer + s.local + s.state + (s.details?.process?.name || "")).toLowerCase().includes(q)).slice(0, 5).forEach(s => results.push(`<button data-action="cmdPaletteSelect" data-socket-id="${s.id}"><i class="ri-plug-line"></i> ${escapeHtml(s.local)} → ${escapeHtml(s.peer)} <small>${escapeHtml(s.state)}</small></button>`)); ["quality","diagnosis","advisor","sockets","timeline","alerts","compare","groups","anomalies","fields"].filter(t => t.includes(q)).forEach(t => results.push(`<button data-action="cmdPaletteTab" data-tab="${t}"><i class="ri-layout-grid-line"></i> Go to ${t}</button>`)); ["rtt","cwnd","sendQ","recvQ","retrans","rto","pacing_rate","delivery_rate"].filter(m => m.toLowerCase().includes(q)).forEach(m => results.push(`<button data-action="cmdPaletteMetric" data-metric="${m}"><i class="ri-line-chart-line"></i> Chart ${m}</button>`)); return results.length ? results.join("") : "<div class=cmd-palette-hint>No results</div>"; })()}</div></div></div>` : ""}
     ${renderChartAnnotationMenu()}
     ${renderDrawer()}
     ${renderModal()}
@@ -3684,7 +3685,7 @@ function renderJvmGcPanel() {
     <div class="panel-body">
       ${!hasPauses ? `<div class="jvm-gc-import"><p>No GC log loaded. Use <strong>Auto-detect dir</strong> or the <strong>GC</strong> button in the Import tab to load a Java GC log.</p></div>` : `
         <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
-          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 � 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 � 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 � 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 � 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 � 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
+          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 - 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 - 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 - 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 - 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 - 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
           <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} in window${gc.analysisWindow ? ` (${gc.analysisWindow.filteredPauses}/${gc.analysisWindow.totalPauses} pauses in ss period)` : ""}</strong>
           <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}${gc.analysisWindow?.start ? ` · Analysis window: ${preciseDateTimeLabel(gc.analysisWindow.start)} → ${preciseDateTimeLabel(gc.analysisWindow.end)}` : ""}</em>
@@ -3765,14 +3766,14 @@ function renderJvmGcPanel() {
 function jvmLegendSeries(kind) {
   if (kind === "scatter") {
     return [
-      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24", tip: "GC pauses with correlation score 0.20�0.50. Temporal overlap with TCP symptoms but moderate confidence." },
+      { key: "scatter_warning", label: "Warning pauses", color: "#fbbf24", tip: "GC pauses with correlation score 0.20-0.50. Temporal overlap with TCP symptoms but moderate confidence." },
       { key: "scatter_high", label: "High score pauses", color: "#ef4444", tip: "GC pauses with correlation score > 0.50. Strong evidence of JVM-induced slow consumer behavior." },
       { key: "scatter_low", label: "Low score pauses", color: "#7dd3fc", tip: "GC pauses with correlation score < 0.20. Pause detected but no significant TCP impact observed." }
     ];
   }
   return [
     { key: "recvq", label: "Recv-Q", color: "#7dd3fc", tip: "TCP receive queue depth in bytes. Rises when the local JVM cannot drain incoming data fast enough - a key slow consumer signal." },
-    { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1�20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
+    { key: "gc_young", label: "Young GC", color: "#4ade80", tip: "Minor/young generation collections. Usually short (1-20 ms) but frequent. Under high allocation rate they can accumulate and starve the application." },
     { key: "gc_mixed", label: "Mixed GC", color: "#fbbf24", tip: "G1 mixed collections evacuating both young and old regions. Typically longer than young GC and may indicate heap pressure building up." },
     { key: "gc_full", label: "Full / Remark", color: "#ef4444", tip: "Full GC, Remark, or Cleanup pauses. These are the longest and most disruptive. Full GC indicates heap exhaustion or fragmentation." },
     { key: "gc_safepoint", label: "Safepoint", color: "#a78bfa", tip: "JVM safepoint pauses not related to GC (e.g. deoptimization, biased locking revocation). Can still block application threads." }
@@ -4898,8 +4899,8 @@ function renderFixLatencyPanel() {
           <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "none")}</span>
           <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:520px;max-height:280px;overflow-y:auto;columns:2;column-gap:18px"><span class="tooltip-kicker">FIX Latency Correlation — How to read</span><strong>Messages</strong><p>Total FIX messages parsed from all loaded files.</p><strong>Spikes</strong><p>Messages where lag (server receive time − tag 52 SendingTime) exceeds the configured threshold. These are the candidates for root-cause investigation.</p><strong>With ss evidence</strong><p>Spikes for which a matching TCP socket was found in the ss snapshots (by IP:port). This means we could inspect the socket state at the time of the spike.</p><strong>Endpoint match %</strong><p>Proportion of spikes where the FIX connection IP:port was found in ss data. 0% means ss was captured on a different host or the socket was not included.</p><strong>Cause breakdown</strong><p><b style="color:#3b82f6">Network</b>: ss shows retransmissions, RTT spike, cwnd collapse, or backoff at spike time.<br/><b style="color:#a855f7">Kernel</b>: nstat shows backlog drops, listen overflows, or RcvQ drops.<br/><b style="color:#ff9f43">CPU</b>: vmstat shows high run queue, CPU saturation, or I/O wait.<br/><b style="color:#2cc62c">GC</b>: a JVM GC pause overlaps the spike.<br/><b style="color:#8c9aab">Unknown</b>: no symptom found in any source — likely application thread-pool scheduling or application-level delay.</p><strong>GC window</strong><p>A FIX spike is attributed to GC if it occurs during the pause or within this window after the pause ends. The JVM connector cannot read the socket during Stop-The-World, and needs time to drain the backlog after resuming. Shorter window = stricter attribution (only spikes very close to the pause). Longer window = catches backlog drain effects.</p><strong>If all causes are Unknown</strong><p>The network is innocent. The TCP socket was healthy at spike time (recvQ=0, retrans=0, RTT stable, cwnd normal). The lag is caused by something above TCP: thread scheduling, GC, or application processing. Load vmstat/nstat to investigate further.</p></span></span>
           <strong>${summary?.totalRecords || 0} messages · ${summary?.totalSpikes || 0} spikes (lag > ${fix.threshold}ms) · ${summary?.correlatedCount || 0} with ss evidence</strong>
-          <em>Max score: ${(summary?.maxScore || 0).toFixed(2)} � Endpoint match: ${((summary?.endpointMatchRate || 0) * 100).toFixed(0)}%</em>
-          ${stats ? `<span style="margin-left:auto;font-size:11px;color:var(--soft)">Median: ${stats.median.toFixed(1)}ms � P95: ${stats.p95.toFixed(1)}ms � P99: ${stats.p99.toFixed(1)}ms � Max: ${stats.max.toFixed(1)}ms</span>` : ""}
+          <em>Max score: ${(summary?.maxScore || 0).toFixed(2)} - Endpoint match: ${((summary?.endpointMatchRate || 0) * 100).toFixed(0)}%</em>
+          ${stats ? `<span style="margin-left:auto;font-size:11px;color:var(--soft)">Median: ${stats.median.toFixed(1)}ms - P95: ${stats.p95.toFixed(1)}ms - P99: ${stats.p99.toFixed(1)}ms - Max: ${stats.max.toFixed(1)}ms</span>` : ""}
         </div>
         ${summary?.causeCounts ? `<div class="bdp-context-line info" style="margin-top:6px">
           <i class="ri-pie-chart-line" style="font-size:16px;color:#a78bfa"></i>
@@ -5535,7 +5536,7 @@ function diagnosticHypotheses() {
       if (h.confidenceScore > cap) {
         h.confidenceScore = cap;
         h.confidenceCapped = true;
-        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% � capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% � capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
+        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% - capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% - capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
       }
     }
   }
@@ -5593,7 +5594,7 @@ function renderRootCauseMatrix(matrix) {
   return `<section class="root-cause-matrix">
     <header>
       <h4><i class="ri-grid-line"></i> Root Cause Matrix</h4>
-      ${matrix.ambiguous ? `<span class="risk medium">Ambiguous � multiple causes compete</span>` : ""}
+      ${matrix.ambiguous ? `<span class="risk medium">Ambiguous - multiple causes compete</span>` : ""}
     </header>
     <div class="matrix-grid">
       <div class="matrix-header"><span>Confidence</span><span>Signals</span><span>Probable cause</span></div>
@@ -6299,16 +6300,16 @@ function renderTimelineStoriesView(stories) {
         const prev = isBytes ? `${Math.round(a.prevValue / 1024)} KB` : String(a.prevValue);
         const curr = isBytes ? `${Math.round(a.currValue / 1024)} KB` : String(a.currValue);
         const dt = a.dtMs >= 1000 ? `${(a.dtMs / 1000).toFixed(1)}s` : `${Math.round(a.dtMs)} ms`;
-        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain � peer or path cannot keep up."
-          : a.metric === "recvQ" ? "Data arriving faster than the app reads � local process may be stalled."
-          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly � app not consuming."
-          : a.metric === "skmem.d" ? "Packets being dropped � buffer overflow."
-          : a.metric === "rto" ? "Retransmission timeout escalating � path or peer unresponsive."
-          : a.metric === "backoff" ? "TCP retry backoff jumped � prolonged wait before next probe."
+        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain - peer or path cannot keep up."
+          : a.metric === "recvQ" ? "Data arriving faster than the app reads - local process may be stalled."
+          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly - app not consuming."
+          : a.metric === "skmem.d" ? "Packets being dropped - buffer overflow."
+          : a.metric === "rto" ? "Retransmission timeout escalating - path or peer unresponsive."
+          : a.metric === "backoff" ? "TCP retry backoff jumped - prolonged wait before next probe."
           : "";
         const time = a.epochMs ? new Date(a.epochMs).toISOString().slice(11, 23) + " UTC" : "";
         const countBadge = a.count > 1 ? ` <span class="rate-count">\u00d7${a.count} sockets</span>` : "";
-        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)}${countBadge} � <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} ? ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
+        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)}${countBadge} &middot; <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} &rarr; ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
       }).join("")}
       ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts ? All Events</button></div>` : ""}
     </div>` : ""}
@@ -6339,7 +6340,7 @@ function renderTimelineStoriesView(stories) {
       const scope = socketCount === 1 ? `1 socket affected` : `${socketCount} sockets affected`;
       const peerLabel = socketCount === 1 && stories[0].socket ? (stories[0].socket.peer || stories[0].socketKey) : "";
       const socketNav = socketCount > 1 ? `<div class="stories-socket-nav">${socketKeys.map((sk, i) => { const s = stories.find(st => st.socketKey === sk); const label = s?.socket?.details?.process ? `${s.socket.details.process.name}:${s.socket.details.process.pid}` : sk.slice(0, 24); const peer = s?.socket?.peer || ""; const active = (!state.storySocketFilter && i === 0) || state.storySocketFilter === sk; return `<button class="story-socket-pill ${active ? "active" : ""}" data-action="filterStorySocket" data-socket-key="${escapeHtml(sk)}" title="${escapeHtml(sk)}">${escapeHtml(label)} → ${escapeHtml(peer.slice(0, 20))}</button>`; }).join("")}</div>` : "";
-      return `${socketNav}<div class="stories-summary"><i class="ri-git-merge-line"></i> <b>${stories.length} ${stories.length === 1 ? "story" : "stories"}</b> � ${scope}${socketCount > 1 ? ` � ${patternTypes.length} distinct ${patternTypes.length === 1 ? "pattern" : "patterns"} (${escapeHtml(patternTypes.join(", "))})` : peerLabel ? ` � ${escapeHtml(peerLabel)}` : ""}</div>`;
+      return `${socketNav}<div class="stories-summary"><i class="ri-git-merge-line"></i> <b>${stories.length} ${stories.length === 1 ? "story" : "stories"}</b> - ${scope}${socketCount > 1 ? ` - ${patternTypes.length} distinct ${patternTypes.length === 1 ? "pattern" : "patterns"} (${escapeHtml(patternTypes.join(", "))})` : peerLabel ? ` - ${escapeHtml(peerLabel)}` : ""}</div>`;
     })() : ""}
     ${(() => { const filtered = state.storySocketFilter ? stories.filter(s => s.socketKey === state.storySocketFilter) : stories; return filtered.slice(0, 6); })().map(story => `<article class="timeline-story">
       <div class="story-header">
@@ -6456,9 +6457,9 @@ function renderComparison() {
     return `<div class="compare-empty">
       <i class="ri-scales-3-line"></i>
       <strong>Before / After comparison</strong>
-      <p>Detect exactly what changed between two captures � in either direction.</p>
+      <p>Detect exactly what changed between two captures - in either direction.</p>
       <div class="compare-steps">
-        <div class="compare-step"><span>1</span><b>Load your first capture</b><small>Either the healthy state or the incident � order doesn't matter</small></div>
+        <div class="compare-step"><span>1</span><b>Load your first capture</b><small>Either the healthy state or the incident - order doesn't matter</small></div>
         <div class="compare-step"><span>2</span><b>Set as baseline</b><small>Click one of the buttons below to mark it</small></div>
         <div class="compare-step"><span>3</span><b>Load the second capture</b><small>The diff will show what changed between the two</small></div>
       </div>
@@ -8191,7 +8192,7 @@ function attachBdpCrosshair(svg, data, series, xFn, yFn, pad, w, h, kind, format
       <line x1="${cx}" x2="${cx}" y1="${pad.t}" y2="${h - pad.b}" stroke="${chartBgColor() === `#f0f3f7` ? `#1a2533cc` : `#ffffffaa`}" stroke-width="1" stroke-dasharray="3 2"/>
       <rect x="${tooltipX}" y="${tooltipY}" width="${tooltipW}" height="${tooltipH}" rx="4" fill="rgba(10,16,24,.8)" stroke="#52657a"/>
       <text x="${tooltipX + 8}" y="${tooltipY + 14}" fill="#8cc8e8" font-size="10" font-weight="700">${escapeHtml(time)}</text>
-      ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "�"}</text>`).join("")}
+      ${rows.map((r, i) => `<circle cx="${tooltipX + 10}" cy="${tooltipY + (i + 1) * lineH + 11}" r="3" fill="${r.color}"/><text x="${tooltipX + 18}" y="${tooltipY + (i + 1) * lineH + 14}" fill="#dde8f4" font-size="10">${escapeHtml(r.label)}: ${Number.isFinite(r.value) ? escapeHtml(formatVal(r.value)) : "-"}</text>`).join("")}
     `;
   }
   svg._bdpShowCrosshair = showCrosshairAtIndex;
@@ -8585,7 +8586,7 @@ function buildJiraReport() {
   if (hypotheses.length) {
     lines.push(`h2. Diagnostic Hypotheses`);
     for (const h of hypotheses) {
-      lines.push(`h3. ${h.severity.toUpperCase()} � ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
+      lines.push(`h3. ${h.severity.toUpperCase()} - ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
       lines.push(h.summary);
       if (h.evidence.length) {
         lines.push(`*Evidence:*`);
@@ -9959,6 +9960,10 @@ function bindEvents() {
     if (action === "fixTableNext") { state.fixTable.page++; render(); }
     if (action === "openMetricIntelligence") { state.helpColumn = event.currentTarget.dataset.field; state.modal = "columnHelp"; render(); }
     if (action === "filterStorySocket") { state.storySocketFilter = event.currentTarget.dataset.socketKey; render(); }
+    if (action === "closeCmdPalette") { state.modal = null; render(); }
+    if (action === "cmdPaletteSelect") { state.selectedId = event.currentTarget.dataset.socketId; state.modal = null; state.view = "analysis"; state.activeTab = "sockets"; render(); }
+    if (action === "cmdPaletteTab") { state.activeTab = event.currentTarget.dataset.tab; state.modal = null; state.view = "analysis"; render(); }
+    if (action === "cmdPaletteMetric") { state.prefs.graphMetric = event.currentTarget.dataset.metric; state.modal = null; state.view = "charts"; state.chartsTab = "charts"; render(); }
     if (action === "pickPeerSs") { document.querySelector("#ingestPeerSsInput")?.click(); }
     if (action === "pickAutoDir") { document.querySelector("#ingestAutoDir")?.click(); }
     if (action === "pickFixFile") { (document.querySelector("#ingestFixFileInput") || document.querySelector("#fixFileInput"))?.click(); }
@@ -11217,6 +11222,8 @@ function bindEvents() {
     render();
     requestAnimationFrame(drawFixCharts);
   });
+  document.querySelector("#cmdPaletteInput")?.addEventListener("input", e => { state.commandPaletteQuery = e.target.value; render(); setTimeout(() => document.querySelector("#cmdPaletteInput")?.focus(), 10); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && state.modal === "commandPalette") { state.modal = null; render(); } });
   document.querySelector("#ingestPeerSsInput")?.addEventListener("change", async e => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -11581,5 +11588,29 @@ document.addEventListener("keydown", e => {
   if (e.key === "J") { e.preventDefault(); copyTextToClipboard(buildJiraReport()); toast("Jira report copied", "Paste into a Jira ticket."); }
   if (e.key === "F") { e.preventDefault(); exportFixSpikeCsv(); }
 });
+
+// Dark/light auto from OS preference
+if (!localStorage.getItem("theme")) {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  if (!prefersDark && state.prefs.theme !== "light") { state.prefs.theme = "light"; document.documentElement.dataset.theme = "light"; }
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => { state.prefs.theme = e.matches ? "dark" : "light"; document.documentElement.dataset.theme = state.prefs.theme; render(); });
+}
+
+// Keyboard shortcuts
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
+  const sockets = state.sockets;
+  if (e.key === "j" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const next = sockets[Math.min(sockets.length - 1, idx + 1)]; if (next) { state.selectedId = next.id; render(); } }
+  if (e.key === "k" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const prev = sockets[Math.max(0, idx - 1)]; if (prev) { state.selectedId = prev.id; render(); } }
+  if (e.key === "r" && !e.ctrlKey && !e.metaKey) { state.chartZoom = { start: 0, end: 1 }; render(); }
+  if (e.key === "k" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); toggleCommandPalette(); }
+});
+
+// Command palette
+function toggleCommandPalette() {
+  if (state.modal === "commandPalette") { state.modal = null; render(); return; }
+  state.modal = "commandPalette"; state.commandPaletteQuery = ""; render();
+  setTimeout(() => document.querySelector("#cmdPaletteInput")?.focus(), 50);
+}
 
 render();
