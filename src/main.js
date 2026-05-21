@@ -1555,6 +1555,39 @@ function makeFinding({ id, severity, title, pattern, sockets, confidence, why, n
   };
 }
 
+function detectTrends() {
+  const history = state.history;
+  if (!history || history.length < 10) return [];
+  const trends = [];
+  const metrics = [
+    { key: "recvQ", label: "Recv-Q", limit: s => (s?.details?.skmem?.rb || 4194304), unit: "bytes" },
+    { key: "sendQ", label: "Send-Q", limit: () => 1048576, unit: "bytes" },
+    { key: "skmem.r", label: "skmem.r", limit: s => (s?.details?.skmem?.rb || 4194304), unit: "bytes" },
+    { key: "rto", label: "RTO", limit: () => 120000, unit: "ms" }
+  ];
+  const recent = history.slice(-20);
+  const older = history.slice(-40, -20);
+  if (!older.length) return [];
+  const socket = socketsById().get(state.selectedId) || state.sockets[0];
+  for (const m of metrics) {
+    const recentAvg = recent.reduce((s, d) => s + (d[m.key] || 0), 0) / recent.length;
+    const olderAvg = older.reduce((s, d) => s + (d[m.key] || 0), 0) / older.length;
+    if (olderAvg <= 0 || recentAvg <= olderAvg) continue;
+    const growthRate = (recentAvg - olderAvg) / olderAvg;
+    if (growthRate < 0.1) continue;
+    const limit = m.limit(socket);
+    const timePerSample = history.length > 1 ? (history[history.length-1].epochMs - history[0].epochMs) / history.length : 1000;
+    const samplesPerMin = 60000 / timePerSample;
+    const ratePerMin = (recentAvg - olderAvg) / (20 / samplesPerMin);
+    const remaining = limit - recentAvg;
+    const minutesToOverflow = remaining > 0 && ratePerMin > 0 ? Math.round(remaining / ratePerMin) : null;
+    if (minutesToOverflow !== null && minutesToOverflow < 30) {
+      trends.push({ metric: m.label, rate: `${(growthRate * 100).toFixed(0)}%`, perMin: ratePerMin, eta: minutesToOverflow, unit: m.unit, current: Math.round(recentAvg), limit });
+    }
+  }
+  return trends;
+}
+
 function baselineDeviations() {
   if (!state.baseline?.history?.length || !state.history?.length) return [];
   const deviations = [];
@@ -5695,6 +5728,7 @@ function renderAdvisor() {
       </div>
     </section>
     ${hidden > 0 ? `<div class="advisor-note"><i class="ri-filter-3-line"></i> ${formatNumber(hidden)} lower-level anomaly signals are compressed into higher-value findings to keep the action list readable.</div>` : ""}
+    ${(() => { const trends = detectTrends(); return trends.length ? `<div class="advisor-trends" style="margin:8px 0;padding:8px 12px;border-radius:6px;background:rgba(255,159,67,0.08);border:1px solid rgba(255,159,67,0.25)"><strong style="color:#ff9f43"><i class="ri-timer-flash-line"></i> Predictive alerts</strong>${trends.map(t => `<div style="margin-top:4px;font-size:12px;color:var(--text)"><b>${t.metric}</b> growing ${t.rate}/window — current ${formatNumber(t.current)} ${t.unit}, overflow in <b style="color:#ff5c77">~${t.eta} min</b></div>`).join("")}</div>` : ""; })()}
     <div class="advisor-grid">
       ${findings.map(renderAdvisorFinding).join("")}
     </div>
