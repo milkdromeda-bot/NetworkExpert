@@ -3727,6 +3727,7 @@ function renderJvmGcPanel() {
             </article>
           </div>
         </div>
+        ${corr?.results?.length > 5 ? `<div style="margin:8px 0"><div class="bdp-chart-title"><strong>Spike density heatmap</strong><span>time x lag</span></div><canvas data-fix-heatmap style="width:100%;height:80px;border-radius:6px;background:rgba(0,0,0,0.2)"></canvas></div>` : ""}
         <div class="jvm-gc-results">
           <div class="jvm-table-head">
             <strong>Correlated JVM stall events</strong>
@@ -4973,6 +4974,7 @@ function renderFixLatencyPanel() {
             </article>` : ""}
           </div>
         </div>
+        ${corr?.results?.length > 5 ? `<div style="margin:8px 0"><div class="bdp-chart-title"><strong>Spike density heatmap</strong><span>time x lag</span></div><canvas data-fix-heatmap style="width:100%;height:80px;border-radius:6px;background:rgba(0,0,0,0.2)"></canvas></div>` : ""}
         <div class="jvm-gc-results">
           <div class="jvm-table-head">
             <strong>Correlated FIX latency spikes</strong>
@@ -5054,7 +5056,41 @@ function drawFixCharts() {
     const ns = fix.nstat.slice(Math.floor(nz.start * fix.nstat.length), Math.ceil(nz.end * fix.nstat.length));
     drawFixNstatChart(svg4, ns.length ? ns : fix.nstat, results);
   }
+  // Heatmap
+  const heatCanvas = document.querySelector("[data-fix-heatmap]");
+  if (heatCanvas && results.length > 5) drawFixHeatmap(heatCanvas, results);
  } catch(e) { console.error("drawFixCharts error:", e); }
+}
+
+function drawFixHeatmap(canvas, results) {
+  const w = canvas.clientWidth || 600, h = canvas.clientHeight || 80;
+  canvas.width = w * 2; canvas.height = h * 2;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(2, 2);
+  ctx.clearRect(0, 0, w, h);
+  const t0 = results[0].receiveMs, t1 = results[results.length - 1].receiveMs;
+  const tSpan = t1 - t0 || 1;
+  const maxLag = Math.max(...results.map(r => r.lagMs), 1);
+  const cols = Math.min(60, results.length);
+  const rows = 8;
+  const cellW = w / cols, cellH = h / rows;
+  const grid = Array.from({ length: rows }, () => new Array(cols).fill(0));
+  for (const r of results) {
+    const col = Math.min(cols - 1, Math.floor(((r.receiveMs - t0) / tSpan) * cols));
+    const row = Math.min(rows - 1, Math.floor((r.lagMs / maxLag) * rows));
+    grid[rows - 1 - row][col]++;
+  }
+  const maxCount = Math.max(1, ...grid.flat());
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const intensity = grid[r][c] / maxCount;
+      if (intensity > 0) {
+        const hue = 60 - intensity * 60;
+        ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${0.2 + intensity * 0.8})`;
+        ctx.fillRect(c * cellW, r * cellH, cellW - 0.5, cellH - 0.5);
+      }
+    }
+  }
 }
 
 function fixTimeLabel(epochMs) {
