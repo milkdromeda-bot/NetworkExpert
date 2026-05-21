@@ -9710,10 +9710,33 @@ function bindEvents() {
       state.raw = rawInput ? rawInput.value : (cmValue || state.raw);
       setActiveInvestigation(state, null);
       resetDerivedCaches({ raw: true });
+      const parseStart = performance.now();
+      if (state.raw.length > 5000000 && window.Worker) {
+        _showBusy();
+        const worker = new Worker(new URL("./parse-worker.js", import.meta.url), { type: "module" });
+        worker.postMessage({ type: "parseSs", payload: { raw: state.raw } });
+        worker.onmessage = msg => {
+          if (msg.data.type === "parseSs:done") {
+            worker.terminate();
+            state.sockets = applyRisks(msg.data.payload.sockets.map(s => ({ ...s, id: s.id || `${s.local}|${s.peer}|${s.state}` })));
+            state.bandwidthIndex = buildSocketBandwidthIndex();
+            state.anomalies = analyzeAll(state.sockets);
+            state.selectedId = state.sockets[0]?.id || null;
+            buildHistory(); addCollectionAnomalies(); runAdvisorAnalysis(); evaluateAlertRules();
+            state.analysisDirty = false; resetDerivedCaches();
+            _hideBusy();
+            const elapsed = ((performance.now() - parseStart) / 1000).toFixed(1);
+            toast("Analysis complete", `${state.sockets.length} sockets parsed in ${elapsed}s (background worker).`);
+            state.view = "analysis"; state.activeTab = "advisor"; render();
+          }
+        };
+        return;
+      }
       recompute();
+      const elapsed = ((performance.now() - parseStart) / 1000).toFixed(1);
       if (state.prefs.autoToast) {
         const top = state.anomalies[0];
-        toast("Analysis complete", top ? `${top.severity}: ${top.title}` : "No major anomaly detected.", top?.severity === "critical" ? "danger" : "warn");
+        toast("Analysis complete", `${state.sockets.length} sockets in ${elapsed}s. ${top ? `${top.severity}: ${top.title}` : "No major anomaly."}`, top?.severity === "critical" ? "danger" : "warn");
       }
       state.view = "analysis";
       state.activeTab = "advisor";
