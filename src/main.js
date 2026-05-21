@@ -10822,8 +10822,18 @@ function bindEvents() {
       state.table.page = 1;
     }
     if (action === "copy") {
-      await navigator.clipboard?.writeText(socket.raw);
-      toast("Socket row copied", "Raw ss row has been copied to the clipboard.");
+      const p = socket.details?.process;
+      const summary = [
+        `${socket.state} ${socket.local} -> ${socket.peer}`,
+        p ? `Process: ${p.name}:${p.pid}` : "",
+        `Send-Q: ${formatNumber(socket.sendQ)} | Recv-Q: ${formatNumber(socket.recvQ)}`,
+        metricValue(socket, "rtt") ? `RTT: ${metricValue(socket, "rtt").toFixed(1)}ms | RTO: ${metricValue(socket, "rto")}ms` : "",
+        metricValue(socket, "cwnd") ? `cwnd: ${metricValue(socket, "cwnd")} | retrans: ${socket.details?.timer?.retrans || 0}` : "",
+        metricValue(socket, "skmem.d") ? `drops: ${metricValue(socket, "skmem.d")}` : "",
+        socket.risk !== "none" ? `Risk: ${socket.risk}` : ""
+      ].filter(Boolean).join("\\n");
+      await navigator.clipboard?.writeText(summary);
+      toast("Socket copied", "Formatted summary copied to clipboard (paste in Slack/email).");
     }
     render();
   }));
