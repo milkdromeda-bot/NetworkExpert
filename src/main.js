@@ -5290,8 +5290,8 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
   }
   const hidden = state.fixLatency.hiddenSeries;
   // FIX spike markers
-  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
-    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/>`
+  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map((r, i) =>
+    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/><text x="${x(r.receiveMs)}" y="${pad.t - 3}" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="8">(${i + 1}) ${fixTimeLabel(r.receiveMs).slice(0, 12)}</text>`
   ).join("");
   const legend = "";
 
@@ -5349,8 +5349,8 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
     return path ? `<path d="${path}" fill="none" stroke="${colors[ki]}" stroke-width="1.5" opacity="0.85"/>` : "";
   }).join("");
 
-  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map(r =>
-    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/>`
+  const markers = hidden.has("fixmarkers") ? "" : fixResults.filter(r => r.receiveMs >= t0 && r.receiveMs <= t1).map((r, i) =>
+    `<line x1="${x(r.receiveMs)}" y1="${pad.t}" x2="${x(r.receiveMs)}" y2="${pad.t + plotH}" stroke="#ffffff" stroke-width="0.7" opacity="0.3"/><text x="${x(r.receiveMs)}" y="${pad.t - 3}" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="8">(${i + 1}) ${fixTimeLabel(r.receiveMs).slice(0, 12)}</text>`
   ).join("");
 
   const legend = "";
@@ -5370,6 +5370,18 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
   attachFixChartCrosshair(svg, pad, w, h, t0, span, nsamples, s => keys.map((k, i) => `${labels[i]}=${s.counters[k] || 0}`).filter(v => !v.endsWith("=0")).join(" · ") || "all zero");
 }
 
+let _fixCrosshairEpoch = null;
+function syncFixCrosshairs(epoch, sourceSvg) {
+  _fixCrosshairEpoch = epoch;
+  document.querySelectorAll("[data-fix-chart]").forEach(svg => {
+    if (svg === sourceSvg) return;
+    const g = svg.querySelector(".fix-crosshair-g");
+    if (!g) return;
+    if (epoch === null) { g.style.display = "none"; return; }
+    if (svg._fixCrosshairUpdate) svg._fixCrosshairUpdate(epoch);
+  });
+}
+
 function attachFixChartCrosshair(svg, pad, w, h, t0, span, data, labelFn) {
   const zone = svg.querySelector(".fix-hover-zone");
   if (!zone || !data.length) return;
@@ -5379,14 +5391,10 @@ function attachFixChartCrosshair(svg, pad, w, h, t0, span, data, labelFn) {
   g.classList.add("fix-crosshair-g");
   g.style.pointerEvents = "none";
   g.style.display = "none";
-  g.innerHTML = `<line class="xh-v" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffd166" stroke-width="1" stroke-dasharray="4,3" opacity="0.8"/><line class="xh-h" x1="${pad.l}" x2="${w - pad.r}" stroke="#ffd166" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/><rect class="xh-bg" rx="6" ry="6" fill="rgba(14,17,22,0.88)" stroke="rgba(140,183,255,0.25)" stroke-width="1"/><text class="xh-title" font-size="12" font-weight="700" fill="#edf4ff"></text><g class="xh-rows"></g>`;
+  g.innerHTML = `<line class="xh-v" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffd166" stroke-width="1" stroke-dasharray="4,3" opacity="0.8"/><line class="xh-h" x1="${pad.l}" x2="${w - pad.r}" stroke="#ffd166" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/><rect class="xh-bg" rx="6" ry="6" fill="rgba(14,17,22,0.35)" stroke="rgba(140,183,255,0.25)" stroke-width="1"/><text class="xh-title" font-size="12" font-weight="700" fill="#edf4ff"></text><g class="xh-rows"></g>`;
   svg.appendChild(g);
-  zone.addEventListener("mousemove", e => {
-    const rect = svg.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const frac = Math.max(0, Math.min(1, (mx - pad.l) / (w - pad.l - pad.r)));
-    const epoch = t0 + frac * span;
+  function updateCrosshair(epoch, my) {
+    const frac = Math.max(0, Math.min(1, (epoch - t0) / span));
     const closest = data.reduce((best, item) => Math.abs((item.epochMs || item.receiveMs) - epoch) < Math.abs((best.epochMs || best.receiveMs) - epoch) ? item : best, data[0]);
     const cx = pad.l + (((closest.epochMs || closest.receiveMs) - t0) / span) * (w - pad.l - pad.r);
     g.style.display = "";
@@ -5407,8 +5415,17 @@ function attachFixChartCrosshair(svg, pad, w, h, t0, span, data, labelFn) {
     const tw = Math.max(150, Math.max(time.length, ...lines.map(l => l.length)) * 7 + 20);
     const th = lines.length * 16 + 28;
     bgEl.setAttribute("x", tooltipX); bgEl.setAttribute("y", tooltipY); bgEl.setAttribute("width", tw); bgEl.setAttribute("height", th);
+  }
+  svg._fixCrosshairUpdate = (epoch) => { updateCrosshair(epoch, pad.t + 30); };
+  zone.addEventListener("mousemove", e => {
+    const rect = svg.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const epoch = t0 + Math.max(0, Math.min(1, (mx - pad.l) / (w - pad.l - pad.r))) * span;
+    updateCrosshair(epoch, my);
+    syncFixCrosshairs(epoch, svg);
   });
-  zone.addEventListener("mouseleave", () => { g.style.display = "none"; });
+  zone.addEventListener("mouseleave", () => { g.style.display = "none"; syncFixCrosshairs(null, svg); });
 }
 
 function renderActiveTab() {
