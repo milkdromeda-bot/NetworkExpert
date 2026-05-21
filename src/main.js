@@ -9469,10 +9469,10 @@ async function importFile(file) {
         }
         : update.status;
       if (options.render !== false) {
-        resetDerivedCaches({ raw: true });
         state.sockets = visibleSockets;
-        recomputeFromSockets();
-        render();
+        // Only render status, skip heavy recompute during streaming
+        const statusEl = document.querySelector(".import-status");
+        if (statusEl && update.status) statusEl.textContent = `${update.status.title} - ${update.status.detail} (${update.status.progress || 0}%)`;
       } else {
         state.sockets = visibleSockets;
       }
