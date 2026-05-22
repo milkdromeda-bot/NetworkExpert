@@ -3265,9 +3265,9 @@ function renderIngestPage() {
   const editorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
   return html`
     <section class="ingest-hero">
-      <div>
-        <h2>Import</h2>
-        <p style="font-size:11px;color:var(--muted)">Supported: <strong>ss</strong> · <strong>GC log</strong> · <strong>vmstat</strong> · <strong>nstat</strong> · <strong>FIX logs</strong> — use Auto-detect dir to load all at once</p>
+      <div style="display:flex;align-items:center;gap:12px">
+        <h2 style="margin:0">Import</h2>
+        <span style="font-size:11px;color:var(--muted)">Supported: <strong>ss</strong> · <strong>GC log</strong> · <strong>vmstat</strong> · <strong>nstat</strong> · <strong>FIX logs</strong> — use Auto-detect dir to load all at once</span>
       </div>
     </section>
     <section class="panel ingest-source-panel ss-editor-theme-${escapeHtml(editorTheme)}">
@@ -3407,6 +3407,10 @@ function renderChartsGlobalToolbar() {
     <div class="chart-tool-group">
       <button data-action="thresholds">${icons.threshold} Thresholds</button>
       ${renderExportMenu("charts")}
+      <div class="app-tabs" role="radiogroup" aria-label="Metrics view mode" style="padding:3px;gap:2px;margin-left:6px">
+        <button class="app-tab ${state.metricsView !== "table" ? "active" : ""}" data-action="setMetricsView" data-metrics-view="charts" title="Charts view"><i class="ri-bar-chart-box-line"></i></button>
+        <button class="app-tab ${state.metricsView === "table" ? "active" : ""}" data-action="setMetricsView" data-metrics-view="table" title="Stats table"><i class="ri-table-line"></i></button>
+      </div>
     </div>
     <div class="chart-tool-group chart-time-group">
       <label class="chart-time-field">TZ <select id="chartTimeZoneSelect" title="Chart timezone">${renderTimeZoneOptions()}</select></label>
@@ -3421,6 +3425,110 @@ function renderChartsGlobalToolbar() {
   </div>`;
 }
 
+function renderAdvisorGlobalSummary() {
+  const sockets = state.sockets;
+  const anomalies = state.anomalies;
+  const history = visibleHistory();
+  const drops = dropRateSummary(history);
+  const critical = anomalies.filter(a => a.severity === "critical" || a.severity === "high");
+  const hasTimeline = history.length > 1;
+
+  // Health score
+  const score = Math.max(0, 100 - critical.length * 15 - anomalies.length * 3 - (drops?.totalDropDelta || 0 > 0 ? 20 : 0));
+  const scoreColor = score >= 80 ? "#4cde8a" : score >= 50 ? "#ffd166" : "#ff5c77";
+
+  // Top issues
+  const issues = critical.slice(0, 5).map(a => `<li style="margin:4px 0"><span style="color:${a.severity === "critical" ? "#ff5c77" : "#ff9f43"};font-weight:700">${escapeHtml(a.severity)}</span> — ${escapeHtml(a.title)}${a.detail ? `: <span style="color:var(--muted)">${escapeHtml(a.detail.slice(0, 100))}</span>` : ""}</li>`);
+
+  // Quick stats
+  const retransSockets = sockets.filter(s => (metricValue(s, "retrans") || 0) > 0).length;
+  const backoffSockets = sockets.filter(s => (metricValue(s, "backoff") || 0) > 0).length;
+  const highRtt = sockets.filter(s => (metricValue(s, "rtt") || 0) > 100).length;
+  const queuedSockets = sockets.filter(s => (metricValue(s, "recvQ") || 0) > 0 || (metricValue(s, "sendQ") || 0) > 0).length;
+
+  return `<div class="advisor-global-summary" style="padding:16px">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+      <div style="width:64px;height:64px;border-radius:50%;border:3px solid ${scoreColor};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:${scoreColor}">${score}</div>
+      <div>
+        <h3 style="margin:0;color:var(--text)">Network Health Score</h3>
+        <p style="margin:2px 0 0;color:var(--muted);font-size:12px">${sockets.length} sockets · ${anomalies.length} anomalies · ${hasTimeline ? history.length + " snapshots" : "no timeline"}</p>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
+      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${retransSockets ? "#ff5c77" : "#4cde8a"}">${retransSockets}</div><div style="font-size:10px;color:var(--muted)">Retransmitting</div></div>
+      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${backoffSockets ? "#ff9f43" : "#4cde8a"}">${backoffSockets}</div><div style="font-size:10px;color:var(--muted)">Backoff active</div></div>
+      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${highRtt ? "#ff9f43" : "#4cde8a"}">${highRtt}</div><div style="font-size:10px;color:var(--muted)">RTT > 100ms</div></div>
+      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${queuedSockets ? "#ffd166" : "#4cde8a"}">${queuedSockets}</div><div style="font-size:10px;color:var(--muted)">Queued (Recv/Send)</div></div>
+      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${drops?.totalDropDelta ? "#ff5c77" : "#4cde8a"}">${drops?.totalDropDelta || 0}</div><div style="font-size:10px;color:var(--muted)">Socket drops</div></div>
+    </div>
+    ${issues.length ? `<div style="margin-bottom:12px"><strong style="color:var(--text)"><i class="ri-alarm-warning-line" style="color:#ff5c77"></i> Top issues</strong><ul style="margin:6px 0 0 16px;padding:0;font-size:12px;color:var(--soft)">${issues.join("")}</ul></div>` : `<div style="padding:12px;border-radius:8px;background:rgba(77,222,138,0.08);border:1px solid rgba(77,222,138,0.2);color:#4cde8a;font-weight:600"><i class="ri-shield-check-line"></i> No critical issues detected. All sockets appear healthy.</div>`}
+    ${renderWhatIfSimulation()}
+    <div style="margin-top:12px;font-size:11px;color:var(--muted)"><i class="ri-lightbulb-line"></i> Tip: Select a socket in Analysis to see per-connection investigation context and tail-latency lens here.</div>
+  </div>`;
+}
+
+
+function renderMetricsStatsTable(metrics) {
+  const rows = visibleHistory();
+  if (!rows.length) return `<div class="empty">No timestamped data for stats.</div>`;
+  const sortKey = state.statsTableSort || "metric";
+  const sortDir = state.statsTableDir || "asc";
+  const cols = ["Min", "Median", "P75", "P95", "P99", "P99.9", "Max", "Avg", "StdDev", "Samples"];
+  const colKeys = ["min", "median", "p75", "p95", "p99", "p999", "max", "avg", "stddev", "samples"];
+
+  const data = metrics.map(m => {
+    const vals = rows.map(r => Number(r[m]) || 0).filter(v => Number.isFinite(v)).sort((a, b) => a - b);
+    if (!vals.length) return null;
+    const p = f => vals[Math.min(vals.length - 1, Math.floor(f * vals.length))];
+    const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+    const variance = vals.reduce((s, v) => s + (v - avg) ** 2, 0) / vals.length;
+    const stddev = Math.sqrt(variance);
+    const t = thresholdFor(m);
+    return { metric: m, label: metricLabel(m), min: vals[0], median: p(0.5), p75: p(0.75), p95: p(0.95), p99: p(0.99), p999: p(0.999), max: vals[vals.length - 1], avg, stddev, samples: vals.length, threshold: t };
+  }).filter(Boolean);
+
+  // Sort
+  if (sortKey !== "metric") {
+    data.sort((a, b) => sortDir === "asc" ? (a[sortKey] || 0) - (b[sortKey] || 0) : (b[sortKey] || 0) - (a[sortKey] || 0));
+  } else {
+    data.sort((a, b) => sortDir === "asc" ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label));
+  }
+
+  function cellColor(m, val) {
+    const sev = thresholdSeverity(m, val);
+    if (sev === "danger") return "color:#ff9eb0;font-weight:700";
+    if (sev === "warn") return "color:#ffcb80;font-weight:600";
+    return "";
+  }
+
+  const arrow = k => sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+
+  return `<div class="panel" style="overflow-x:auto"><table class="stats-table" style="width:100%;font-size:12px;border-collapse:collapse">
+    <thead><tr>
+      <th style="text-align:left;padding:6px 10px;cursor:pointer" data-stats-sort="metric">METRIC${arrow("metric")}</th>
+      ${cols.map((c, i) => `<th style="cursor:pointer${colKeys[i] === "max" ? ";color:#ff5c77" : ""}" data-stats-sort="${colKeys[i]}">${c}${arrow(colKeys[i])}</th>`).join("")}
+    </tr></thead>
+    <tbody>${data.map(d => {
+      const maxStyle = cellColor(d.metric, d.max);
+      const p99Style = cellColor(d.metric, d.p99);
+      const p95Style = cellColor(d.metric, d.p95);
+      return `<tr>
+        <td style="text-align:left;padding:6px 10px;font-weight:600;color:var(--text);background:rgba(255,255,255,0.03)">${escapeHtml(d.label)}</td>
+        <td>${formatMetricValue(d.metric, d.min)}</td>
+        <td>${formatMetricValue(d.metric, d.median)}</td>
+        <td>${formatMetricValue(d.metric, d.p75)}</td>
+        <td style="${p95Style}">${formatMetricValue(d.metric, d.p95)}</td>
+        <td style="${p99Style}">${formatMetricValue(d.metric, d.p99)}</td>
+        <td style="${p99Style}">${formatMetricValue(d.metric, d.p999)}</td>
+        <td style="background:rgba(255,92,119,0.06);${maxStyle}">${formatMetricValue(d.metric, d.max)}</td>
+        <td>${formatMetricValue(d.metric, d.avg)}</td>
+        <td style="color:var(--muted)">${d.stddev < 0.01 ? "0" : formatMetricValue(d.metric, d.stddev)}</td>
+        <td style="color:var(--muted)">${formatNumber(d.samples)}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table></div>`;
+}
+
 function renderChartsPage() {
   const metrics = chartMetricList();
   const metricOptions = alphabeticalMetrics(metrics);
@@ -3432,7 +3540,7 @@ function renderChartsPage() {
   const activeCorrelation = EXPERT_CORRELATIONS.find(item => item.x === state.correlation.x && item.y === state.correlation.y);
   const microburst = microburstSummary();
   return html`
-    ${state.chartsTab === "advisor" ? `${renderInvestigationContext() || renderTailLatencyLensPanel() || '<div class="advisor-empty"><i class="ri-brain-line"></i><strong>Select a socket</strong><p>Choose a socket from the Analysis view to see investigation context and tail-latency analysis here.</p></div>'}` : ""}
+    ${state.chartsTab === "advisor" ? `${renderInvestigationContext() || renderTailLatencyLensPanel() || renderAdvisorGlobalSummary()}` : ""}
     ${state.chartsTab === "charts" ? `<section class="panel ${layout.stickyToolbar ? "sticky-chart-panel" : ""}">
       <div class="panel-body">
         ${microburst ? `<div class="investigation-note ${microburst.severity}">
@@ -3444,7 +3552,8 @@ function renderChartsPage() {
         </div>
       </div>
     </section>
-    <section class="chart-grid cols-${columns} density-${layout.density}">
+
+    ${state.metricsView === "table" ? renderMetricsStatsTable(orderedMetrics) : `<section class="chart-grid cols-${columns} density-${layout.density}">
       ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}${state.expandedChart === m ? " chart-expanded" : ""}" data-chart-card="${m}">
         ${state.storyMarkerPct != null && (!state.storyMarkerMetric || state.storyMarkerMetric === m) ? `<div class="story-marker-overlay" style="padding-left:${state.storyMarkerPct}%"><div class="story-marker-line"><span class="story-marker-label">${escapeHtml(state.storyMarkerTime || "")} ${escapeHtml((state.storyMarkerLabel || "").slice(0, 20))}</span></div></div>` : ""}
         <div class="panel-head">
@@ -3468,7 +3577,7 @@ function renderChartsPage() {
           ${renderMetricChartLegend(m)}
         </div>
       </div>`).join("")}
-    </section>
+    </section>`}
     <section class="panel">
       <div class="panel-head"><div class="panel-title">Correlation between two stats</div></div>
       <div class="panel-body">
@@ -7068,14 +7177,14 @@ function renderPrefs() {
     ["en-GB", "English - United Kingdom"]
   ];
   return html`<div class="prefs-shell">
-    <div class="tabs pref-tabs">
+    <div class="app-tabs" style="margin-bottom:12px">
       ${[
         ["display", "Display"],
         ["table", "Table"],
         ["charts", "Charts"],
         ["system", "System"],
         ["alerts", "Alerts"]
-      ].map(([key, label]) => `<button class="tab ${tab === key ? "active" : ""}" data-pref-tab="${key}">${label}</button>`).join("")}
+      ].map(([key, label]) => `<button class="app-tab ${tab === key ? "active" : ""}" data-pref-tab="${key}">${label}</button>`).join("")}
     </div>
     <div class="pref-grid professional">
       ${tab === "display" ? `<article class="field-card">
@@ -10042,6 +10151,12 @@ function bindEvents() {
       }
     }
   });
+  document.querySelectorAll("[data-stats-sort]").forEach(th => th.addEventListener("click", () => {
+    const key = th.dataset.statsSort;
+    if (state.statsTableSort === key) { state.statsTableDir = state.statsTableDir === "asc" ? "desc" : "asc"; }
+    else { state.statsTableSort = key; state.statsTableDir = key === "metric" ? "asc" : "desc"; }
+    render();
+  }));
   document.querySelectorAll("[data-charts-tab]").forEach(btn => {
     btn.addEventListener("click", event => {
       const tab = event.currentTarget.dataset.chartsTab;
@@ -10337,6 +10452,7 @@ function bindEvents() {
     if (action === "prefs") { state.drawer = "prefs"; render(); }
     if (action === "toggleGearMenu") { state.gearMenuOpen = !state.gearMenuOpen; render(); return; }
     if (state.gearMenuOpen) { state.gearMenuOpen = false; }
+    if (action === "setMetricsView") { state.metricsView = event.currentTarget.dataset.metricsView; render(); }
     if (action === "prefs") { state.drawer = "prefs"; render(); }
     if (action === "showShortcuts") { state.modal = "shortcuts"; state.drawer = null; render(); }
     if (action === "details") { state.drawer = "details"; render(); }
