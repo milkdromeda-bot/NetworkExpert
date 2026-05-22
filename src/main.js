@@ -8090,7 +8090,16 @@ function chartMoveOptions(metric) {
 function renderChartMoveMenu(metric) {
   const options = chartMoveOptions(metric);
   if (!options.length) return "";
-  return `<button class="mini" data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="left" title="Move left"><i class="ri-arrow-left-s-line"></i></button><button class="mini" data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="right" title="Move right"><i class="ri-arrow-right-s-line"></i></button>`;
+  const pos = state.openChartMoveMetric === metric && state.openChartMovePos
+    ? `style="left:${state.openChartMovePos.left}px;top:${state.openChartMovePos.top}px"`
+    : "";
+  return `<button class="mini mini-menu" data-chart-move-menu="${escapeHtml(metric)}" title="Move chart">${icons.menu}</button>
+    <div class="row-menu chart-move-menu ${state.openChartMoveMetric === metric ? "open" : ""}" ${pos}>
+      ${options.map(option => `<button data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="${option.direction}">
+        ${option.icon}
+        <span>${escapeHtml(option.label)}</span>
+      </button>`).join("")}
+    </div>`;
 }
 
 function positionChartMoveMenu(button, metric) {
