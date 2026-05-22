@@ -246,6 +246,8 @@ let state = {
   drawer: null,
   modal: null,
   gearMenuOpen: false,
+  _undoStack: [],
+  _redoStack: [],
   statsMetric: null,
   helpColumn: null,
   helpMetric: null,
@@ -2691,6 +2693,31 @@ const _busyEl = document.getElementById("busyOverlay");
 function _showBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.add("visible"); }
 function _hideBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.remove("visible"); _busyEl?.classList.remove("visible"); }
 
+function _undoSnapshot() {
+  const snap = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
+  state._undoStack.push(snap);
+  if (state._undoStack.length > 30) state._undoStack.shift();
+  state._redoStack = [];
+}
+function _undo() {
+  if (!state._undoStack.length) return;
+  const current = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
+  state._redoStack.push(current);
+  const snap = state._undoStack.pop();
+  state.view = snap.view; state.activeTab = snap.activeTab; state.chartsTab = snap.chartsTab; state.selectedId = snap.selectedId; state.filter = snap.filter;
+  try { state.annotations = JSON.parse(snap.annotations); } catch(e) {}
+  render();
+}
+function _redo() {
+  if (!state._redoStack.length) return;
+  const current = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
+  state._undoStack.push(current);
+  const snap = state._redoStack.pop();
+  state.view = snap.view; state.activeTab = snap.activeTab; state.chartsTab = snap.chartsTab; state.selectedId = snap.selectedId; state.filter = snap.filter;
+  try { state.annotations = JSON.parse(snap.annotations); } catch(e) {}
+  render();
+}
+
 function _renderError(err) {
   console.error("Render error:", err);
   const app = document.querySelector("#app");
@@ -2794,6 +2821,8 @@ function _renderSync() {
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
           ${(() => { const t = detectTrends(); return t.length ? `<span class="status-pill trend-badge" title="${t.map(x => x.metric + " overflow in ~" + x.eta + " min").join(", ")}"><i class="ri-timer-flash-line" style="color:#ff9f43"></i> ${t.length} trend${t.length > 1 ? "s" : ""}</span>` : ""; })()}
           ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
+          <button class="icon" data-action="undo" title="Undo (Ctrl+Z)" aria-label="Undo" ${!state._undoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-back-line"></i></button>
+          <button class="icon" data-action="redo" title="Redo (Ctrl+Y)" aria-label="Redo" ${!state._redoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-forward-line"></i></button>
           <button class="icon" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><i class="${state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line"}"></i></button>
           <div class="gear-menu-wrap">
             <button class="icon gear-btn ${state.gearMenuOpen ? "is-open" : ""}" data-action="toggleGearMenu" title="Settings" aria-label="Settings" aria-haspopup="true"><i class="ri-settings-3-line"></i></button>
@@ -8776,7 +8805,7 @@ function attachChartContextAnnotation(svg) {
       menuEl.remove();
       if (ctx) {
         state.modal = "annotation";
-        state.annotationDraft = { kind: "custom", label: "Analyst note", note: "", metric: ctx.metric, anchor: "custom", epochMs: ctx.epochMs, sourceName: state.sourceName, socketId: state.selectedId || "" };
+        state.annotationDraft = { kind: "custom", label: "Analyst note", note: "", metric: ctx.metric, anchor: "cursor", epochMs: ctx.epochMs, sourceName: state.sourceName, socketId: state.selectedId || "" };
         render();
       }
     });
@@ -10122,6 +10151,8 @@ function closeFloatingMenus(options = {}) {
 }
 
 function handleGlobalKeydown(event) {
+  if (event.ctrlKey && event.key === "z" && !event.shiftKey) { event.preventDefault(); _undo(); return; }
+  if (event.ctrlKey && (event.key === "y" || (event.key === "z" && event.shiftKey))) { event.preventDefault(); _redo(); return; }
   if (event.key !== "Escape") return;
   if (!closeFloatingMenus({ cancelDashboard: true })) return;
   event.preventDefault();
@@ -10452,6 +10483,9 @@ function bindEvents() {
     if (action === "prefs") { state.drawer = "prefs"; render(); }
     if (action === "toggleGearMenu") { state.gearMenuOpen = !state.gearMenuOpen; render(); return; }
     if (state.gearMenuOpen) { state.gearMenuOpen = false; }
+    if (action === "undo") { _undo(); return; }
+    if (action === "redo") { _redo(); return; }
+    _undoSnapshot();
     if (action === "setMetricsView") { state.metricsView = event.currentTarget.dataset.metricsView; render(); }
     if (action === "prefs") { state.drawer = "prefs"; render(); }
     if (action === "showShortcuts") { state.modal = "shortcuts"; state.drawer = null; render(); }
