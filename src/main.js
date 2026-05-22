@@ -3586,7 +3586,7 @@ function renderChartsPage() {
       ${orderedMetrics.map((m, index) => `<div class="panel chart-card ${state.activeChartMetric === m ? "active-chart" : ""}${state.expandedChart === m ? " chart-expanded" : ""}" data-chart-card="${m}">
         ${state.storyMarkerPct != null && (!state.storyMarkerMetric || state.storyMarkerMetric === m) ? `<div class="story-marker-overlay" style="padding-left:${state.storyMarkerPct}%"><div class="story-marker-line"><span class="story-marker-label">${escapeHtml(state.storyMarkerTime || "")} ${escapeHtml((state.storyMarkerLabel || "").slice(0, 20))}</span></div></div>` : ""}
         <div class="panel-head">
-          <div class="panel-title chart-title-wrap" draggable="true" data-drag-handle="${m}" style="cursor:grab">
+          <div class="panel-title chart-title-wrap">
             <span>${escapeHtml(metricLabel(m))}</span>
             ${renderChartMetricTooltip(m)}
           </div>
@@ -8089,16 +8089,7 @@ function chartMoveOptions(metric) {
 function renderChartMoveMenu(metric) {
   const options = chartMoveOptions(metric);
   if (!options.length) return "";
-  const pos = state.openChartMoveMetric === metric && state.openChartMovePos
-    ? `style="left:${state.openChartMovePos.left}px;top:${state.openChartMovePos.top}px"`
-    : "";
-  return `<button class="mini mini-menu" data-chart-move-menu="${escapeHtml(metric)}" title="Move chart">${icons.menu}</button>
-    <div class="row-menu chart-move-menu ${state.openChartMoveMetric === metric ? "open" : ""}" ${pos}>
-      ${options.map(option => `<button data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="${option.direction}">
-        ${option.icon}
-        <span>${escapeHtml(option.label)}</span>
-      </button>`).join("")}
-    </div>`;
+  return `<button class="mini" data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="left" title="Move left"><i class="ri-arrow-left-s-line"></i></button><button class="mini" data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="right" title="Move right"><i class="ri-arrow-right-s-line"></i></button>`;
 }
 
 function positionChartMoveMenu(button, metric) {
@@ -9164,16 +9155,19 @@ function captureIncidentReportCharts(limit = 5) {
       );
     }
     // Drag & drop chart reorder
-  let _draggedChart = null;
-  document.querySelectorAll("[data-drag-handle]").forEach(handle => {
-    const card = handle.closest("[data-chart-card]");
-    if (!card) return;
-    handle.addEventListener("dragstart", e => { _draggedChart = card; card.style.opacity = "0.4"; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", card.dataset.chartCard); });
-    handle.addEventListener("dragend", () => { if (_draggedChart) _draggedChart.style.opacity = ""; _draggedChart = null; document.querySelectorAll("[data-chart-card]").forEach(c => c.classList.remove("drag-over")); });
-    card.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; card.classList.add("drag-over"); });
-    card.addEventListener("dragleave", () => { card.classList.remove("drag-over"); });
-    card.addEventListener("drop", e => { e.preventDefault(); card.classList.remove("drag-over"); if (!_draggedChart || _draggedChart === card) return; const parent = card.parentElement; const cards = [...parent.querySelectorAll("[data-chart-card]")]; const fromIdx = cards.indexOf(_draggedChart); const toIdx = cards.indexOf(card); if (fromIdx < toIdx) parent.insertBefore(_draggedChart, card.nextSibling); else parent.insertBefore(_draggedChart, card); const metrics = cards.map(c => c.dataset.chartCard); const reordered = [...metrics]; reordered.splice(fromIdx, 1); reordered.splice(toIdx, 0, metrics[fromIdx]); state.prefs.visibleMetrics = reordered; });
-  });
+  // Chart reorder via move buttons (reliable alternative to drag & drop)
+  document.querySelectorAll("[data-chart-move]").forEach(btn => btn.addEventListener("click", () => {
+    const metric = btn.dataset.chartMove;
+    const dir = btn.dataset.chartMoveDir;
+    const metrics = [...(state.prefs.visibleMetrics?.length ? state.prefs.visibleMetrics : state.chartMetrics)];
+    const idx = metrics.indexOf(metric);
+    if (idx < 0) return;
+    const target = dir === "left" ? idx - 1 : idx + 1;
+    if (target < 0 || target >= metrics.length) return;
+    [metrics[idx], metrics[target]] = [metrics[target], metrics[idx]];
+    state.prefs.visibleMetrics = metrics;
+    render(); setTimeout(scheduleChartPageDraw, 50);
+  }));
   document.querySelectorAll("[data-chart-card]").forEach(card => {
       if (captures.length >= limit) return;
       const metric = card.dataset.chartCard;
