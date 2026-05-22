@@ -9,6 +9,8 @@
     "dev": "node server.js",
     "check": "node --check server.js && node --check src/main.js && node --check src/importer.js && node --check src/parser.js && node --check src/timeline.js && node --check src/navigation.js && node --check src/analysis.js && node --check src/diagnostics.js && node --check src/wscale-analysis.js && node --check src/rcv-ssthresh-analysis.js && node --check src/bdp-window-analysis.js && node --check src/capture-quality.js && node --check src/alerts.js && node --check src/compare.js && node --check src/profiles.js && node --check src/executive-summary.js && node --check src/ss-command.js && node --check src/ss-command-validation.js && node --check src/annotations.js && node --check src/evidence-pack.js && node --check src/chart-zoom.js && node --check src/services.js && node --check src/search.js && node --check src/ip-intel.js && node --check src/aliases.js && node --check src/topology.js && node --check src/table-state.js && node --check src/expert-config.js && node --check src/table-settings-view.js && node --check src/column-help-view.js && node --check src/table-columns.js && node --check src/socket-table-view.js && node --check src/guide-view.js && node --check src/modal-view.js",
     "test": "node --test tests/**/*.test.js",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ui": "npx playwright test --ui",
     "verify": "npm run check && npm test"
   },
   "keywords": [
@@ -19,5 +21,8 @@
     "socket",
     "ubuntu"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "1.52.0"
+  }
 }

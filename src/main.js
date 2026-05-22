@@ -2742,8 +2742,9 @@ function _renderSync() {
   const app = document.querySelector("#app");
   app.innerHTML = html`
     ${state.onboarding >= 0 ? renderOnboarding() : ""}
-    <div class="app-shell view-${state.view}">
-      <header class="topbar">
+    <a href="#main-content" class="skip-link">Skip to content</a>
+    <div class="app-shell view-${state.view}" role="application" aria-label="Ultimate Network Expert">
+      <header class="topbar" role="banner">
         <div class="title">
           <div class="brand tcp-brand" title="TCP packets travelling between peers">
           <span class="brand-node n1"></span>
@@ -2763,15 +2764,15 @@ function _renderSync() {
           </div>
         </div>
         <div class="top-actions">
-          <div class="app-tabs">
-            <span id="inlineBusy" class="inline-busy"><span class="busy-spinner-sm"></span> Analyzing...</span>
-            <span id="inlineReport" class="inline-busy"><span class="busy-spinner-sm"></span> Generating report...</span>
+          <div class="app-tabs" role="tablist" aria-label="Main navigation">
+            <span id="inlineBusy" class="inline-busy" aria-live="assertive" aria-atomic="true"><span class="busy-spinner-sm"></span> Analyzing...</span>
+            <span id="inlineReport" class="inline-busy" aria-live="assertive" aria-atomic="true"><span class="busy-spinner-sm"></span> Generating report...</span>
             ${[
               ["ingest", "Import", "ri-upload-2-line"],
               ["analysis", "Analysis", "ri-stethoscope-line"],
               ["charts", "Monitoring", "ri-line-chart-line"],
               ["guide", "Guide", "ri-book-open-line"]
-            ].map(([key, label, icon]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}"><i class="${icon}"></i><span>${label}</span></button>`).join("")}
+            ].map(([key, label, icon]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}" role="tab" aria-selected="${state.view === key}"><i class="${icon}"></i><span>${label}</span></button>`).join("")}
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
@@ -2783,9 +2784,9 @@ function _renderSync() {
       </header>
       <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → ${state.activeTab}` : state.view === "charts" ? `Monitoring → ${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : "Advisor"}` : "Guide"}</nav>
       ${state.view !== "charts" ? renderInvestigationContext() : ""}
-      ${state.view === "ingest" ? `<main class="workspace wide">${renderIngestPage()}</main>` : ""}
-      ${state.view === "analysis" ? `<main class="workspace wide">${renderAnalysisPage()}</main>` : ""}
-      ${state.view === "charts" ? `<main class="workspace wide">
+      ${state.view === "ingest" ? `<main id="main-content" class="workspace wide" role="main">${renderIngestPage()}</main>` : ""}
+      ${state.view === "analysis" ? `<main id="main-content" class="workspace wide" role="main">${renderAnalysisPage()}</main>` : ""}
+      ${state.view === "charts" ? `<main id="main-content" class="workspace wide" role="main">
         <nav class="charts-sub-tabs" role="tablist">
           <button class="charts-sub-tab ${state.chartsTab === "charts" ? "active" : ""}" data-charts-tab="charts" role="tab" aria-selected="${state.chartsTab === "charts"}">Metrics</button>
           <button class="charts-sub-tab ${state.chartsTab === "bdp" ? "active" : ""}" data-charts-tab="bdp" role="tab" aria-selected="${state.chartsTab === "bdp"}">BDP & Throughput</button>
@@ -3441,7 +3442,7 @@ function renderChartsPage() {
           </div>
         </div>
         <div class="panel-body chart-card-body">
-          <svg class="chart small-chart ${layout.density}" data-mini-chart="${m}"></svg>
+          <svg class="chart small-chart ${layout.density}" data-mini-chart="${m}" tabindex="0" role="img" aria-label="${escapeHtml(metricLabel(m))} chart"></svg>
           ${renderMetricChartLegend(m)}
         </div>
       </div>`).join("")}
@@ -8800,6 +8801,18 @@ function attachChartInteractions(svg) {
         });
       }
     }
+  });
+  // Keyboard navigation for accessibility
+  let kbX = null;
+  svg.addEventListener("keydown", e => {
+    if (!["ArrowLeft", "ArrowRight", "Escape"].includes(e.key)) return;
+    e.preventDefault();
+    const b = bounds();
+    const step = (b.right - b.left) / 40;
+    if (e.key === "Escape") { if (layer()) layer().innerHTML = ""; kbX = null; return; }
+    if (kbX === null) kbX = (b.left + b.right) / 2;
+    kbX = clampX(kbX + (e.key === "ArrowRight" ? step : -step));
+    drawOverlay(kbX);
   });
 }
 
