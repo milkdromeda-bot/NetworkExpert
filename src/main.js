@@ -2690,6 +2690,21 @@ const _busyEl = document.getElementById("busyOverlay");
 function _showBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.add("visible"); }
 function _hideBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.remove("visible"); _busyEl?.classList.remove("visible"); }
 
+function _renderError(err) {
+  console.error("Render error:", err);
+  const app = document.querySelector("#app");
+  if (app) app.innerHTML = `<div style="padding:40px;max-width:700px;margin:0 auto;font-family:monospace">
+    <h2 style="color:#ff5c77">⚠ Render error</h2>
+    <p style="color:#c4d0de">A module crashed during rendering. Your data is preserved in memory.</p>
+    <pre style="background:#0b1018;padding:16px;border-radius:8px;overflow:auto;color:#ff9f43;font-size:12px">${escapeHtml(err?.stack || err?.message || String(err))}</pre>
+    <button onclick="try{render()}catch(e){}" style="padding:8px 16px;background:#5db7ff;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:12px">Retry render</button>
+    <button onclick="location.reload()" style="padding:8px 16px;background:#52657a;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:12px;margin-left:8px">Reload page</button>
+  </div>`;
+}
+
+window.addEventListener("error", e => { console.error("Uncaught error:", e.error); });
+window.addEventListener("unhandledrejection", e => { console.error("Unhandled rejection:", e.reason); });
+
 let _cachedDataVersion = -1;
 let _cachedStories = [];
 let _cachedMultiSocket = [];
@@ -2735,7 +2750,7 @@ function render() {
   hideFloatingChartTooltipNow();
   if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
-  setTimeout(() => { _renderSync(); _hideBusy(); }, 16);
+  setTimeout(() => { try { _renderSync(); } catch(e) { _renderError(e); } _hideBusy(); }, 16);
 }
 
 function _renderSync() {
