@@ -3542,7 +3542,7 @@ function renderMetricsStatsTable(metrics) {
       const p99Style = cellColor(d.metric, d.p99);
       const p95Style = cellColor(d.metric, d.p95);
       return `<tr>
-        <td style="text-align:left;padding:6px 10px;font-weight:600;color:var(--text);background:rgba(255,255,255,0.03)">${escapeHtml(d.label)}</td>
+        <td style="text-align:left;padding:6px 10px;font-weight:600;color:var(--text);background:rgba(255,255,255,0.03)"><button class="mini" data-chart-stats="${d.metric}" title="Detailed statistics" style="margin-right:6px;vertical-align:middle"><i class="ri-bar-chart-grouped-line"></i></button>${escapeHtml(d.label)}</td>
         <td>${formatMetricValue(d.metric, d.min)}</td>
         <td>${formatMetricValue(d.metric, d.median)}</td>
         <td>${formatMetricValue(d.metric, d.p75)}</td>
@@ -3597,7 +3597,7 @@ function renderChartsPage() {
             <button class="mini" data-chart-zoom="resetZoom" data-chart-zoom-metric="${m}" title="Reset zoom">${icons.reset}</button>
             <button class="mini" data-chart-zoom="panLeft" data-chart-zoom-metric="${m}" title="Pan left">${icons.arrowLeft}</button>
             <button class="mini" data-chart-zoom="panRight" data-chart-zoom-metric="${m}" title="Pan right">${icons.arrowRight}</button>
-            <button class="mini" data-chart-stats="${m}" title="Statistics">${icons.stats}</button>
+            <button class="mini" data-chart-png="${m}" title="Save as PNG"><i class="ri-image-line"></i></button>
             ${renderChartMoveMenu(m)}
           </div>
         </div>
@@ -7779,11 +7779,17 @@ function chartStats(metric) {
 function renderPercentileDistribution(metric, stats) {
   const w = 520;
   const h = 260;
-  const pad = { l: 76, r: 24, t: 28, b: 52 };
   const values = stats.curve || [];
-  const max = Math.max(...values.map(point => point.value), 1);
-  const min = Math.min(...values.map(point => point.value), 0);
+  const rawMin = Math.min(...values.map(point => point.value));
+  const rawMax = Math.max(...values.map(point => point.value), 1);
+  const range = rawMax - rawMin || 1;
+  const min = rawMin > range * 2 ? rawMin - range * 0.1 : 0;
+  const max = rawMax + range * 0.05;
   const span = Math.max(1, max - min);
+  const yTicks = [0, .25, .5, .75, 1].map(f => min + f * span);
+  const longestLabel = yTicks.map(v => formatMetricValue(metric, v)).reduce((a, b) => a.length > b.length ? a : b, "");
+  const padL = Math.min(160, Math.max(76, longestLabel.length * 7 + 16));
+  const pad = { l: padL, r: 32, t: 28, b: 52 };
   const x = p => pad.l + (Math.max(0, Math.min(100, p)) / 100) * (w - pad.l - pad.r);
   const y = value => h - pad.b - ((value - min) / span) * (h - pad.t - pad.b);
   const path = values.map((point, index) => `${index ? "L" : "M"}${x(point.p).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ");
@@ -7795,14 +7801,13 @@ function renderPercentileDistribution(metric, stats) {
     ["P99.9", 99.9, stats.p999],
     ["P99.99", 99.99, stats.p9999]
   ];
-  const yTicks = [0, .25, .5, .75, 1].map(f => min + f * span);
   return `<svg class="percentile-chart" data-percentile-chart="1" data-chart-width="${w}" data-chart-height="${h}" data-pad-left="${pad.l}" data-pad-right="${pad.r}" data-pad-top="${pad.t}" data-pad-bottom="${pad.b}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(metricLabel(metric))} percentile distribution">
       <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="${chartBgColor()}"/>
       ${yTicks.map(value => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(value)}" y2="${y(value)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(value) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(metric, value)}</text>`).join("")}
-      ${[0, 25, 50, 75, 90, 99, 100].map(p => `<line x1="${x(p)}" x2="${x(p)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(p)}" y="${h - 20}" text-anchor="middle" fill="#8c9aab" font-size="11">${p === 100 ? "P100" : `P${p}`}</text>`).join("")}
-      <path d="${path}" fill="none" stroke="${metricColor(metric)}" stroke-width="3"/>
+      ${[0, 25, 50, 75, 90, 99, 100].map((p, i, arr) => `<line x1="${x(p)}" x2="${x(p)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(p)}" y="${h - 20}" text-anchor="${i === arr.length - 1 ? "end" : i === 0 ? "start" : "middle"}" fill="#8c9aab" font-size="11">${p === 100 ? "P100" : `P${p}`}</text>`).join("")}
+      <path d="${path}" fill="none" stroke="${metricColor(metric)}" stroke-width="1.5"/>
       ${percentilePoints}
-      ${markers.map(([label, p, value]) => `<circle cx="${x(p)}" cy="${y(value)}" r="4" fill="${thresholdColor(metric, value)}"><title>${label}: ${formatMetricValue(metric, value)}</title></circle>`).join("")}
+      ${markers.map(([label, p, value]) => `<circle cx="${x(p)}" cy="${y(value)}" r="3" fill="${thresholdColor(metric, value)}"><title>${label}: ${formatMetricValue(metric, value)}</title></circle>`).join("")}
       <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
       <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
       <g class="percentile-focus-layer" data-percentile-focus-layer="1"></g>
@@ -8382,7 +8387,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const anyDanger = values.some(v => thresholdSeverity(metric, v) === "danger");
   const anyWarn = values.some(v => thresholdSeverity(metric, v) === "warn");
   const stroke = anyDanger ? "#ff5c77" : anyWarn ? "#ff9f43" : metricColor(metric);
-  const singlePointLine = data.length === 1 ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(values[0] || 0)}" y2="${y(values[0] || 0)}" stroke="${stroke}" stroke-width="3" opacity=".85"/>` : "";
+  const singlePointLine = data.length === 1 ? `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(values[0] || 0)}" y2="${y(values[0] || 0)}" stroke="${stroke}" stroke-width="1.5" opacity=".85"/>` : "";
   const bars = values.map((v, i) => `<rect x="${x(data[i], i) - barWidth / 2}" y="${y(v)}" width="${barWidth}" height="${h - pad.b - y(v)}" fill="${thresholdColor(metric, v)}" opacity=".86"/>`).join("");
   const points = showPoints ? values.map((v, i) => `<circle cx="${x(data[i], i)}" cy="${y(v)}" r="${pointRadius.toFixed(2)}" fill="${thresholdColor(metric, v)}"><title>${metricLabel(metric)}=${formatMetricValue(metric, v)} at ${timeLabel(data[i]?.t || 0, data[i]?.epochMs)}</title></circle>`).join("") : "";
   const xTickFractions = w < 520 ? [0, .5, 1] : [0, .25, .5, .75, 1];
@@ -8426,9 +8431,9 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${axis.zoomed ? " - zoomed Y" : ""}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(metric)} ${metricUnit(metric) ? `(${metricUnit(metric)})` : ""}</text>
-    ${showMetricSeries && style === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
+    ${showMetricSeries && style === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="1.5"/>${points}` : ""}
     ${showMetricSeries && style === "bars" ? bars : ""}
-    ${showMetricSeries && style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="3"/>${points}` : ""}
+    ${showMetricSeries && style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="1.5"/>${points}` : ""}
     ${showMetricSeries && (style === "points" || style === "xy") ? points : ""}
     ${annotationOverlay}
     ${state.baseline?.history?.length && !chartSeriesHidden(metric, "baseline") ? (() => { const bh = state.baseline.history; const bValues = bh.map(d => d[metric] || 0); if (!bValues.some(v => v > 0)) return ""; const bLine = bValues.map((v, i) => `${i ? "L" : "M"}${(pad.l + (i / Math.max(1, bh.length - 1)) * (w - pad.l - pad.r)).toFixed(1)},${y(v).toFixed(1)}`).join(" "); return `<path d="${bLine}" fill="none" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.6"/>`; })() : ""}
@@ -8545,6 +8550,8 @@ function redrawChartCardMetric(metric, action = state.activeChartAction) {
   if (!svg?.isConnected) return false;
   state.chartRenderToken += 1;
   drawChartInto(svg, metric, chartRenderStyle(), true);
+  const minimap = card?.querySelector("[data-minimap]");
+  if (minimap) drawSingleMinimap(minimap, metric);
   updateChartActiveChrome(metric, action);
   return true;
 }
@@ -9031,6 +9038,36 @@ function attachChartInteractions(svg) {
     kbX = clampX(kbX + (e.key === "ArrowRight" ? step : -step));
     drawOverlay(kbX);
   });
+}
+
+function exportChartAsPng(svg, metric) {
+  const w = svg.clientWidth || 640;
+  const h = svg.clientHeight || 300;
+  const svgData = new XMLSerializer().serializeToString(svg);
+  const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    const scale = 2;
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#05070b";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${metric || "chart"}-${new Date().toISOString().slice(0, 19).replace(/:/g, "")}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, "image/png");
+    toast("Chart exported", `${metricLabel(metric)} saved as PNG.`);
+  };
+  img.src = url;
 }
 
 async function saveChartsPng() {
@@ -12156,6 +12193,14 @@ function bindEvents() {
     state.statsMetric = event.currentTarget.dataset.chartStats;
     state.modal = "chartStats";
     render();
+  }));
+  document.querySelectorAll("[data-chart-png]").forEach(btn => btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const metric = event.currentTarget.dataset.chartPng;
+    const card = event.currentTarget.closest("[data-chart-card]");
+    const svg = card?.querySelector("svg.chart");
+    if (!svg) return;
+    exportChartAsPng(svg, metric);
   }));
   document.querySelector("#corrPreset")?.addEventListener("change", e => {
     const preset = EXPERT_CORRELATIONS.find(item => item.id === e.target.value);

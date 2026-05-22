@@ -2094,7 +2094,10 @@ button.mega i {
   border-bottom: 1px solid var(--line);
   padding: 7px 10px;
   gap: 10px;
+  overflow: hidden;
 }
+.panel-head .panel-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.panel-head .col-tools { flex-shrink: 0; }
 .analysis-layout .panel-head {
   min-height: 42px;
 }
