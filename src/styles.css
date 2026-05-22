@@ -291,12 +291,29 @@ button i,
   filter: drop-shadow(0 0 8px rgba(57, 214, 214, .22));
 }
 button.icon {
-  width: 40px;
-  min-width: 40px;
-  min-height: 40px;
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
+  border: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 50%;
+  color: var(--muted);
 }
-button.icon i { font-size: 21px; }
+button.icon:hover {
+  background: rgba(255,255,255,0.1) !important;
+  color: var(--text);
+  transform: none;
+  border: none !important;
+  box-shadow: none !important;
+}
+button.icon i { font-size: 20px; }
+.gear-menu-wrap .gear-btn.is-open {
+  background: none !important;
+  box-shadow: 0 0 0 2px rgba(93,183,255,0.8) !important;
+  color: var(--text);
+}
 button.primary {
   border-color: rgba(57, 214, 214, .72);
   background:
@@ -10079,7 +10096,7 @@ mark.guide-hl {
 .table-column-toggle-row .col-pin { font-size: 12px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
 /* Command palette */
-.cmd-palette-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: flex-start; justify-content: center; padding-top: 15vh; }
+.cmd-palette-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9999; display: flex; align-items: flex-start; justify-content: center; padding-top: 15vh; backdrop-filter: blur(2px); }
 .cmd-palette { width: min(560px, 90vw); background: var(--panel, #1a1d23); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 24px 80px rgba(0,0,0,0.6); overflow: hidden; }
 .cmd-palette-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .cmd-palette-head i { font-size: 18px; color: var(--muted); }
@@ -10106,3 +10123,23 @@ mark.guide-hl {
 .chart-card[draggable] { cursor: grab; }
 .chart-card[draggable]:active { cursor: grabbing; }
 .chart-card.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; }
+
+/* Gear settings dropdown */
+.gear-menu-wrap { position: relative; display: inline-flex; }
+.gear-btn { border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: none; background: none; box-shadow: none; color: var(--muted); padding: 0; }
+.gear-btn i { font-size: 20px; }
+.gear-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); transform: none; box-shadow: none; border: none; }
+.gear-dropdown {
+  position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 900;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow); min-width: 220px; padding: 6px 0;
+  animation: fadeIn 0.15s ease;
+}
+.gear-dropdown button {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 14px; border: none; background: none; color: var(--text);
+  font-size: 13px; cursor: pointer; text-align: left; justify-content: flex-start;
+}
+.gear-dropdown button:hover { background: var(--panel-2); }
+.gear-dropdown button i { font-size: 16px; color: var(--muted); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }

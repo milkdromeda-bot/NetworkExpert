@@ -245,6 +245,7 @@ let state = {
   prefsTab: "display",
   drawer: null,
   modal: null,
+  gearMenuOpen: false,
   statsMetric: null,
   helpColumn: null,
   helpMetric: null,
@@ -307,7 +308,7 @@ applyDefaultDashboardPreset();
 
 const icons = {
   activity: `<i class="ri-pulse-line"></i>`,
-  settings: `<i class="ri-more-2-fill"></i>`,
+  settings: `<i class="ri-settings-3-line"></i>`,
   book: `<i class="ri-book-open-line"></i>`,
   upload: `<i class="ri-folder-open-line"></i>`,
   load: `<i class="ri-folder-open-line"></i>`,
@@ -2794,7 +2795,13 @@ function _renderSync() {
           ${(() => { const t = detectTrends(); return t.length ? `<span class="status-pill trend-badge" title="${t.map(x => x.metric + " overflow in ~" + x.eta + " min").join(", ")}"><i class="ri-timer-flash-line" style="color:#ff9f43"></i> ${t.length} trend${t.length > 1 ? "s" : ""}</span>` : ""; })()}
           ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
           <button class="icon" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><i class="${state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line"}"></i></button>
-          <button class="icon" data-action="prefs" title="Preferences" aria-label="Preferences">${icons.settings}</button>
+          <div class="gear-menu-wrap">
+            <button class="icon gear-btn ${state.gearMenuOpen ? "is-open" : ""}" data-action="toggleGearMenu" title="Settings" aria-label="Settings" aria-haspopup="true"><i class="ri-settings-3-line"></i></button>
+            ${state.gearMenuOpen ? `<div class="gear-dropdown" role="menu">
+              <button role="menuitem" data-action="prefs"><i class="ri-equalizer-line"></i> Settings</button>
+              <button role="menuitem" data-action="showShortcuts"><i class="ri-keyboard-box-line"></i> Keyboard shortcuts</button>
+            </div>` : ""}
+          </div>
         </div>
       </header>
       <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → ${state.activeTab}` : state.view === "charts" ? `Monitoring → ${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : "Advisor"}` : "Guide"}</nav>
@@ -8189,7 +8196,7 @@ function renderChartThresholdOverlay(items, pad, w, h) {
         <line x1="${pad.l}" x2="${w - pad.r}" y1="${label.lineY}" y2="${label.lineY}" stroke="${label.color}" stroke-dasharray="${label.dash}" opacity=".45"/>
         <rect x="${pillX}" y="${pillY}" width="${textWidth}" height="15" rx="7.5" fill="${chartBgColor()}" opacity=".85"/>
         <rect x="${pillX}" y="${pillY}" width="${textWidth}" height="15" rx="7.5" fill="${label.color}" opacity=".25"/>
-        <text x="${pillX + 7}" y="${textY}" fill="${label.color}" font-size="9.5" font-weight="600" opacity=".95">${escapeHtml(label.label)}</text>
+        <text x="${pillX + 7}" y="${textY}" fill="${label.textColor || label.color}" font-size="9.5" font-weight="600">${escapeHtml(label.label)}</text>
       </g>`;
     }).join("")}
   </g>`;
@@ -8258,8 +8265,8 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const warnY = showWarnLine ? y(t.warn) : 0;
   const dangerY = showDangerLine ? y(t.danger) : 0;
   const thresholdOverlay = renderChartThresholdOverlay([
-    { show: showWarnLine, name: "warn", formatted: formatMetricValue(metric, t.warn), y: warnY, color: "#ff9f43", dash: "7 6" },
-    { show: showDangerLine, name: "danger", formatted: formatMetricValue(metric, t.danger), y: dangerY, color: "#ff5c77", dash: "4 4" }
+    { show: showWarnLine, name: "warn", formatted: formatMetricValue(metric, t.warn), y: warnY, color: "#ff9f43", textColor: "#ffcb80", dash: "7 6" },
+    { show: showDangerLine, name: "danger", formatted: formatMetricValue(metric, t.danger), y: dangerY, color: "#ff5c77", textColor: "#ff9eb0", dash: "4 4" }
   ], pad, w, h);
   const microburstBand = chartMicroburstBand(microburst, data, pad, w, h, firstTime, lastTime);
   const annotationOverlay = chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime);
@@ -10328,6 +10335,10 @@ function bindEvents() {
     if (action === "pickFile") { document.querySelector("#fileInput")?.click(); }
     if (action === "guide") { state.drawer = "guide"; render(); }
     if (action === "prefs") { state.drawer = "prefs"; render(); }
+    if (action === "toggleGearMenu") { state.gearMenuOpen = !state.gearMenuOpen; render(); return; }
+    if (state.gearMenuOpen) { state.gearMenuOpen = false; }
+    if (action === "prefs") { state.drawer = "prefs"; render(); }
+    if (action === "showShortcuts") { state.modal = "shortcuts"; state.drawer = null; render(); }
     if (action === "details") { state.drawer = "details"; render(); }
     if (action === "columns") { state.modal = "columns"; render(); }
     if (action === "thresholds") { state.drawer = "thresholds"; renderKeepingWorkspacePosition(); }
