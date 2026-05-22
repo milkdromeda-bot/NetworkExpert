@@ -3603,6 +3603,7 @@ function renderChartsPage() {
         </div>
         <div class="panel-body chart-card-body">
           <svg class="chart small-chart ${layout.density}" data-mini-chart="${m}" tabindex="0" role="img" aria-label="${escapeHtml(metricLabel(m))} chart"></svg>
+          <canvas class="chart-minimap" data-minimap="${m}" aria-hidden="true"></canvas>
           ${renderMetricChartLegend(m)}
         </div>
       </div>`).join("")}
@@ -8447,8 +8448,64 @@ function scheduleMultiChartDraw() {
       index += 1;
     }
     if (index < charts.length) requestAnimationFrame(drawSlice);
+    else drawMinimaps();
   };
   requestAnimationFrame(drawSlice);
+}
+
+function drawMinimaps() {
+  document.querySelectorAll("[data-minimap]").forEach(canvas => drawSingleMinimap(canvas, canvas.dataset.minimap));
+}
+
+function drawSingleMinimap(canvas, metric) {
+    const history = state.history;
+    if (!history.length) return;
+    const vals = history.map(r => Number(r[metric]) || 0);
+    if (!vals.some(v => v > 0)) return;
+    const w = canvas.clientWidth || canvas.parentElement?.clientWidth || 200;
+    const h = 24;
+    canvas.width = w * 2; canvas.height = h * 2;
+    canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.scale(2, 2);
+    // Draw full waveform
+    const max = Math.max(...vals, 1);
+    const step = Math.max(1, Math.floor(vals.length / w));
+    ctx.fillStyle = "rgba(93,183,255,0.25)";
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i < w; i++) {
+      const idx = Math.min(vals.length - 1, Math.floor((i / w) * vals.length));
+      const v = vals[idx] / max;
+      ctx.lineTo(i, h - v * (h - 2));
+    }
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fill();
+    // Draw line on top
+    ctx.strokeStyle = "rgba(93,183,255,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < w; i++) {
+      const idx = Math.min(vals.length - 1, Math.floor((i / w) * vals.length));
+      const v = vals[idx] / max;
+      if (i === 0) ctx.moveTo(i, h - v * (h - 2));
+      else ctx.lineTo(i, h - v * (h - 2));
+    }
+    ctx.stroke();
+    // Draw zoom window highlight
+    const zoom = chartZoomFor(metric);
+    if (zoom && (zoom.start > 0.001 || zoom.end < 0.999)) {
+      const x1 = zoom.start * w, x2 = zoom.end * w;
+      // Dim outside
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillRect(0, 0, x1, h);
+      ctx.fillRect(x2, 0, w - x2, h);
+      // Window border
+      ctx.strokeStyle = "rgba(93,183,255,0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x1, 0.5, x2 - x1, h - 1);
+    }
 }
 
 function chartRenderStyle() {
@@ -10182,6 +10239,30 @@ function bindEvents() {
     else { state.statsTableSort = key; state.statsTableDir = key === "metric" ? "asc" : "desc"; }
     render();
   }));
+  document.querySelectorAll("[data-minimap]").forEach(canvas => {
+    let dragging = false;
+    const getMetric = () => canvas.dataset.minimap;
+    const panTo = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const metric = getMetric();
+      const zoom = chartZoomFor(metric);
+      const span = zoom.end - zoom.start;
+      const newStart = Math.max(0, Math.min(1 - span, frac - span / 2));
+      if (!state.chartZoomByMetric) state.chartZoomByMetric = {};
+      state.chartZoomByMetric[metric] = { start: newStart, end: newStart + span };
+      clearVisibleHistoryCache();
+      // Instant minimap redraw (no wait)
+      drawSingleMinimap(canvas, metric);
+      // Redraw only the affected chart
+      const svg = canvas.parentElement?.querySelector(`[data-mini-chart="${metric}"]`);
+      if (svg) drawChartInto(svg, metric, state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle, true);
+    };
+    canvas.addEventListener("mousedown", e => { dragging = true; panTo(e); e.preventDefault(); });
+    canvas.addEventListener("mousemove", e => { if (dragging) panTo(e); });
+    canvas.addEventListener("mouseup", () => { dragging = false; });
+    canvas.addEventListener("mouseleave", () => { dragging = false; });
+  });
   document.querySelectorAll("[data-charts-tab]").forEach(btn => {
     btn.addEventListener("click", event => {
       const tab = event.currentTarget.dataset.chartsTab;
