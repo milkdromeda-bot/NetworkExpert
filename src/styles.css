@@ -7637,6 +7637,22 @@ tr.selected { background: #101a27; }
   justify-content: space-between;
   gap: 8px;
 }
+.analysis-tabs .sidebar-toggle {
+  flex: 0 0 auto;
+  align-self: center;
+}
+.analysis-tab i { font-size: 15px; }
+.analysis-tab .nav-label {
+  transition: opacity 0.2s ease, width 0.2s ease;
+}
+.analysis-tabs.collapsed .analysis-tab-scroll { gap: 2px; }
+.analysis-tabs.collapsed .analysis-tab { padding: 0 8px; min-width: 34px; }
+.analysis-tabs.collapsed .analysis-tab .nav-label {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 .analysis-tab-scroll {
   display: flex;
   gap: 6px;

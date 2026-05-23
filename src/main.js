@@ -184,6 +184,7 @@ const showOnboarding = !localStorage.getItem("networkExpertOnboarded");
 let state = {
   raw: "",
   showEditor: false,
+  analysisSidebarCollapsed: false,
   command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
   ssCommandConfig: defaultSsCommandConfig(),
   sourceName: "empty workspace",
@@ -1144,13 +1145,15 @@ function analysisTabGuide(tabId) {
 }
 
 function renderAnalysisTabs() {
-  return `<div class="tabs analysis-tabs" role="tablist" aria-label="Analysis views">
+  const icons_map = { quality: "ri-shield-check-line", diagnosis: "ri-stethoscope-line", advisor: "ri-lightbulb-line", templates: "ri-layout-grid-line", map: "ri-mind-map", conversations: "ri-chat-3-line", expert: "ri-brain-line", timeline: "ri-time-line", alerts: "ri-alarm-warning-line", compare: "ri-scales-3-line", sockets: "ri-plug-line", groups: "ri-folder-line", anomalies: "ri-error-warning-line", fields: "ri-list-settings-line" };
+  const collapsed = state.analysisSidebarCollapsed;
+  return `<div class="tabs analysis-tabs ${collapsed ? "collapsed" : ""}" role="tablist" aria-label="Analysis views">
+    <button class="icon sidebar-toggle" data-action="toggleAnalysisSidebar" title="${collapsed ? "Expand tabs" : "Collapse tabs"}"><i class="${collapsed ? "ri-menu-unfold-line" : "ri-menu-fold-line"}"></i></button>
     <div class="analysis-tab-scroll">
       ${ANALYSIS_TAB_GUIDE.map(tab => `<button class="tab analysis-tab ${state.activeTab === tab.id ? "active" : ""}" data-tab="${tab.id}" role="tab" aria-selected="${state.activeTab === tab.id ? "true" : "false"}" aria-label="${escapeHtml(`${tab.label}: ${tab.short}`)}" title="${escapeHtml(tab.short)}">
-        <span>${escapeHtml(tab.label)}</span>
+        <i class="${icons_map[tab.id] || "ri-checkbox-blank-circle-line"}"></i><span class="nav-label">${escapeHtml(tab.label)}</span>
       </button>`).join("")}
     </div>
-    <button class="analysis-view-guide-button" type="button" data-action="showAnalysisViewGuide" title="Open the guide for Analysis views"><i class="ri-question-line"></i> View guide</button>
   </div>`;
 }
 
@@ -10552,6 +10555,10 @@ function bindEvents() {
     }
     if (action === "showRawEditor") {
       state.showEditor = true;
+      renderKeepingWorkspacePosition();
+    }
+    if (action === "toggleAnalysisSidebar") {
+      state.analysisSidebarCollapsed = !state.analysisSidebarCollapsed;
       renderKeepingWorkspacePosition();
     }
     if (action === "toggleWordWrap") {
