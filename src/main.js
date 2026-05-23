@@ -12529,42 +12529,11 @@ document.querySelector("#app").addEventListener("scroll", e => {
 }, true);
 
 // Socket hover card
-const _hoverCard = document.getElementById("socketHoverCard");
-let _hoverTimer = 0;
-
 // Mouse spotlight on panels
 document.querySelector("#app").addEventListener("mousemove", e => {
   const panel = e.target.closest(".panel, .advisor-card, .guided-checklist-card");
   if (panel) { const r = panel.getBoundingClientRect(); panel.style.setProperty("--mouse-x", `${e.clientX - r.left}px`); panel.style.setProperty("--mouse-y", `${e.clientY - r.top}px`); }
 }, { passive: true });
-function _buildSparkline(values, w = 180, h = 24) {
-  if (!values || values.length < 2) return "";
-  const max = Math.max(...values) || 1;
-  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - (v / max) * h}`).join(" ");
-  return `<svg class="shc-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" width="100%" height="${h}"><polygon points="0,${h} ${pts} ${w},${h}"/><polyline points="${pts}"/></svg>`;
-}
-document.querySelector("#app").addEventListener("mouseenter", e => {
-  const row = e.target.closest?.("tr[data-socket]");
-  if (!row) return;
-  clearTimeout(_hoverTimer);
-  _hoverTimer = setTimeout(() => {
-    const id = row.dataset.socket;
-    const s = state.sockets.find(x => x.id === id);
-    if (!s) return;
-    const rtt = metricValue(s, "rtt"), cwnd = metricValue(s, "cwnd"), retrans = metricValue(s, "retrans");
-    const history = state.socketHistory?.get?.(id);
-    const rttValues = history?.map(h => h.rtt ?? 0) || [];
-    const rect = row.getBoundingClientRect();
-    _hoverCard.innerHTML = `<div class="shc-title">${s.local} → ${s.peer}</div><div class="shc-metrics"><div class="shc-metric"><label>RTT</label><strong>${rtt != null ? rtt.toFixed(1) + "ms" : "—"}</strong></div><div class="shc-metric"><label>CWND</label><strong>${cwnd ?? "—"}</strong></div><div class="shc-metric"><label>Retrans</label><strong>${retrans ?? 0}</strong></div></div>${_buildSparkline(rttValues)}`;
-    _hoverCard.style.top = `${rect.top - 8}px`;
-    _hoverCard.style.left = `${rect.right + 12}px`;
-    if (rect.right + 260 > window.innerWidth) _hoverCard.style.left = `${rect.left - 250}px`;
-    _hoverCard.classList.add("visible");
-  }, 400);
-}, true);
-document.querySelector("#app").addEventListener("mouseleave", e => {
-  if (e.target.closest?.("tr[data-socket]")) { clearTimeout(_hoverTimer); _hoverCard.classList.remove("visible"); }
-}, true);
 
 // Command palette
 function toggleCommandPalette() {

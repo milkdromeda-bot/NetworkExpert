@@ -10588,3 +10588,10 @@ tr.selected { animation: rowFocus 0.3s ease; }
   0% { box-shadow: inset 0 0 0 2px rgba(93,183,255,0.4); }
   100% { box-shadow: none; }
 }
+
+
+/* === Stable analysis header during tab switch === */
+.analysis-layout .panel-head { view-transition-name: analysis-head; }
+.analysis-tabs { view-transition-name: analysis-tabs; }
+::view-transition-old(analysis-head), ::view-transition-new(analysis-head),
+::view-transition-old(analysis-tabs), ::view-transition-new(analysis-tabs) { animation: none; }
