@@ -10164,3 +10164,9 @@ mark.guide-hl {
   background: rgba(0,0,0,0.3);
   cursor: pointer;
 }
+
+/* View transition animations */
+main.workspace { animation: viewFadeIn 0.25s ease; }
+@keyframes viewFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.drawer, .modal-content { animation: slideIn 0.2s ease; }
+@keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
