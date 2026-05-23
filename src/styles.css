@@ -5960,7 +5960,7 @@ tr.selected { background: #101a27; }
 .field-column {
   display: grid;
   align-content: start;
-  gap: 9px;
+  gap: 2px;
 }
 .field-doc-card {
   min-height: 86px;
@@ -10087,11 +10087,11 @@ mark.guide-hl {
 .field-doc-card ul { margin: 2px 0 0; padding-left: 16px; }
 .field-doc-card li { font-size: 11px; }
 
-.field-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: background 0.12s; }
-.field-row:hover { background: rgba(140,183,255,0.08); }
-.field-row strong { color: var(--accent); font-size: 12px; min-width: 130px; width: 130px; flex-shrink: 0; }
+.field-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: background 0.12s; border-bottom: 1px solid rgba(38,50,65,0.4); }
+.field-row:hover { background: rgba(93,183,255,0.06); box-shadow: inset 3px 0 0 var(--blue); }
+.field-row strong { color: var(--cyan); font-size: 13px; font-family: "Cascadia Code", Consolas, monospace; min-width: 140px; width: 140px; flex-shrink: 0; }
 .field-row .field-unit { color: var(--muted); font-size: 10px; margin-left: auto; flex-shrink: 0; opacity: 0.6; }
-.field-row .field-desc { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field-row .field-desc { color: var(--soft); font-size: 12px; line-height: 1.4; }
 
 
 
