@@ -10711,3 +10711,13 @@ button .ripple {
 [data-density="compact"] td, [data-density="compact"] th { padding: 3px 6px; font-size: 11px; }
 [data-density="compact"] .grid-controls { gap: 6px; }
 [data-density="compact"] .section { margin-bottom: 10px; padding-bottom: 10px; }
+
+
+/* === Reduced motion === */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
