@@ -47,6 +47,7 @@ export function createTableColumns({
     { key: "pacing_rate", label: "Pacing rate", value: s => metricValue(s, "pacing_rate"), render: s => renderTableMetricCell("pacing_rate", metricValue(s, "pacing_rate")), defaultVisible: false },
     { key: "delivery_rate", label: "Delivery rate", value: s => metricValue(s, "delivery_rate"), render: s => renderTableMetricCell("delivery_rate", metricValue(s, "delivery_rate")), defaultVisible: false },
     { key: "backoff", label: "Backoff", value: s => metricValue(s, "backoff"), render: s => renderTableMetricCell("backoff", metricValue(s, "backoff")), defaultVisible: false },
-    { key: "retrans", label: "Retrans timer", value: s => s.details.timer?.retrans || 0, render: s => renderTableMetricCell("retrans", s.details.timer?.retrans || 0), defaultVisible: false }
+    { key: "retrans", label: "Retrans timer", value: s => s.details.timer?.retrans || 0, render: s => renderTableMetricCell("retrans", s.details.timer?.retrans || 0), defaultVisible: false },
+    { key: "rtt_spark", label: "RTT ⚡", value: s => metricValue(s, "rtt"), render: s => { const h = s._rttHistory; if (!h || h.length < 2) return `<span class="muted">-</span>`; const max = Math.max(...h) || 1; const pts = h.map((v, i) => `${(i / (h.length - 1)) * 30},${12 - (v / max) * 12}`).join(" "); return `<svg width="30" height="12" class="mini-spark"><polyline points="${pts}"/></svg>`; }, defaultVisible: false }
   ];
 }

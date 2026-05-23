@@ -1972,6 +1972,7 @@ function sortedFilteredSockets() {
   });
   state.cache.filteredKey = cacheKey;
   state.cache.filteredRows = rows;
+  rows.forEach(s => { const h = state.socketHistory?.get?.(s.id); s._rttHistory = h?.map(p => p.rtt ?? 0).slice(-20) || null; });
   return rows;
 }
 
