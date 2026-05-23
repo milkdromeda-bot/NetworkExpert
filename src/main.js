@@ -12541,6 +12541,19 @@ document.querySelector("#app").addEventListener("mousemove", e => {
   if (panel) { const r = panel.getBoundingClientRect(); panel.style.setProperty("--mouse-x", `${e.clientX - r.left}px`); panel.style.setProperty("--mouse-y", `${e.clientY - r.top}px`); }
 }, { passive: true });
 
+// Ripple effect on buttons
+document.addEventListener("pointerdown", e => {
+  const btn = e.target.closest("button:not(.icon)");
+  if (!btn) return;
+  const r = btn.getBoundingClientRect();
+  const ripple = document.createElement("span");
+  ripple.className = "ripple";
+  const size = Math.max(r.width, r.height);
+  ripple.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size/2}px;top:${e.clientY - r.top - size/2}px`;
+  btn.appendChild(ripple);
+  setTimeout(() => ripple.remove(), 500);
+});
+
 // Command palette
 function toggleCommandPalette() {
   if (state.modal === "commandPalette") { state.modal = null; render(); return; }

@@ -10650,3 +10650,17 @@ tr.selected { animation: rowFocus 0.3s ease; }
   pointer-events: auto;
 }
 .back-to-top i { font-size: 20px; }
+
+
+/* === Ripple effect === */
+button .ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(0);
+  animation: rippleAnim 0.5s ease-out;
+  pointer-events: none;
+}
+@keyframes rippleAnim {
+  to { transform: scale(4); opacity: 0; }
+}
