@@ -6880,7 +6880,7 @@ function renderExpertInformation() {
 
 function renderTimeline() {
   const events = buildTimelineEvents();
-  if (!events.length) return `<div class="empty"><svg width="56" height="56" viewBox="0 0 56 56" fill="none"><rect x="8" y="24" width="40" height="8" rx="4" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="28" r="3" fill="currentColor" opacity="0.3"/><circle cx="28" cy="28" r="3" fill="currentColor" opacity="0.3"/><circle cx="40" cy="28" r="3" fill="currentColor" opacity="0.3"/></svg><strong>No timeline events available</strong>Import multiple timestamped ss snapshots to see how metrics evolve over time.<div class="empty-cta"><button data-action="pickFile" class="primary"><i class="ri-upload-2-line"></i> Import snapshots</button></div></div>`; for a stronger time-based view.</div>`;
+  if (!events.length) return `<div class="empty"><svg width="56" height="56" viewBox="0 0 56 56" fill="none"><rect x="8" y="24" width="40" height="8" rx="4" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="28" r="3" fill="currentColor" opacity="0.3"/><circle cx="28" cy="28" r="3" fill="currentColor" opacity="0.3"/><circle cx="40" cy="28" r="3" fill="currentColor" opacity="0.3"/></svg><strong>No timeline events available</strong>Import multiple timestamped ss snapshots to see how metrics evolve over time.<div class="empty-cta"><button data-action="pickFile" class="primary"><i class="ri-upload-2-line"></i> Import snapshots</button></div></div>`;
   const first = events[0]?.epochMs || Date.now();
   const last = events[events.length - 1]?.epochMs || first;
   const stories = cachedStories();
