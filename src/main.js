@@ -2708,6 +2708,17 @@ function _staggerReveal() {
   els.forEach((el, i) => { el.setAttribute("data-reveal", ""); el.style.animationDelay = `${i * 35}ms`; });
 }
 
+function _positionTabIndicator() {
+  const active = document.querySelector(".app-tab.active");
+  const indicator = document.getElementById("tabIndicator");
+  if (!active || !indicator) return;
+  const tabs = active.closest(".app-tabs");
+  const tabsRect = tabs.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  indicator.style.left = `${rect.left - tabsRect.left}px`;
+  indicator.style.width = `${rect.width}px`;
+}
+
 function _renderSkeleton(type) {
   const skeletons = {
     analysis: `<div class="skeleton-grid" style="margin-bottom:16px">${Array(4).fill('<div class="skeleton skeleton-kpi"></div>').join("")}</div><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-chart" style="margin-top:16px"></div>`,
@@ -2844,6 +2855,7 @@ function _renderSync() {
               ["charts", "Monitoring", "ri-line-chart-line"],
               ["guide", "Guide", "ri-book-open-line"]
             ].map(([key, label, icon]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}" role="tab" aria-selected="${state.view === key}"><i class="${icon}"></i><span>${label}</span></button>`).join("")}
+            <span class="app-tab-indicator" id="tabIndicator"></span>
           </div>
           <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
           <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
@@ -2893,6 +2905,7 @@ function _renderSync() {
   `;
   bindEvents();
   _staggerReveal();
+  _positionTabIndicator();
   initCodeMirror();
   if (state.view === "charts") {
     scheduleChartPageDraw();

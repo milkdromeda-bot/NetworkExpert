@@ -723,6 +723,7 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
 }
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .app-tabs {
+  position: relative;
   display: inline-flex;
   gap: 2px;
   padding: 3px;
@@ -730,6 +731,16 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   border-radius: 12px;
   background: rgba(7, 11, 17, .85);
   backdrop-filter: blur(8px);
+}
+.app-tab-indicator {
+  position: absolute;
+  bottom: 3px;
+  height: 3px;
+  background: var(--cyan);
+  border-radius: 3px;
+  transition: left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 0 10px rgba(57, 214, 214, 0.5);
+  pointer-events: none;
 }
 .app-tab {
   min-height: 36px;
