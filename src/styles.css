@@ -10170,3 +10170,24 @@ main.workspace { animation: viewFadeIn 0.25s ease; }
 @keyframes viewFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .drawer, .modal-content { animation: slideIn 0.2s ease; }
 @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+
+/* Unified tooltip style */
+.tooltip-unified, .gear-dropdown, .chart-context-menu, .row-menu {
+  background: linear-gradient(135deg, rgba(13,24,38,0.98), rgba(7,11,18,0.98));
+  border: 1px solid rgba(93,183,255,0.25);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(57,214,214,0.04);
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+[data-theme="light"] .tooltip-unified,
+[data-theme="light"] .gear-dropdown,
+[data-theme="light"] .chart-context-menu,
+[data-theme="light"] .row-menu {
+  background: #fff;
+  border-color: #d0d8e0;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  color: #1a2533;
+}
