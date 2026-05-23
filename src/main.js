@@ -2762,21 +2762,23 @@ function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
 
 function renderOnboarding() {
   const steps = [
-    { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo. Timestamped captures with <code>date --iso-8601=ns</code> unlock timeline and stories." },
-    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> - the tool builds a Root Cause Matrix, causal stories, velocity alerts, and multi-socket correlation. An AI summary tells you what happened in plain language." },
-    { icon: "ri-route-line", title: "Act with confidence", desc: "Each hypothesis includes a <b>Playbook</b> with commands for local, peer, and host. Compare before/after captures. Export a full incident report in one click." }
+    { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo.", target: ".CodeMirror, .ingest-drop-zone", position: "bottom" },
+    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> — the tool builds a Root Cause Matrix, causal stories, and multi-socket correlation.", target: "[data-view='analysis']", position: "bottom" },
+    { icon: "ri-line-chart-line", title: "Monitor in real-time", desc: "Charts with minimap, crosshair sync, zoom, and annotations. Toggle between chart and table view.", target: "[data-view='charts']", position: "bottom" },
+    { icon: "ri-file-pdf-line", title: "Export reports", desc: "PDF, HTML incident report, evidence ZIP, or Jira — one click to share findings.", target: "[data-export-menu], .export-menu-wrap", position: "bottom" },
+    { icon: "ri-settings-3-line", title: "Customize everything", desc: "Thresholds, layout, alerts, profiles — make it yours via the gear icon.", target: ".gear-menu-wrap", position: "bottom" }
   ];
   const step = steps[state.onboarding] || steps[0];
   const isLast = state.onboarding >= steps.length - 1;
-  return `<div class="onboarding-overlay">
+  return `<div class="onboarding-overlay" data-tour-step="${state.onboarding}">
     <div class="onboarding-card">
       <div class="onboarding-progress">${steps.map((_, i) => `<span class="${i <= state.onboarding ? "active" : ""}"></span>`).join("")}</div>
       <div class="onboarding-icon"><i class="${step.icon}"></i></div>
       <h2>${step.title}</h2>
       <p>${step.desc}</p>
       <div class="onboarding-actions">
-        <button data-action="skipOnboarding" class="onboarding-skip">Skip</button>
-        <button data-action="${isLast ? "finishOnboarding" : "nextOnboarding"}" class="primary">${isLast ? "Get started" : "Next"}</button>
+        <button data-action="skipOnboarding" class="onboarding-skip">Skip tour</button>
+        <button data-action="${isLast ? "finishOnboarding" : "nextOnboarding"}" class="primary">${isLast ? "Start using" : "Next →"}</button>
       </div>
     </div>
   </div>`;
