@@ -2854,11 +2854,7 @@ function render() {
   if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
   const doRender = () => { try { _renderSync(); } catch(e) { _renderError(e); } _hideBusy(); };
-  if (document.startViewTransition) {
-    setTimeout(() => document.startViewTransition(doRender), 16);
-  } else {
-    setTimeout(doRender, 16);
-  }
+  setTimeout(doRender, 16);
 }
 
 function _renderSync() {
@@ -12398,7 +12394,7 @@ document.addEventListener("keydown", event => {
 
 document.querySelector("#app").addEventListener("click", event => {
   const target = event.target.closest("[data-view]");
-  if (target) { state._lastTab = state._lastTab || {}; state._lastTab[state.view] = state.activeTab; state.view = target.dataset.view; if (state._lastTab[state.view]) state.activeTab = state._lastTab[state.view]; render(); return; }
+  if (target) { state._lastTab = state._lastTab || {}; state._lastTab[state.view] = state.activeTab; state.view = target.dataset.view; if (state._lastTab[state.view]) state.activeTab = state._lastTab[state.view]; if (document.startViewTransition) { document.startViewTransition(() => render()); } else { render(); } return; }
 
   const tab = event.target.closest("[data-tab]");
   if (tab) { state.activeTab = tab.dataset.tab; state.breadcrumbMenuOpen = false; render(); return; }
