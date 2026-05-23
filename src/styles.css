@@ -10458,3 +10458,25 @@ svg.chart { cursor: crosshair; }
 ::view-transition-old(kpis), ::view-transition-new(kpis) { animation: none; }
 @keyframes fade-out { to { opacity: 0; } }
 @keyframes fade-in { from { opacity: 0; } }
+
+
+/* === Mouse-follow radial spotlight === */
+.panel, .advisor-card, .guided-checklist-card {
+  position: relative;
+  overflow: hidden;
+}
+.panel::before, .advisor-card::before, .guided-checklist-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(57,214,214,0.04), transparent 40%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.panel:hover::before, .advisor-card:hover::before, .guided-checklist-card:hover::before {
+  opacity: 1;
+}
+[data-theme="light"] .panel::before, [data-theme="light"] .advisor-card::before {
+  background: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(26,115,232,0.04), transparent 40%);
+}

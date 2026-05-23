@@ -12512,6 +12512,12 @@ document.querySelector("#app").addEventListener("scroll", e => {
 // Socket hover card
 const _hoverCard = document.getElementById("socketHoverCard");
 let _hoverTimer = 0;
+
+// Mouse spotlight on panels
+document.querySelector("#app").addEventListener("mousemove", e => {
+  const panel = e.target.closest(".panel, .advisor-card, .guided-checklist-card");
+  if (panel) { const r = panel.getBoundingClientRect(); panel.style.setProperty("--mouse-x", `${e.clientX - r.left}px`); panel.style.setProperty("--mouse-y", `${e.clientY - r.top}px`); }
+}, { passive: true });
 function _buildSparkline(values, w = 180, h = 24) {
   if (!values || values.length < 2) return "";
   const max = Math.max(...values) || 1;
