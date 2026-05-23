@@ -2248,8 +2248,9 @@ th.drag-over, .column-card.drag-over {
   outline-offset: -2px;
   background: rgba(69, 211, 255, .08);
 }
-tr { cursor: pointer; }
-tr:hover, tr.selected { background: #101a27; }
+tr { cursor: pointer; transition: background 0.15s ease, box-shadow 0.15s ease; }
+tr:hover { background: rgba(93, 183, 255, 0.06) !important; box-shadow: inset 3px 0 0 var(--blue); }
+tr.selected { background: #101a27; }
 .grid-controls-shell {
   padding: 0 0 10px;
   background: rgba(11, 16, 24, 0.96);
