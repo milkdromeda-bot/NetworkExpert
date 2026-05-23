@@ -10309,7 +10309,8 @@ main.workspace { animation: viewFadeIn 0.25s ease; }
 }
 
 /* Staggered card reveal */
-.panel[data-reveal], .advisor-card[data-reveal], .timeline-story[data-reveal] {
+.panel[data-reveal], .advisor-card[data-reveal], .timeline-story[data-reveal], .expert-strip article[data-reveal] {
+  opacity: 1 !important;
   animation: cardReveal 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes cardReveal {

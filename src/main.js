@@ -2709,8 +2709,19 @@ function _showBusy() { const el = document.getElementById("inlineBusy"); if (el)
 function _hideBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.remove("visible"); _busyEl?.classList.remove("visible"); }
 
 function _staggerReveal() {
-  const els = document.querySelectorAll(".workspace .panel, .workspace .advisor-card, .workspace .timeline-story, .workspace .expert-strip article");
-  els.forEach((el, i) => { el.setAttribute("data-reveal", ""); el.style.animationDelay = `${i * 35}ms`; });
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.setAttribute("data-reveal", "");
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  document.querySelectorAll(".workspace .panel, .workspace .advisor-card, .workspace .timeline-story, .workspace .expert-strip article").forEach((el, i) => {
+    el.style.animationDelay = `${i * 35}ms`;
+    el.style.opacity = "0";
+    observer.observe(el);
+  });
 }
 
 function _positionTabIndicator() {
