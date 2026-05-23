@@ -1151,7 +1151,7 @@ function renderAnalysisTabs() {
   return `<div class="tabs analysis-tabs ${collapsed ? "collapsed" : ""}" role="tablist" aria-label="Analysis views">
     <button class="icon sidebar-toggle" data-action="toggleAnalysisSidebar" title="${collapsed ? "Expand tabs" : "Collapse tabs"}"><i class="${collapsed ? "ri-menu-unfold-line" : "ri-menu-fold-line"}"></i></button>
     <div class="analysis-tab-scroll">
-      ${ANALYSIS_TAB_GUIDE.map(tab => `<button class="tab analysis-tab ${state.activeTab === tab.id ? "active" : ""}" data-tab="${tab.id}" role="tab" aria-selected="${state.activeTab === tab.id ? "true" : "false"}" aria-label="${escapeHtml(`${tab.label}: ${tab.short}`)}" title="${escapeHtml(tab.short)}">
+      ${ANALYSIS_TAB_GUIDE.map((tab, idx) => `<button class="tab analysis-tab ${state.activeTab === tab.id ? "active" : ""}" data-tab="${tab.id}" data-key-hint="${idx < 9 ? idx + 1 : ""}" role="tab" aria-selected="${state.activeTab === tab.id ? "true" : "false"}" aria-label="${escapeHtml(`${tab.label}: ${tab.short}`)}" title="${escapeHtml(tab.short)}">
         <i class="${icons_map[tab.id] || "ri-checkbox-blank-circle-line"}"></i><span class="nav-label">${escapeHtml(tab.label)}</span>
       </button>`).join("")}
     </div>
