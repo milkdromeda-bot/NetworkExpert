@@ -10696,3 +10696,18 @@ button .ripple {
 .advisor-card.high::after, .timeline-story.high::after, .rate-alert.high::after { background: var(--orange); }
 .advisor-card.medium::after, .timeline-story.medium::after, .rate-alert.medium::after { background: var(--yellow); }
 .advisor-card.low::after, .timeline-story.low::after, .rate-alert.low::after { background: var(--green); }
+
+
+/* === Compact mode === */
+[data-density="compact"] { font-size: 12px; }
+[data-density="compact"] .workspace { padding: 10px; }
+[data-density="compact"] .panel { padding: 8px; }
+[data-density="compact"] .panel-body { padding: 8px; }
+[data-density="compact"] .panel-head { min-height: 36px; padding: 4px 8px; }
+[data-density="compact"] .advisor-card { padding: 8px; gap: 6px; }
+[data-density="compact"] .kpis.compact { padding: 4px 8px; gap: 10px; }
+[data-density="compact"] .analysis-tab { min-height: 30px; padding: 0 8px; font-size: 11px; }
+[data-density="compact"] tr { height: 28px; }
+[data-density="compact"] td, [data-density="compact"] th { padding: 3px 6px; font-size: 11px; }
+[data-density="compact"] .grid-controls { gap: 6px; }
+[data-density="compact"] .section { margin-bottom: 10px; padding-bottom: 10px; }

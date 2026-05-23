@@ -2904,6 +2904,7 @@ function _renderSync() {
           ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
           <button class="icon" data-action="undo" title="Undo (Ctrl+Z)" aria-label="Undo" ${!state._undoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-back-line"></i></button>
           <button class="icon" data-action="redo" title="Redo (Ctrl+Y)" aria-label="Redo" ${!state._redoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-forward-line"></i></button>
+          <button class="icon" data-action="toggleDensity" title="Toggle compact/comfortable mode" aria-label="Toggle density"><i class="${state.prefs.density === "compact" ? "ri-expand-diagonal-line" : "ri-contract-line"}"></i></button>
           <button class="icon" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><i class="${state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line"}"></i></button>
           <div class="gear-menu-wrap">
             <button class="icon gear-btn ${state.gearMenuOpen ? "is-open" : ""}" data-action="toggleGearMenu" title="Settings" aria-label="Settings" aria-haspopup="true"><i class="ri-settings-3-line"></i></button>
@@ -10872,6 +10873,12 @@ function bindEvents() {
       const icon = event.currentTarget.querySelector("i");
       if (icon) icon.className = state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line";
       savePrefs();
+    }
+    if (action === "toggleDensity") {
+      state.prefs.density = state.prefs.density === "compact" ? "comfortable" : "compact";
+      document.documentElement.setAttribute("data-density", state.prefs.density === "compact" ? "compact" : "");
+      savePrefs();
+      render();
     }
     if (action === "nextOnboarding") {
       state.onboarding += 1;
