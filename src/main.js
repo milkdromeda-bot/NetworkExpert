@@ -12497,6 +12497,13 @@ document.addEventListener("drop", e => {
   if (file) importFile(file);
 });
 
+// Topbar shrink on scroll
+document.querySelector("#app").addEventListener("scroll", e => {
+  const ws = e.target.closest?.(".workspace");
+  if (!ws) return;
+  document.querySelector(".topbar")?.classList.toggle("compact", ws.scrollTop > 40);
+}, true);
+
 // Command palette
 function toggleCommandPalette() {
   if (state.modal === "commandPalette") { state.modal = null; render(); return; }

@@ -506,7 +506,7 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   height: 100vh;
   display: grid;
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr) minmax(290px, 360px);
-  grid-template-rows: 64px auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 .rail {
   grid-row: 1 / span 3;
@@ -667,7 +667,14 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   justify-content: space-between;
   padding: 0 18px;
   gap: 18px;
+  height: 64px;
+  transition: height 0.25s ease, padding 0.25s ease;
 }
+.topbar.compact {
+  height: 48px;
+}
+.topbar.compact .title h1 { font-size: 15px; }
+.topbar.compact .brand { transform: scale(0.82); }
 .title {
   display: flex;
   align-items: center;
