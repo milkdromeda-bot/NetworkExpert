@@ -10194,7 +10194,7 @@ main.workspace { animation: viewFadeIn 0.25s ease; }
 
 
 /* Guided tour highlight */
-.onboarding-overlay { position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,0.7); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; }
+.onboarding-overlay { position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
 .onboarding-card { position: relative; z-index: 100000; }
 [data-tour-step] ~ .app-shell [data-view="analysis"],
 [data-tour-step="1"] ~ .app-shell [data-view="analysis"],

@@ -2762,14 +2762,16 @@ function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
 
 function renderOnboarding() {
   const steps = [
-    { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo.", target: ".CodeMirror, .ingest-drop-zone", position: "bottom" },
-    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> — the tool builds a Root Cause Matrix, causal stories, and multi-socket correlation.", target: "[data-view='analysis']", position: "bottom" },
-    { icon: "ri-line-chart-line", title: "Monitor in real-time", desc: "Charts with minimap, crosshair sync, zoom, and annotations. Toggle between chart and table view.", target: "[data-view='charts']", position: "bottom" },
-    { icon: "ri-file-pdf-line", title: "Export reports", desc: "PDF, HTML incident report, evidence ZIP, or Jira — one click to share findings.", target: "[data-export-menu], .export-menu-wrap", position: "bottom" },
-    { icon: "ri-settings-3-line", title: "Customize everything", desc: "Thresholds, layout, alerts, profiles — make it yours via the gear icon.", target: ".gear-menu-wrap", position: "bottom" }
+    { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo.", view: "ingest" },
+    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> — the tool builds a Root Cause Matrix, causal stories, and multi-socket correlation.", view: "analysis" },
+    { icon: "ri-line-chart-line", title: "Monitor in real-time", desc: "Charts with minimap, crosshair sync, zoom, and annotations. Toggle between chart and table view.", view: "charts" },
+    { icon: "ri-file-pdf-line", title: "Export reports", desc: "PDF, HTML incident report, evidence ZIP, or Jira — one click to share findings.", view: "ingest" },
+    { icon: "ri-settings-3-line", title: "Customize everything", desc: "Thresholds, layout, alerts, profiles — make it yours via the gear icon.", view: "ingest" }
   ];
   const step = steps[state.onboarding] || steps[0];
   const isLast = state.onboarding >= steps.length - 1;
+  // Navigate to the correct view for this step
+  if (step.view && state.view !== step.view) state.view = step.view;
   return `<div class="onboarding-overlay" data-tour-step="${state.onboarding}">
     <div class="onboarding-card">
       <div class="onboarding-progress">${steps.map((_, i) => `<span class="${i <= state.onboarding ? "active" : ""}"></span>`).join("")}</div>
@@ -2841,6 +2843,7 @@ function _renderSync() {
             ${state.gearMenuOpen ? `<div class="gear-dropdown" role="menu">
               <button role="menuitem" data-action="prefs"><i class="ri-equalizer-line"></i> Settings</button>
               <button role="menuitem" data-action="showShortcuts"><i class="ri-keyboard-box-line"></i> Keyboard shortcuts</button>
+              <button role="menuitem" data-action="startTour"><i class="ri-compass-3-line"></i> Guided tour</button>
             </div>` : ""}
           </div>
         </div>
@@ -10663,6 +10666,7 @@ function bindEvents() {
     if (action === "setMetricsView") { state.metricsView = event.currentTarget.dataset.metricsView; render(); }
     if (action === "prefs") { state.drawer = "prefs"; render(); }
     if (action === "showShortcuts") { state.modal = "shortcuts"; state.drawer = null; render(); }
+    if (action === "startTour") { state.onboarding = 0; render(); }
     if (action === "details") { state.drawer = "details"; render(); }
     if (action === "columns") { state.modal = "columns"; render(); }
     if (action === "thresholds") { state.drawer = "thresholds"; renderKeepingWorkspacePosition(); }
