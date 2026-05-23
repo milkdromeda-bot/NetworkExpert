@@ -10502,3 +10502,48 @@ svg.chart { cursor: crosshair; }
   width: 20px;
   text-align: center;
 }
+
+
+/* === Breadcrumb dropdown === */
+.breadcrumb { position: relative; }
+.breadcrumb-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text) !important;
+  font-weight: 700;
+  font-size: inherit;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  min-height: auto;
+}
+.breadcrumb-dropdown-trigger:hover { background: rgba(255,255,255,0.06) !important; }
+.breadcrumb-dropdown-trigger i { font-size: 14px; color: var(--muted); }
+.breadcrumb-menu {
+  position: absolute;
+  top: 100%;
+  left: 60px;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(11, 16, 24, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  max-width: 360px;
+  animation: viewEnter 0.2s ease;
+}
+.breadcrumb-menu button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.breadcrumb-menu button.active { background: rgba(57,214,214,0.15) !important; color: var(--cyan) !important; border-color: rgba(57,214,214,0.3) !important; }

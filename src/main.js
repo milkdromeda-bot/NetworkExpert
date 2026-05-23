@@ -185,6 +185,7 @@ let state = {
   raw: "",
   showEditor: false,
   analysisSidebarCollapsed: false,
+  breadcrumbMenuOpen: false,
   command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
   ssCommandConfig: defaultSsCommandConfig(),
   sourceName: "empty workspace",
@@ -2900,7 +2901,7 @@ function _renderSync() {
           </div>
         </div>
       </header>
-      <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → ${state.activeTab}` : state.view === "charts" ? `Monitoring → ${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : "Advisor"}` : "Guide"}</nav>
+      <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.activeTab} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu">${["quality","diagnosis","advisor","templates","map","conversations","expert","timeline","alerts","compare","sockets","groups","anomalies","fields"].map(t => `<button data-tab="${t}" class="${t === state.activeTab ? "active" : ""}">${t}</button>`).join("")}</div>` : ""}` : state.view === "charts" ? `Monitoring → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : "Advisor"} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu"><button data-charts-tab="charts">Metrics</button><button data-charts-tab="bdp">BDP</button><button data-charts-tab="jvm">JVM Stall</button><button data-charts-tab="fix">FIX Latency</button></div>` : ""}` : "Guide"}</nav>
       ${state.view !== "charts" ? renderInvestigationContext() : ""}
       ${state.view === "ingest" ? `<main id="main-content" class="workspace wide" role="main">${renderIngestPage()}</main>` : ""}
       ${state.view === "analysis" ? `<main id="main-content" class="workspace wide" role="main">${renderAnalysisPage()}</main>` : ""}
@@ -10584,6 +10585,10 @@ function bindEvents() {
       state.analysisSidebarCollapsed = !state.analysisSidebarCollapsed;
       renderKeepingWorkspacePosition();
     }
+    if (action === "toggleBreadcrumbMenu") {
+      state.breadcrumbMenuOpen = !state.breadcrumbMenuOpen;
+      renderKeepingWorkspacePosition();
+    }
     if (action === "toggleWordWrap") {
       state.editorWordWrap = !state.editorWordWrap;
       if (cmInstance) cmInstance.setOption("lineWrapping", state.editorWordWrap);
@@ -12372,7 +12377,10 @@ document.querySelector("#app").addEventListener("click", event => {
   if (target) { state.view = target.dataset.view; render(); return; }
 
   const tab = event.target.closest("[data-tab]");
-  if (tab) { state.activeTab = tab.dataset.tab; render(); return; }
+  if (tab) { state.activeTab = tab.dataset.tab; state.breadcrumbMenuOpen = false; render(); return; }
+
+  const chartsTab = event.target.closest("[data-charts-tab]");
+  if (chartsTab) { state.chartsTab = chartsTab.dataset.chartsTab; state.breadcrumbMenuOpen = false; render(); return; }
 
   const sort = event.target.closest("[data-sort]");
   if (sort) {
