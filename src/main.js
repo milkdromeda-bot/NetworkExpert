@@ -12524,12 +12524,15 @@ document.addEventListener("drop", e => {
   if (file) importFile(file);
 });
 
-// Topbar shrink on scroll
+// Topbar shrink on scroll + back to top
+const _backToTop = document.getElementById("backToTop");
 document.querySelector("#app").addEventListener("scroll", e => {
   const ws = e.target.closest?.(".workspace");
   if (!ws) return;
   document.querySelector(".topbar")?.classList.toggle("compact", ws.scrollTop > 40);
+  _backToTop.classList.toggle("visible", ws.scrollTop > 300);
 }, true);
+_backToTop.addEventListener("click", () => { document.querySelector(".workspace")?.scrollTo({ top: 0, behavior: "smooth" }); });
 
 // Socket hover card
 // Mouse spotlight on panels
