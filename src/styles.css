@@ -10480,3 +10480,25 @@ svg.chart { cursor: crosshair; }
 [data-theme="light"] .panel::before, [data-theme="light"] .advisor-card::before {
   background: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(26,115,232,0.04), transparent 40%);
 }
+
+
+/* === Command palette enhancements === */
+.cmd-palette-results button mark {
+  background: rgba(57, 214, 214, 0.25);
+  color: var(--cyan);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.cmd-palette-results button .cmd-cat {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.5;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.cmd-palette-results button i {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
