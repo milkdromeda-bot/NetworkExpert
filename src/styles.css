@@ -6810,6 +6810,7 @@ tr.selected { background: #101a27; }
   padding: 5px 8px;
   font-size: 12px;
 }
+#chartTimeZoneSelect { max-width: 160px; }
 .chart-tool-separator {
   width: 1px;
   height: 24px;
@@ -10727,7 +10728,18 @@ button .ripple {
 [data-density="compact"] .section { margin-bottom: 6px !important; padding-bottom: 6px !important; }
 [data-density="compact"] .advisor-card { padding: 6px 8px !important; gap: 4px !important; }
 [data-density="compact"] .breadcrumb { font-size: 11px !important; padding: 2px 8px !important; }
-[data-density="compact"] .charts-global-toolbar { gap: 6px !important; padding: 4px 8px !important; }
+[data-density="compact"] .charts-global-toolbar { gap: 4px !important; padding: 2px 0 4px !important; margin-bottom: 4px !important; }
+[data-density="compact"] .view-charts .tab { min-height: 28px !important; font-size: 12px !important; }
+[data-density="compact"] .view-charts .workspace { gap: 4px !important; }
+[data-density="compact"] .chart-card { margin-bottom: 4px !important; }
+[data-density="compact"] .chart-title-wrap { padding: 2px 0 !important; margin-bottom: 2px !important; }
+
+/* Monitoring view is always compact vertically */
+.view-charts .breadcrumb { padding: 2px 12px !important; font-size: 11px; }
+.view-charts .charts-global-toolbar { padding: 4px 0 6px !important; margin-bottom: 4px !important; gap: 6px !important; }
+.view-charts .workspace { padding: 8px 16px !important; }
+.view-charts .tab { min-height: 30px; }
+.view-charts .chart-title-wrap { padding: 2px 0 !important; margin-bottom: 0 !important; }
 
 
 /* === Reduced motion === */
@@ -10777,3 +10789,70 @@ button .ripple {
 .theme-toggle-thumb.dark { left: 23px; }
 [data-theme="light"] .theme-toggle-track { background: #e2e8f0; }
 [data-theme="light"] .theme-toggle-thumb { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+
+/* === Guide pattern table === */
+.guide-pattern-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.guide-pattern-table thead th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: rgba(15, 22, 33, 0.6);
+  border-bottom: 1px solid var(--line);
+}
+.guide-pattern-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(38, 50, 65, 0.4);
+  color: var(--soft);
+  vertical-align: top;
+}
+.guide-pattern-table tbody td strong { color: var(--text); }
+.guide-pattern-table tbody td .code {
+  font-family: "Cascadia Code", Consolas, monospace;
+  color: var(--cyan);
+}
+.guide-pattern-table tbody tr:last-child td { border-bottom: none; }
+.guide-pattern-table tbody tr { transition: background 0.12s; }
+.guide-pattern-table tbody tr:hover { background: rgba(93, 183, 255, 0.04); }
+.guide-pattern-table code {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  background: rgba(57, 214, 214, 0.08);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.guide-pattern-table .badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(93, 183, 255, 0.1);
+  color: var(--blue);
+  font-weight: 600;
+}
+[data-theme="light"] .guide-pattern-table thead th { background: #f1f5f9; }
+[data-theme="light"] .guide-pattern-table code { background: rgba(26, 115, 232, 0.08); color: #1a73e8; }
+[data-theme="light"] .guide-pattern-table { border-color: #d0d8e0; }
+[data-theme="light"] .guide-pattern-table tbody td { border-bottom-color: #e2e8f0; color: #334155; }
+[data-theme="light"] .guide-pattern-table tbody td strong { color: #0f172a; }
+[data-theme="light"] .guide-pattern-table tbody td .code { background: #f0f4f8 !important; color: #0e7490; border: 1px solid #d0d8e0; }
+[data-theme="light"] .guide-pattern-table tbody tr:hover { background: rgba(26, 115, 232, 0.04); }
+[data-theme="light"] .guide-pattern-table .badge { background: rgba(26, 115, 232, 0.1); color: #1a73e8; border: 1px solid rgba(26, 115, 232, 0.2); }
+
+/* === Chart card drag & drop === */
+.chart-drag-handle { cursor: grab; }
+.chart-drag-handle:active { cursor: grabbing; }
+.chart-card.dragging { opacity: 0.4; }
+.chart-card.drag-over { outline: 2px dashed var(--cyan); outline-offset: -2px; border-radius: 8px; }

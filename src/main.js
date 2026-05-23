@@ -8228,18 +8228,7 @@ function chartMoveOptions(metric) {
 }
 
 function renderChartMoveMenu(metric) {
-  const options = chartMoveOptions(metric);
-  if (!options.length) return "";
-  const pos = state.openChartMoveMetric === metric && state.openChartMovePos
-    ? `style="left:${state.openChartMovePos.left}px;top:${state.openChartMovePos.top}px"`
-    : "";
-  return `<button class="mini mini-menu" data-chart-move-menu="${escapeHtml(metric)}" title="Move chart">${icons.menu}</button>
-    <div class="row-menu chart-move-menu ${state.openChartMoveMetric === metric ? "open" : ""}" ${pos}>
-      ${options.map(option => `<button data-chart-move="${escapeHtml(metric)}" data-chart-move-dir="${option.direction}">
-        ${option.icon}
-        <span>${escapeHtml(option.label)}</span>
-      </button>`).join("")}
-    </div>`;
+  return `<button class="mini chart-drag-handle" draggable="true" data-chart-drag="${escapeHtml(metric)}" title="Drag to reorder"><i class="ri-draggable"></i></button>`;
 }
 
 function positionChartMoveMenu(button, metric) {
@@ -8254,12 +8243,17 @@ function positionChartMoveMenu(button, metric) {
   state.openChartMovePos = { left: Math.round(left), top: Math.round(top) };
 }
 
-function moveVisibleChartMetric(metric, direction) {
+function moveVisibleChartMetric(metric, directionOrTarget) {
   const visible = orderedChartMetrics();
   const current = visible.indexOf(metric);
-  const targetIndex = chartMoveTargetIndex(metric, direction);
-  const targetMetric = visible[targetIndex];
-  if (current < 0 || targetIndex < 0 || !targetMetric) return false;
+  let targetMetric;
+  if (visible.includes(directionOrTarget)) {
+    targetMetric = directionOrTarget;
+  } else {
+    const targetIndex = chartMoveTargetIndex(metric, directionOrTarget);
+    targetMetric = visible[targetIndex];
+  }
+  if (current < 0 || !targetMetric || metric === targetMetric) return false;
   const order = [...state.prefs.chartLayout.panelOrder];
   const currentOrderIndex = order.indexOf(metric);
   const targetOrderIndex = order.indexOf(targetMetric);
@@ -11787,20 +11781,27 @@ function bindEvents() {
       }
     });
   });
-  document.querySelectorAll("[data-chart-move-menu]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const metric = event.currentTarget.dataset.chartMoveMenu;
-    if (state.openChartMoveMetric === metric) {
-      state.openChartMoveMetric = null;
-      state.openChartMovePos = null;
-    } else {
-      positionChartMoveMenu(event.currentTarget, metric);
-    }
-    renderKeepingWorkspacePosition();
-  }));
-  document.querySelectorAll(".chart-move-menu").forEach(menu => menu.addEventListener("click", event => {
-    event.stopPropagation();
-  }));
+  document.querySelectorAll("[data-chart-drag]").forEach(handle => {
+    handle.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/plain", handle.dataset.chartDrag);
+      handle.closest(".chart-card")?.classList.add("dragging");
+    });
+    handle.addEventListener("dragend", () => {
+      handle.closest(".chart-card")?.classList.remove("dragging");
+      document.querySelectorAll(".chart-card.drag-over").forEach(el => el.classList.remove("drag-over"));
+    });
+  });
+  document.querySelectorAll(".chart-card").forEach(card => {
+    card.addEventListener("dragover", e => { e.preventDefault(); card.classList.add("drag-over"); });
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+    card.addEventListener("drop", e => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      const from = e.dataTransfer.getData("text/plain");
+      const to = card.querySelector("[data-chart-drag]")?.dataset.chartDrag || card.querySelector("[data-mini-chart]")?.dataset.miniChart;
+      if (from && to && from !== to && moveVisibleChartMetric(from, to)) render();
+    });
+  });
   document.querySelectorAll("[data-chart-move]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     const metric = event.currentTarget.dataset.chartMove;

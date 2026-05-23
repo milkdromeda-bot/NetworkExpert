@@ -77,12 +77,12 @@ export function createGuideView(context) {
     ];
     return `<div class="guide-section"><h2><i class="ri-first-aid-kit-line"></i> Remediation Cheat Sheet</h2>
       <p style="color:var(--muted);margin-bottom:12px">Click any command to copy. Replace &lt;PEER_IP&gt;, &lt;INTERFACE&gt;, &lt;PID&gt;, &lt;PORT&gt; with your values.</p>
-      <table style="width:100%;font-size:12px;border-collapse:collapse">
-        <thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line);color:var(--muted)">Problem</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line);color:var(--muted)">Commands</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line);color:var(--muted)">Why</th></tr></thead>
+      <table class="guide-pattern-table">
+        <thead><tr><th>Problem</th><th>Commands</th><th>Why</th></tr></thead>
         <tbody>${rows.map(([problem, cmds, why]) => `<tr>
-          <td style="padding:8px;border-bottom:1px solid rgba(38,50,65,0.5);font-weight:600;color:var(--text);vertical-align:top">${problem}</td>
-          <td style="padding:8px;border-bottom:1px solid rgba(38,50,65,0.5);vertical-align:top"><pre class="code" style="margin:0;font-size:11px;padding:6px 8px;border-radius:4px;background:rgba(0,0,0,0.3);cursor:pointer;white-space:pre-wrap" data-copy-cmd="${cmds.replace(/"/g, '&quot;')}" title="Click to copy">${cmds}</pre></td>
-          <td style="padding:8px;border-bottom:1px solid rgba(38,50,65,0.5);color:var(--muted);vertical-align:top">${why}</td>
+          <td><strong>${problem}</strong></td>
+          <td><pre class="code" style="margin:0;font-size:11px;padding:6px 10px;border-radius:4px;background:rgba(0,0,0,0.3);cursor:pointer;white-space:pre-wrap" data-copy-cmd="${cmds.replace(/"/g, '&quot;')}" title="Click to copy">${cmds}</pre></td>
+          <td>${why}</td>
         </tr>`).join("")}</tbody>
       </table>
     </div>`;
@@ -287,7 +287,7 @@ export function createGuideView(context) {
   }
   
   function renderGuideUseCases() {
-    const quickRef = `<div class="guide-quick-ref" style="margin-bottom:16px;overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--line)"><th style="text-align:left;padding:6px 10px;color:var(--muted)">Pattern</th><th style="text-align:left;padding:6px 10px;color:var(--muted)">Detected via ss</th><th style="text-align:left;padding:6px 10px;color:var(--muted)">Root cause side</th></tr></thead><tbody><tr><td style="padding:5px 10px"><b>slow-consumer</b></td><td style="padding:5px 10px">Consumer (Recv-Q local)</td><td style="padding:5px 10px">Consumer (slow application)</td></tr><tr><td style="padding:5px 10px"><b>path-blackhole</b></td><td style="padding:5px 10px">Sender (RTO / backoff)</td><td style="padding:5px 10px">Network (intermediate equipment)</td></tr><tr><td style="padding:5px 10px"><b>peer-stopped-reading</b></td><td style="padding:5px 10px">Sender (Send-Q / persist)</td><td style="padding:5px 10px">Consumer (frozen application)</td></tr><tr><td style="padding:5px 10px"><b>congestion-event</b></td><td style="padding:5px 10px">Sender (retrans / cwnd)</td><td style="padding:5px 10px">Network (saturated link)</td></tr><tr><td style="padding:5px 10px"><b>buffer-exhaustion</b></td><td style="padding:5px 10px">Consumer (skmem.d / drops)</td><td style="padding:5px 10px">Kernel (memory pressure)</td></tr></tbody></table></div>`;
+    const quickRef = `<div class="guide-quick-ref" style="margin-bottom:16px;overflow-x:auto"><table class="guide-pattern-table"><thead><tr><th>Pattern</th><th>Detected via ss</th><th>Root cause side</th></tr></thead><tbody><tr><td><code>slow-consumer</code></td><td>Consumer (Recv-Q local)</td><td><span class="badge">Consumer (slow application)</span></td></tr><tr><td><code>path-blackhole</code></td><td>Sender (RTO / backoff)</td><td><span class="badge">Network (intermediate equipment)</span></td></tr><tr><td><code>peer-stopped-reading</code></td><td>Sender (Send-Q / persist)</td><td><span class="badge">Consumer (frozen application)</span></td></tr><tr><td><code>congestion-event</code></td><td>Sender (retrans / cwnd)</td><td><span class="badge">Network (saturated link)</span></td></tr><tr><td><code>buffer-exhaustion</code></td><td>Consumer (skmem.d / drops)</td><td><span class="badge">Kernel (memory pressure)</span></td></tr></tbody></table></div>`;
     const cases = [
       {
         title: "1. Slow consumer or congested send path",
