@@ -2640,6 +2640,16 @@ function updateAnomalyAlertState() {
     state.anomalyAlertSince = Date.now();
     state.lastAnomalyCount = count;
   }
+  updateFavicon();
+}
+
+function updateFavicon() {
+  const critical = state.anomalies.some(a => a.severity === "critical" || a.severity === "high");
+  const hasAnomalies = state.anomalies.length > 0;
+  const color = critical ? "%23ff5c77" : hasAnomalies ? "%23ff9f43" : "%234cde8a";
+  const dot = critical || hasAnomalies ? `%3Ccircle cx='54' cy='10' r='9' fill='${color}'/%3E` : "";
+  const link = document.querySelector("link[rel='icon']");
+  if (link) link.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b11'/%3E%3Cpath d='M18 34h12m4 0h12M24 24l8 10 8-10' fill='none' stroke='%2339d6d6' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='18' cy='34' r='6' fill='%235db7ff'/%3E%3Ccircle cx='46' cy='34' r='6' fill='${color}'/%3E${dot}%3C/svg%3E`;
 }
 
 function anomalyStatusClass() {
