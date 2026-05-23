@@ -12564,6 +12564,30 @@ document.addEventListener("pointerdown", e => {
   setTimeout(() => ripple.remove(), 500);
 });
 
+// Double-click to zoom charts
+document.querySelector("#app").addEventListener("dblclick", e => {
+  const svg = e.target.closest("svg.chart");
+  if (!svg) return;
+  const rect = svg.getBoundingClientRect();
+  const xRatio = (e.clientX - rect.left) / rect.width;
+  const z = state.chartZoom;
+  const range = z.end - z.start;
+  const center = z.start + xRatio * range;
+  const newRange = range / 2;
+  state.chartZoom = clampZoomRange({ start: center - newRange / 2, end: center + newRange / 2 });
+  render();
+});
+document.querySelector("#app").addEventListener("contextmenu", e => {
+  if (!e.target.closest("svg.chart")) return;
+  e.preventDefault();
+  const z = state.chartZoom;
+  const range = z.end - z.start;
+  const center = (z.start + z.end) / 2;
+  const newRange = Math.min(1, range * 2);
+  state.chartZoom = clampZoomRange({ start: center - newRange / 2, end: center + newRange / 2 });
+  render();
+});
+
 // Command palette
 function toggleCommandPalette() {
   if (state.modal === "commandPalette") { state.modal = null; render(); return; }
