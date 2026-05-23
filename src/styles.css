@@ -2120,6 +2120,10 @@ button.mega i {
 .panel-head .panel-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .panel-head .col-tools { flex-shrink: 0; }
 .analysis-layout .panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--panel);
   min-height: 42px;
 }
 .analysis-layout .toolbar {
@@ -10613,3 +10617,11 @@ tr.selected { animation: rowFocus 0.3s ease; }
 .analysis-tabs { view-transition-name: analysis-tabs; }
 ::view-transition-old(analysis-head), ::view-transition-new(analysis-head),
 ::view-transition-old(analysis-tabs), ::view-transition-new(analysis-tabs) { animation: none; }
+
+/* === Sticky filter + tabs in analysis === */
+.analysis-layout .analysis-tabs {
+  position: sticky;
+  top: 42px;
+  z-index: 19;
+  background: var(--panel);
+}
