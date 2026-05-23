@@ -179,6 +179,7 @@ function tableDefaults() {
 
 const initialPrefs = loadPrefs();
 if (initialPrefs.theme === "light") document.documentElement.setAttribute("data-theme", "light");
+if (initialPrefs.density === "compact") document.documentElement.setAttribute("data-density", "compact");
 const showOnboarding = !localStorage.getItem("networkExpertOnboarded");
 
 let state = {
@@ -2901,7 +2902,7 @@ function _renderSync() {
           <button class="icon" data-action="undo" title="Undo (Ctrl+Z)" aria-label="Undo" ${!state._undoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-back-line"></i></button>
           <button class="icon" data-action="redo" title="Redo (Ctrl+Y)" aria-label="Redo" ${!state._redoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-forward-line"></i></button>
           <button class="icon" data-action="toggleDensity" title="Toggle compact/comfortable mode" aria-label="Toggle density"><i class="${state.prefs.density === "compact" ? "ri-expand-diagonal-line" : "ri-contract-line"}"></i></button>
-          <button class="icon" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><i class="${state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line"}"></i></button>
+          <button class="theme-toggle" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><span class="theme-toggle-track"><i class="ri-sun-line"></i><i class="ri-moon-line"></i><span class="theme-toggle-thumb ${state.prefs.theme === "light" ? "" : "dark"}"></span></span></button>
           <div class="gear-menu-wrap">
             <button class="icon gear-btn ${state.gearMenuOpen ? "is-open" : ""}" data-action="toggleGearMenu" title="Settings" aria-label="Settings" aria-haspopup="true"><i class="ri-settings-3-line"></i></button>
             ${state.gearMenuOpen ? `<div class="gear-dropdown" role="menu">
@@ -6756,7 +6757,7 @@ function renderServiceMap() {
     { key: "locals", title: "Local sockets", x: 520, nodes: ordered.locals },
     { key: "peers", title: "Peers", x: 920, nodes: ordered.peers }
   ];
-  const positions = layoutTopologyLanePositions(lanes);
+  const positions = layoutTopologyLanePositions(lanes, { nodeGap: 86 });
   const maxY = Math.max(...Object.values(positions).map(position => position.y));
   const height = Math.max(420, maxY + 104);
   const groupBands = serviceMapGroupBands(lanes, positions);
@@ -6816,8 +6817,9 @@ function renderServiceMap() {
               : (node.risk === "critical" ? "#fff1f3" : node.risk === "high" ? "#fff4e6" : node.risk === "medium" ? "#fffbe6" : "#e8f4fd");
             const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
             const subtitle = nodeSubtitle(node);
+            const nodeH = Math.max(48, Math.min(80, 36 + (node.count || 1) * 4));
             return `<g class="map-node ${node.endpoint ? "has-edit" : ""}">
-              <rect x="${p.x - 146}" y="${p.y - 24}" width="292" height="48" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
+              <rect x="${p.x - 146}" y="${p.y - nodeH / 2}" width="292" height="${nodeH}" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
               <text x="${p.x - 134}" y="${subtitle ? p.y - 3 : p.y + 5}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 30))}</text>
               ${subtitle ? `<text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(subtitle)}</text>` : ""}
               ${node.endpoint ? `<g class="map-node-edit-action" data-map-alias="${escapeHtml(node.endpoint)}" role="button" tabindex="0" aria-label="Edit ${escapeHtml(node.endpoint)} label">
@@ -10267,6 +10269,7 @@ function toast(title, text, type = "") {
   el.addEventListener("mouseenter", () => { el.classList.add("paused"); });
   el.addEventListener("mouseleave", () => { el.classList.remove("paused"); });
   stack.appendChild(el);
+  while (stack.children.length > 4) { stack.firstElementChild.remove(); }
   setTimeout(() => { if (!el.classList.contains("paused")) { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); } else { const wait = () => { if (!el.classList.contains("paused")) { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); } else { setTimeout(wait, 500); } }; setTimeout(wait, 500); } }, 8000);
 }
 
@@ -10866,13 +10869,13 @@ function bindEvents() {
     if (action === "toggleTheme") {
       state.prefs.theme = state.prefs.theme === "light" ? "dark" : "light";
       document.documentElement.setAttribute("data-theme", state.prefs.theme);
-      const icon = event.currentTarget.querySelector("i");
-      if (icon) icon.className = state.prefs.theme === "light" ? "ri-moon-line" : "ri-sun-line";
       savePrefs();
+      render();
     }
     if (action === "toggleDensity") {
       state.prefs.density = state.prefs.density === "compact" ? "comfortable" : "compact";
-      document.documentElement.setAttribute("data-density", state.prefs.density === "compact" ? "compact" : "");
+      if (state.prefs.density === "compact") { document.documentElement.setAttribute("data-density", "compact"); }
+      else { document.documentElement.removeAttribute("data-density"); }
       savePrefs();
       render();
     }
@@ -12393,6 +12396,24 @@ document.addEventListener("keydown", event => {
 });
 
 document.querySelector("#app").addEventListener("click", event => {
+  const actionMenu = event.target.closest("[data-action-menu]");
+  if (actionMenu) {
+    event.stopPropagation();
+    const id = actionMenu.dataset.actionMenu;
+    if (state.openMenuId === id) { state.openMenuId = null; state.openMenuPos = null; }
+    else {
+      const rect = actionMenu.getBoundingClientRect();
+      const menuWidth = 250;
+      const menuHeight = 220;
+      const left = Math.min(Math.max(8, rect.right + 4), window.innerWidth - menuWidth - 8);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top = spaceBelow > menuHeight + 8 ? rect.top : Math.max(8, rect.bottom - menuHeight);
+      state.openMenuId = id;
+      state.openMenuPos = { left: Math.round(left), top: Math.round(top) };
+    }
+    render(); return;
+  }
+
   const target = event.target.closest("[data-view]");
   if (target) { state._lastTab = state._lastTab || {}; state._lastTab[state.view] = state.activeTab; state.view = target.dataset.view; if (state._lastTab[state.view]) state.activeTab = state._lastTab[state.view]; if (document.startViewTransition) { document.startViewTransition(() => render()); } else { render(); } return; }
 
