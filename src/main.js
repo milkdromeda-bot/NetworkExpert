@@ -183,6 +183,7 @@ const showOnboarding = !localStorage.getItem("networkExpertOnboarded");
 
 let state = {
   raw: "",
+  showEditor: false,
   command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
   ssCommandConfig: defaultSsCommandConfig(),
   sourceName: "empty workspace",
@@ -3286,6 +3287,16 @@ function renderKeepingModalPosition() {
 
 function renderIngestEditor() {
   const editorThemePicker = renderSsEditorThemePicker();
+  if (!state.raw && !state.showEditor) {
+    return `<div class="drop-zone" id="fileDropZone">
+        <p style="margin:0 0 16px;color:var(--soft)">Upload ss capture in .txt, .log, .gz, or .zip format</p>
+        <i class="ri-upload-cloud-2-fill drop-icon"></i>
+        <span class="drop-label">Drag & Drop</span>
+        <span class="drop-or">or</span>
+        <button class="drop-btn" data-action="pickFile"><i class="ri-lock-line"></i> Select a file</button>
+        <button data-action="showRawEditor" style="margin-top:18px;background:none!important;border:none!important;box-shadow:none!important;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer">or paste raw text</button>
+      </div>`;
+  }
   return `<div class="cm-search-hints">
         <span>Quick find:</span>
         <button data-cm-search="ESTAB">ESTAB</button>
@@ -10539,6 +10550,10 @@ function bindEvents() {
       state.showSsOptions = false;
       renderKeepingWorkspacePosition();
     }
+    if (action === "showRawEditor") {
+      state.showEditor = true;
+      renderKeepingWorkspacePosition();
+    }
     if (action === "toggleWordWrap") {
       state.editorWordWrap = !state.editorWordWrap;
       if (cmInstance) cmInstance.setOption("lineWrapping", state.editorWordWrap);
@@ -12445,6 +12460,16 @@ document.addEventListener("keydown", e => {
   if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) { e.preventDefault(); popUndo(); }
   if (e.key === "k" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); toggleCommandPalette(); }
   if (e.key === "?" && !e.ctrlKey) { state.modal = state.modal === "shortcuts" ? null : "shortcuts"; render(); }
+});
+
+// File drag & drop zone
+document.addEventListener("dragover", e => { e.preventDefault(); document.querySelector(".drop-zone")?.classList.add("dragover"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget || !document.contains(e.relatedTarget)) document.querySelector(".drop-zone")?.classList.remove("dragover"); });
+document.addEventListener("drop", e => {
+  e.preventDefault();
+  document.querySelector(".drop-zone")?.classList.remove("dragover");
+  const file = e.dataTransfer?.files?.[0];
+  if (file) importFile(file);
 });
 
 // Command palette
