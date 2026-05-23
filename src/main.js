@@ -6583,7 +6583,7 @@ function renderGridControls(total) {
 }
 
 function renderPagination(total, totalPages, start) {
-  if (!total) return `<div class="empty"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="margin-bottom:8px;opacity:0.4"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="2"/><path d="M18 24h12M24 18v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/><path d="M15 15l18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><br>No socket matches the filters.</div>`;
+  if (!total) return `<div class="empty"><svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="22" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M20 28h16M28 20v16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/><path d="M18 18l20 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><strong>No sockets match your filters</strong>Try broadening the filter criteria or reset filters.<div class="empty-cta"><button data-action="clearFilters"><i class="ri-filter-off-line"></i> Clear filters</button></div></div>`;
   const end = Math.min(total, start + state.table.pageSize);
   const filteredCount = hasActiveTableFilters() ? `<span class="pager-filter-count">${formatNumber(total)} filtered row(s)</span>` : "";
   return `<div class="pager">
@@ -6878,7 +6878,7 @@ function renderExpertInformation() {
 
 function renderTimeline() {
   const events = buildTimelineEvents();
-  if (!events.length) return `<div class="empty"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="margin-bottom:8px;opacity:0.4"><rect x="6" y="22" width="36" height="4" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="24" r="3" fill="currentColor" opacity="0.3"/><circle cx="24" cy="24" r="3" fill="currentColor" opacity="0.3"/><circle cx="36" cy="24" r="3" fill="currentColor" opacity="0.3"/></svg><br>No timeline event is available. Import timestamped snapshots for a stronger time-based view.</div>`;
+  if (!events.length) return `<div class="empty"><svg width="56" height="56" viewBox="0 0 56 56" fill="none"><rect x="8" y="24" width="40" height="8" rx="4" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="28" r="3" fill="currentColor" opacity="0.3"/><circle cx="28" cy="28" r="3" fill="currentColor" opacity="0.3"/><circle cx="40" cy="28" r="3" fill="currentColor" opacity="0.3"/></svg><strong>No timeline events available</strong>Import multiple timestamped ss snapshots to see how metrics evolve over time.<div class="empty-cta"><button data-action="pickFile" class="primary"><i class="ri-upload-2-line"></i> Import snapshots</button></div></div>`; for a stronger time-based view.</div>`;
   const first = events[0]?.epochMs || Date.now();
   const last = events[events.length - 1]?.epochMs || first;
   const stories = cachedStories();
@@ -7028,7 +7028,7 @@ function renderAlerting() {
               <button data-jump="${escapeHtml(event.socketId)}">${icons.focus} Context</button>
               <button data-alert-ack="${escapeHtml(event.id)}">${event.acknowledged ? icons.reset : icons.saveDisk} ${event.acknowledged ? "Unack" : "Ack"}</button>
             </footer>
-          </article>`).join("") : `<div class="empty">No alert currently matches the configured rules.</div>`}
+          </article>`).join("") : `<div class="empty"><svg width="56" height="56" viewBox="0 0 56 56" fill="none"><path d="M28 12L44 40H12L28 12z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M28 24v8M28 36v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.4"/></svg><strong>No active alerts</strong>All configured alert rules are passing. Alerts trigger when thresholds are exceeded.</div>`}
         </div>
       </div>
       <div class="alert-column">
