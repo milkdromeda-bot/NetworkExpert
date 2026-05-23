@@ -7819,8 +7819,26 @@ tr.selected { background: #101a27; }
   height: 3px;
   background: var(--blue);
   border-radius: 0 0 0 4px;
-  animation: toastCountdown 5s linear forwards;
+  animation: toastCountdown 8s linear forwards;
 }
+.toast.paused .toast-progress { animation-play-state: paused; }
+.toast-close {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 22px; min-width: 22px; min-height: 22px;
+  padding: 0;
+  border: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--muted) !important;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.toast:hover .toast-close { opacity: 1; }
+.toast-close:hover { color: var(--text) !important; background: rgba(255,255,255,0.1) !important; }
 .toast.warn .toast-progress { background: var(--yellow); }
 .toast.danger .toast-progress { background: var(--red); }
 @keyframes toastCountdown {

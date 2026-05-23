@@ -10262,9 +10262,12 @@ function toast(title, text, type = "") {
   const stack = document.querySelector("#toastStack");
   const el = document.createElement("div");
   el.className = `toast ${type}`;
-  el.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p><span class="toast-progress"></span>`;
+  el.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p><button class="toast-close" aria-label="Close">×</button><span class="toast-progress"></span>`;
+  el.querySelector(".toast-close").addEventListener("click", () => { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); });
+  el.addEventListener("mouseenter", () => { el.classList.add("paused"); });
+  el.addEventListener("mouseleave", () => { el.classList.remove("paused"); });
   stack.appendChild(el);
-  setTimeout(() => { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); }, 4900);
+  setTimeout(() => { if (!el.classList.contains("paused")) { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); } else { const wait = () => { if (!el.classList.contains("paused")) { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); } else { setTimeout(wait, 500); } }; setTimeout(wait, 500); } }, 8000);
 }
 
 async function copyTextToClipboard(text) {
