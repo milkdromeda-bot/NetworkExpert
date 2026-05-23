@@ -2723,6 +2723,23 @@ function _positionTabIndicator() {
   indicator.style.width = `${rect.width}px`;
 }
 
+function _animateCounters() {
+  document.querySelectorAll("[data-countup]").forEach(el => {
+    const target = parseInt(el.dataset.countup, 10);
+    if (!target || el.dataset.counted) return;
+    el.dataset.counted = "1";
+    const duration = 600;
+    const start = performance.now();
+    const fmt = (n) => n.toLocaleString("fr");
+    (function step(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmt(Math.round(target * ease));
+      if (t < 1) requestAnimationFrame(step);
+    })(start);
+  });
+}
+
 function _renderSkeleton(type) {
   const skeletons = {
     analysis: `<div class="skeleton-grid" style="margin-bottom:16px">${Array(4).fill('<div class="skeleton skeleton-kpi"></div>').join("")}</div><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-chart" style="margin-top:16px"></div>`,
@@ -2910,6 +2927,7 @@ function _renderSync() {
   bindEvents();
   _staggerReveal();
   _positionTabIndicator();
+  _animateCounters();
   initCodeMirror();
   if (state.view === "charts") {
     scheduleChartPageDraw();
@@ -3443,10 +3461,10 @@ function renderAnalysisPage() {
     : "Deep analysis is paused. Click to enable the background advisor.";
   return html`
     <section class="kpis compact">
-      <span class="kpi-inline"><label>Sockets</label><strong>${formatNumber(state.sockets.length)}</strong></span>
-      <span class="kpi-inline"><label>Critical</label><strong>${formatNumber(state.anomalies.filter(a => a.severity === "critical").length)}</strong></span>
+      <span class="kpi-inline"><label>Sockets</label><strong data-countup="${state.sockets.length}">${formatNumber(state.sockets.length)}</strong></span>
+      <span class="kpi-inline"><label>Critical</label><strong data-countup="${state.anomalies.filter(a => a.severity === "critical").length}">${formatNumber(state.anomalies.filter(a => a.severity === "critical").length)}</strong></span>
       <span class="kpi-inline"><label>Send-Q</label><strong>${formatMetricValue("sendQ", state.sockets.reduce((s, x) => s + x.sendQ, 0))}</strong></span>
-      <span class="kpi-inline"><label>Drops</label><strong>${formatMetricValue("skmem.d", state.sockets.reduce((s, x) => s + (x.details.skmem.d || 0), 0))}</strong></span>
+      <span class="kpi-inline"><label>Drops</label><strong data-countup="${state.sockets.reduce((s, x) => s + (x.details.skmem.d || 0), 0)}">${formatMetricValue("skmem.d", state.sockets.reduce((s, x) => s + (x.details.skmem.d || 0), 0))}</strong></span>
     </section>
     <section class="analysis-layout">
       <div class="panel">
