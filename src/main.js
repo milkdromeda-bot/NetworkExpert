@@ -2738,15 +2738,17 @@ function _positionTabIndicator() {
 function _animateCounters() {
   document.querySelectorAll("[data-countup]").forEach(el => {
     const target = parseInt(el.dataset.countup, 10);
-    if (!target || el.dataset.counted) return;
-    el.dataset.counted = "1";
-    const duration = 600;
+    if (isNaN(target)) return;
+    const prev = parseInt(el.dataset.prev || "0", 10);
+    if (prev === target) return;
+    el.dataset.prev = target;
+    const duration = 500;
     const start = performance.now();
     const fmt = (n) => n.toLocaleString("fr");
     (function step(now) {
       const t = Math.min((now - start) / duration, 1);
       const ease = 1 - Math.pow(1 - t, 3);
-      el.textContent = fmt(Math.round(target * ease));
+      el.textContent = fmt(Math.round(prev + (target - prev) * ease));
       if (t < 1) requestAnimationFrame(step);
     })(start);
   });
