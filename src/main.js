@@ -2703,6 +2703,20 @@ const _busyEl = document.getElementById("busyOverlay");
 function _showBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.add("visible"); }
 function _hideBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.remove("visible"); _busyEl?.classList.remove("visible"); }
 
+function _staggerReveal() {
+  const els = document.querySelectorAll(".workspace .panel, .workspace .advisor-card, .workspace .timeline-story, .workspace .expert-strip article");
+  els.forEach((el, i) => { el.setAttribute("data-reveal", ""); el.style.animationDelay = `${i * 35}ms`; });
+}
+
+function _renderSkeleton(type) {
+  const skeletons = {
+    analysis: `<div class="skeleton-grid" style="margin-bottom:16px">${Array(4).fill('<div class="skeleton skeleton-kpi"></div>').join("")}</div><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-chart" style="margin-top:16px"></div>`,
+    table: `<div class="skeleton skeleton-title"></div>${Array(8).fill('<div class="skeleton skeleton-table-row"></div>').join("")}`,
+    charts: `<div class="skeleton-grid">${Array(2).fill('<div class="skeleton skeleton-chart"></div>').join("")}</div>`
+  };
+  return skeletons[type] || skeletons.analysis;
+}
+
 function _undoSnapshot() {
   const snap = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
   state._undoStack.push(snap);
@@ -2878,6 +2892,7 @@ function _renderSync() {
     ${renderModal()}
   `;
   bindEvents();
+  _staggerReveal();
   initCodeMirror();
   if (state.view === "charts") {
     scheduleChartPageDraw();
@@ -6733,10 +6748,10 @@ function renderServiceMap() {
           }).join("")}
           ${lanes.flatMap(lane => lane.nodes.map(node => {
             const p = positions[node.id];
-            const isDark = !document.documentElement.hasAttribute("data-theme") || document.documentElement.getAttribute("data-theme") === "dark";
+            const isDark = state.prefs.theme !== "light";
             const fill = isDark
               ? (node.risk === "critical" ? "#1a0a10" : node.risk === "high" ? "#1a1008" : node.risk === "medium" ? "#161408" : "#0a1520")
-              : (node.risk === "critical" ? "#fef2f2" : node.risk === "high" ? "#fff7ed" : node.risk === "medium" ? "#fefce8" : "#f0f9ff");
+              : (node.risk === "critical" ? "#fff1f3" : node.risk === "high" ? "#fff4e6" : node.risk === "medium" ? "#fffbe6" : "#e8f4fd");
             const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
             const subtitle = nodeSubtitle(node);
             return `<g class="map-node ${node.endpoint ? "has-edit" : ""}">
@@ -10431,6 +10446,8 @@ function bindEvents() {
       const parseStart = performance.now();
       if (state.raw.length > 5000000 && window.Worker) {
         _showBusy();
+        const ws = document.querySelector(".workspace");
+        if (ws) ws.innerHTML = _renderSkeleton("analysis");
         const worker = new Worker(new URL("./parse-worker.js", import.meta.url), { type: "module" });
         worker.postMessage({ type: "parseSs", payload: { raw: state.raw } });
         worker.onmessage = msg => {
