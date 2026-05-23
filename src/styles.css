@@ -4955,7 +4955,16 @@ tr.selected { background: #101a27; }
   stroke-width: var(--link-hover-width);
 }
 .map-link-wrap.critical .map-link {
-  opacity: .56;
+  opacity: .7;
+  animation: linkPulse 1.8s ease-in-out infinite;
+}
+.map-link-wrap.high .map-link {
+  opacity: .6;
+  animation: linkPulse 2.4s ease-in-out infinite;
+}
+@keyframes linkPulse {
+  0%, 100% { opacity: .5; filter: none; }
+  50% { opacity: .9; filter: drop-shadow(0 0 6px var(--link-color)); }
 }
 .map-node-label {
   fill: #edf4ff;
