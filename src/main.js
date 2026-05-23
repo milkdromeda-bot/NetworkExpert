@@ -12388,7 +12388,7 @@ document.addEventListener("keydown", event => {
 
 document.querySelector("#app").addEventListener("click", event => {
   const target = event.target.closest("[data-view]");
-  if (target) { state.view = target.dataset.view; render(); return; }
+  if (target) { state._lastTab = state._lastTab || {}; state._lastTab[state.view] = state.activeTab; state.view = target.dataset.view; if (state._lastTab[state.view]) state.activeTab = state._lastTab[state.view]; render(); return; }
 
   const tab = event.target.closest("[data-tab]");
   if (tab) { state.activeTab = tab.dataset.tab; state.breadcrumbMenuOpen = false; render(); return; }
