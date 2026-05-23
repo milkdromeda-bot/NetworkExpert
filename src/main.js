@@ -2838,7 +2838,12 @@ function render() {
   hideFloatingChartTooltipNow();
   if (state.analysisDirty) recompute();
   updateAnomalyAlertState();
-  setTimeout(() => { try { _renderSync(); } catch(e) { _renderError(e); } _hideBusy(); }, 16);
+  const doRender = () => { try { _renderSync(); } catch(e) { _renderError(e); } _hideBusy(); };
+  if (document.startViewTransition) {
+    setTimeout(() => document.startViewTransition(doRender), 16);
+  } else {
+    setTimeout(doRender, 16);
+  }
 }
 
 function _renderSync() {

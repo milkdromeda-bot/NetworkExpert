@@ -10447,3 +10447,14 @@ svg.chart { cursor: crosshair; }
 .socket-hover-card .shc-spark { margin-top: 8px; height: 24px; }
 .socket-hover-card .shc-spark polyline { fill: none; stroke: var(--blue); stroke-width: 1.5; }
 .socket-hover-card .shc-spark polygon { fill: rgba(93,183,255,0.1); stroke: none; }
+
+
+/* === View Transitions API === */
+.topbar { view-transition-name: topbar; }
+.kpis.compact { view-transition-name: kpis; }
+::view-transition-old(root) { animation: 150ms ease-out both fade-out; }
+::view-transition-new(root) { animation: 200ms ease-in both fade-in; }
+::view-transition-old(topbar), ::view-transition-new(topbar) { animation: none; }
+::view-transition-old(kpis), ::view-transition-new(kpis) { animation: none; }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } }
