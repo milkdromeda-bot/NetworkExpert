@@ -10419,3 +10419,31 @@ svg.chart { cursor: crosshair; }
 .map-link-wrap { cursor: pointer; }
 [draggable="true"], .table-settings-head[draggable] { cursor: grab; }
 [draggable="true"]:active, .table-settings-head[draggable]:active { cursor: grabbing; }
+
+
+/* === Socket hover card === */
+.socket-hover-card {
+  position: fixed;
+  z-index: 9000;
+  pointer-events: none;
+  background: rgba(11, 16, 24, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(93, 183, 255, 0.15);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-width: 220px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  font-size: 12px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.socket-hover-card.visible { opacity: 1; transform: translateY(0); }
+.socket-hover-card .shc-title { font-weight: 700; color: var(--text); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.socket-hover-card .shc-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.socket-hover-card .shc-metric label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.socket-hover-card .shc-metric strong { display: block; font-size: 13px; color: var(--text); }
+.socket-hover-card .shc-spark { margin-top: 8px; height: 24px; }
+.socket-hover-card .shc-spark polyline { fill: none; stroke: var(--blue); stroke-width: 1.5; }
+.socket-hover-card .shc-spark polygon { fill: rgba(93,183,255,0.1); stroke: none; }
