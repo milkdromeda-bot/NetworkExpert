@@ -6458,7 +6458,7 @@ function renderGridControls(total) {
 }
 
 function renderPagination(total, totalPages, start) {
-  if (!total) return `<div class="empty">No socket matches the filters.</div>`;
+  if (!total) return `<div class="empty"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="margin-bottom:8px;opacity:0.4"><circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="2"/><path d="M18 24h12M24 18v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/><path d="M15 15l18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><br>No socket matches the filters.</div>`;
   const end = Math.min(total, start + state.table.pageSize);
   const filteredCount = hasActiveTableFilters() ? `<span class="pager-filter-count">${formatNumber(total)} filtered row(s)</span>` : "";
   return `<div class="pager">
@@ -6753,7 +6753,7 @@ function renderExpertInformation() {
 
 function renderTimeline() {
   const events = buildTimelineEvents();
-  if (!events.length) return `<div class="empty">No timeline event is available. Import timestamped snapshots for a stronger time-based view.</div>`;
+  if (!events.length) return `<div class="empty"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="margin-bottom:8px;opacity:0.4"><rect x="6" y="22" width="36" height="4" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="24" r="3" fill="currentColor" opacity="0.3"/><circle cx="24" cy="24" r="3" fill="currentColor" opacity="0.3"/><circle cx="36" cy="24" r="3" fill="currentColor" opacity="0.3"/></svg><br>No timeline event is available. Import timestamped snapshots for a stronger time-based view.</div>`;
   const first = events[0]?.epochMs || Date.now();
   const last = events[events.length - 1]?.epochMs || first;
   const stories = cachedStories();
@@ -7033,7 +7033,7 @@ function renderAnomalies(items) {
       <header><strong><span class="risk ${a.severity}">${a.severity}</span> ${escapeHtml(a.title)}</strong><span class="metric-chip">${escapeHtml(a.metric || "socket")}</span></header>
       <p>${escapeHtml(a.detail)}</p>
       <footer><button data-jump="${escapeHtml(a.socketId)}"><i class="ri-focus-3-line"></i> View context</button></footer>
-    </article>`).join("")}</div>` : `<div class="empty">No anomaly matches the current filters.</div>`}
+    </article>`).join("")}</div>` : `<div class="empty"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="margin-bottom:8px;opacity:0.4"><path d="M24 8l18 32H6L24 8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M24 20v10M24 34v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><br>No anomaly matches the current filters.</div>`}
   </div>`;
 }
 

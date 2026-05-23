@@ -12,7 +12,7 @@ export function renderSocketTableView({
   renderTableSettingsTrigger,
   renderTableSettingsMenu
 }) {
-  if (!state.sockets.length) return `<div class="empty">Paste ss output, then run parsing.</div>`;
+  if (!state.sockets.length) return `<div class="empty"><svg width="64" height="64" viewBox="0 0 64 64" fill="none" style="margin-bottom:12px;opacity:0.5"><rect x="8" y="20" width="48" height="32" rx="4" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/><path d="M24 36h16M32 28v16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><br>Paste ss output, then run parsing.</div>`;
   const allRows = sortedFilteredSockets();
   const columns = visibleColumns();
   const ROW_HEIGHT = 32;
