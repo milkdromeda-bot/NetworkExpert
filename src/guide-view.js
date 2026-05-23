@@ -31,6 +31,7 @@ export function createGuideView(context) {
       { key: "monitoring", icon: "ri-line-chart-line", label: "Monitoring" },
       { key: "cases", icon: "ri-route-line", label: "Use Cases" },
       { key: "commands", icon: "ri-terminal-box-line", label: "Commands" },
+      { key: "remediation", icon: "ri-first-aid-kit-line", label: "Remediation" },
       { key: "fields", icon: "ri-table-line", label: "Fields" },
       { key: "refs", icon: "ri-video-line", label: "References & Videos" }
     ];
@@ -54,12 +55,40 @@ export function createGuideView(context) {
         ${tab === "monitoring" ? renderGuideMonitoring() : ""}
         ${tab === "cases" ? renderGuideUseCases() : ""}
         ${tab === "commands" ? commands.map(([title, cmd], index) => renderGuideCommandCard(title, cmd, index)).join("") : ""}
+        ${tab === "remediation" ? renderGuideRemediation() : ""}
         ${tab === "fields" ? renderFields() : ""}
         ${tab === "refs" ? renderGuideReferences() : ""}
       </main>
     </div>`;
   }
   
+  function renderGuideRemediation() {
+    const rows = [
+      ["Socket drops / buffer overflow", "sudo sysctl -w net.core.rmem_max=16777216\nsudo sysctl -w net.ipv4.tcp_rmem='4096 131072 16777216'", "Increase receive buffer to prevent drops under burst"],
+      ["Retransmissions / path loss", "mtr --report --report-cycles 100 <PEER_IP>\nethtool -S <INTERFACE> | grep -i 'error\\|drop\\|crc'", "Identify where packets are lost on the path"],
+      ["High RTT / latency", "mtr --tcp --port 443 --report <PEER_IP>\nss -ti dst <PEER_IP> | grep rtt", "Pinpoint latency source (network vs app)"],
+      ["RTO backoff / timeouts", "sysctl net.ipv4.tcp_keepalive_time net.ipv4.tcp_keepalive_intvl\nss -to dst <PEER_IP>", "Check if connection is stuck in backoff"],
+      ["Recv-Q growing / slow consumer", "ss -tnp | awk '$2 > 0'\nsudo sysctl -w net.core.somaxconn=4096", "App not reading fast enough — increase backlog or fix app"],
+      ["Window scaling / autotuning", "sysctl net.ipv4.tcp_window_scaling\nsudo sysctl -w net.ipv4.tcp_rmem='4096 131072 67108864'", "Ensure window can grow to match BDP"],
+      ["Send-Q growing / peer not ACKing", "ss -tnp | awk '$3 > 0'\ntcpdump -i <IF> -c 100 dst <PEER_IP> and tcp[tcpflags] & tcp-ack != 0", "Peer is slow or path is congested"],
+      ["GC pause / JVM stall", "jstat -gcutil <PID> 1000\njcmd <PID> GC.heap_info", "Check if GC pauses correlate with TCP symptoms"],
+      ["CPU scheduling / runqueue", "vmstat 1 10\nmpstat -P ALL 1 5\npidstat -u -p <PID> 1 5", "Check if CPU saturation causes network delays"],
+      ["NIC ring buffer overflow", "ethtool -g <INTERFACE>\nsudo ethtool -G <INTERFACE> rx 4096", "Increase NIC ring buffer if rx_missed > 0"]
+    ];
+    return `<div class="guide-section"><h2><i class="ri-first-aid-kit-line"></i> Remediation Cheat Sheet</h2>
+      <p style="color:var(--muted);margin-bottom:12px">Click any command to copy. Replace &lt;PEER_IP&gt;, &lt;INTERFACE&gt;, &lt;PID&gt;, &lt;PORT&gt; with your values.</p>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line);color:var(--muted)">Problem</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line);color:var(--muted)">Commands</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line);color:var(--muted)">Why</th></tr></thead>
+        <tbody>${rows.map(([problem, cmds, why]) => `<tr>
+          <td style="padding:8px;border-bottom:1px solid rgba(38,50,65,0.5);font-weight:600;color:var(--text);vertical-align:top">${problem}</td>
+          <td style="padding:8px;border-bottom:1px solid rgba(38,50,65,0.5);vertical-align:top"><pre class="code" style="margin:0;font-size:11px;padding:6px 8px;border-radius:4px;background:rgba(0,0,0,0.3);cursor:pointer;white-space:pre-wrap" data-copy-cmd="${cmds.replace(/"/g, '&quot;')}" title="Click to copy">${cmds}</pre></td>
+          <td style="padding:8px;border-bottom:1px solid rgba(38,50,65,0.5);color:var(--muted);vertical-align:top">${why}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>`;
+  }
+
+
   function renderGuideCommandCard(title, command, index) {
     const key = `guide-command-${index}`;
     const copied = state.copiedGuideCommand === key;

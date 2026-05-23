@@ -6234,6 +6234,46 @@ function renderAdvisor() {
   </div>`;
 }
 
+function renderRemediationWizard(finding) {
+  const fixes = remediationForFinding(finding);
+  if (!fixes.length) return "";
+  return `<div class="remediation-wizard" style="margin:8px 0;padding:10px 12px;border-radius:8px;background:rgba(77,222,138,0.05);border:1px solid rgba(77,222,138,0.2)">
+    <strong style="color:#4cde8a;font-size:11px"><i class="ri-first-aid-kit-line"></i> Auto-remediation</strong>
+    ${fixes.map(f => `<div style="margin-top:6px">
+      <div style="font-size:11px;color:var(--text);margin-bottom:3px">${escapeHtml(f.description)}</div>
+      <pre class="code" style="margin:0;font-size:11px;padding:6px 10px;border-radius:6px;background:rgba(0,0,0,0.3);cursor:pointer" data-copy-cmd="${escapeHtml(f.command)}" title="Click to copy">${escapeHtml(f.command)}</pre>
+    </div>`).join("")}
+  </div>`;
+}
+
+function remediationForFinding(finding) {
+  const t = finding.title?.toLowerCase() || "";
+  const fixes = [];
+  if (t.includes("drop") || t.includes("buffer")) {
+    fixes.push({ description: "Increase receive buffer max:", command: "sudo sysctl -w net.core.rmem_max=16777216" });
+    fixes.push({ description: "Increase socket buffer:", command: "sudo sysctl -w net.ipv4.tcp_rmem='4096 131072 16777216'" });
+  }
+  if (t.includes("retrans") || t.includes("loss") || t.includes("congestion")) {
+    fixes.push({ description: "Check path loss with mtr:", command: "mtr --report --report-cycles 100 <PEER_IP>" });
+    fixes.push({ description: "Check NIC errors:", command: "ethtool -S <INTERFACE> | grep -i error" });
+  }
+  if (t.includes("rtt") || t.includes("latency") || t.includes("slow")) {
+    fixes.push({ description: "Trace route latency:", command: "mtr --tcp --port 443 --report <PEER_IP>" });
+  }
+  if (t.includes("backoff") || t.includes("timeout") || t.includes("rto")) {
+    fixes.push({ description: "Check TCP keepalive settings:", command: "sysctl net.ipv4.tcp_keepalive_time net.ipv4.tcp_keepalive_intvl net.ipv4.tcp_keepalive_probes" });
+  }
+  if (t.includes("queue") || t.includes("recv-q") || t.includes("consumer")) {
+    fixes.push({ description: "Check application read rate:", command: "ss -tnp | grep <PORT> | awk '{print $2}'" });
+    fixes.push({ description: "Increase backlog:", command: "sudo sysctl -w net.core.somaxconn=4096" });
+  }
+  if (t.includes("window") || t.includes("scale") || t.includes("autotuning")) {
+    fixes.push({ description: "Enable window scaling:", command: "sudo sysctl -w net.ipv4.tcp_window_scaling=1" });
+    fixes.push({ description: "Increase max window:", command: "sudo sysctl -w net.ipv4.tcp_rmem='4096 131072 67108864'" });
+  }
+  return fixes.slice(0, 3);
+}
+
 function renderAdvisorFinding(finding) {
   return `<article class="advisor-card ${finding.severity}">
     <header>
@@ -6263,6 +6303,7 @@ function renderAdvisorFinding(finding) {
       <summary><i class="ri-terminal-box-line"></i> Suggested command line evidence</summary>
       <pre class="code">${escapeHtml(finding.commands.join("\n"))}</pre>
     </details>
+    ${renderRemediationWizard(finding)}
     <footer>
       ${finding.socketId ? `<button data-jump="${escapeHtml(finding.socketId)}">${icons.focus} Show context row</button>` : ""}
       <button data-action="copyAdvisorCommands" data-finding-id="${escapeHtml(finding.id)}">${icons.copy} Copy commands</button>
@@ -12211,6 +12252,10 @@ function bindEvents() {
     const svg = card?.querySelector("svg.chart");
     if (!svg) return;
     exportChartAsPng(svg, metric);
+  }));
+  document.querySelectorAll("[data-copy-cmd]").forEach(el => el.addEventListener("click", () => {
+    copyTextToClipboard(el.dataset.copyCmd);
+    toast("Copied", el.dataset.copyCmd.slice(0, 50));
   }));
   document.querySelector("#corrPreset")?.addEventListener("change", e => {
     const preset = EXPERT_CORRELATIONS.find(item => item.id === e.target.value);
