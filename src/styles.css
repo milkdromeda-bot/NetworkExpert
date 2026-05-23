@@ -7777,6 +7777,8 @@ tr.selected { background: #101a27; }
   gap: 10px;
 }
 .toast {
+  position: relative;
+  overflow: hidden;
   width: min(360px, calc(100vw - 36px));
   background: #0d141e;
   border: 1px solid var(--line);
@@ -7784,6 +7786,30 @@ tr.selected { background: #101a27; }
   border-radius: 8px;
   box-shadow: var(--shadow);
   padding: 11px 12px;
+  animation: toastIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toast.leaving {
+  animation: toastOut 0.3s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+}
+@keyframes toastIn {
+  from { transform: translateX(100%) scale(0.9); opacity: 0; }
+}
+@keyframes toastOut {
+  to { transform: translateX(100%) scale(0.9); opacity: 0; }
+}
+.toast-progress {
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 3px;
+  background: var(--blue);
+  border-radius: 0 0 0 4px;
+  animation: toastCountdown 5s linear forwards;
+}
+.toast.warn .toast-progress { background: var(--yellow); }
+.toast.danger .toast-progress { background: var(--red); }
+@keyframes toastCountdown {
+  from { width: 100%; }
+  to { width: 0%; }
 }
 .toast strong { display: block; margin-bottom: 3px; }
 .toast p { margin: 0; color: var(--muted); font-size: 12px; }

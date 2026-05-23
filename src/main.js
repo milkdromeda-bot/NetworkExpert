@@ -10227,9 +10227,9 @@ function toast(title, text, type = "") {
   const stack = document.querySelector("#toastStack");
   const el = document.createElement("div");
   el.className = `toast ${type}`;
-  el.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p>`;
+  el.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p><span class="toast-progress"></span>`;
   stack.appendChild(el);
-  setTimeout(() => el.remove(), 5200);
+  setTimeout(() => { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); }, 4900);
 }
 
 async function copyTextToClipboard(text) {
