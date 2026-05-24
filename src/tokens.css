@@ -1,0 +1,88 @@
+/* Design Tokens — NetworkExpert
+   Single source of truth for colors, spacing, typography, and effects.
+   Imported by styles.css via @import (or just referenced as documentation).
+*/
+
+:root {
+  /* === Colors === */
+  --color-bg: #05070b;
+  --color-panel: #0b1018;
+  --color-panel-2: #101722;
+  --color-panel-3: #131d2b;
+  --color-border: #263241;
+  --color-muted: #8c9aab;
+  --color-text: #edf4ff;
+  --color-soft: #c4d0de;
+
+  /* Accent palette */
+  --color-blue: #5db7ff;
+  --color-cyan: #39d6d6;
+  --color-green: #4cde8a;
+  --color-yellow: #ffd166;
+  --color-orange: #ff9f43;
+  --color-red: #ff5c77;
+  --color-magenta: #d38cff;
+
+  /* Semantic */
+  --color-success: var(--color-green);
+  --color-warning: var(--color-yellow);
+  --color-danger: var(--color-red);
+  --color-info: var(--color-blue);
+
+  /* === Typography === */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Code", Consolas, monospace;
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-base: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 24px;
+
+  /* === Spacing === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-2h: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* === Radii === */
+  --radius-sm: 4px;
+  --radius-default: 6px;
+  --radius-md: 8px;
+  --radius-lg-sm: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* === Shadows === */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 18px 80px rgba(0, 0, 0, 0.45);
+  --shadow-glow-cyan: 0 0 12px rgba(57, 214, 214, 0.5);
+  --shadow-glow-red: 0 0 12px rgba(255, 92, 119, 0.4);
+
+  /* === Transitions === */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --duration-fast: 0.15s;
+  --duration-normal: 0.25s;
+  --duration-slow: 0.4s;
+
+  /* === Borders === */
+  --border: 1px solid var(--line);
+
+  /* === Z-index scale === */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 9000;
+  --z-toast: 9500;
+  --z-tooltip: 10000;
+}
