@@ -2943,7 +2943,7 @@ function _renderSync() {
     ${renderDrawer()}
     ${renderModal()}
   `;
-  if (window.Idiomorph) {
+  if (false && window.Idiomorph) {
     Idiomorph.morph(app, newHtml, { morphStyle: "innerHTML" });
   } else {
     app.innerHTML = newHtml;
