@@ -2700,6 +2700,7 @@ function initCodeMirror() {
     }
   });
   cmInstance.on("change", () => { state.raw = cmInstance.getValue(); });
+  cmInstance.on("paste", () => { setTimeout(() => { const val = cmInstance.getValue(); if (val.length > 20 && val.length < 500000) { document.querySelector("[data-action='parse']")?.click(); } }, 100); });
   cmInstance.setSize("100%", "clamp(360px, 58vh, 620px)");
 }
 function syncFromCodeMirror() {
@@ -2719,7 +2720,7 @@ function _staggerReveal() {
       }
     });
   }, { threshold: 0.1 });
-  document.querySelectorAll(".workspace .panel, .workspace .advisor-card, .workspace .timeline-story, .workspace .expert-strip article").forEach((el, i) => {
+  document.querySelectorAll(".workspace .advisor-card, .workspace .timeline-story, .workspace .expert-strip article, .workspace .diagnosis-grid > *").forEach((el, i) => {
     el.style.animationDelay = `${i * 35}ms`;
     el.style.opacity = "0";
     observer.observe(el);
@@ -2860,7 +2861,7 @@ function render() {
 
 function _renderSync() {
   const app = document.querySelector("#app");
-  app.innerHTML = html`
+  const newHtml = html`
     ${state.onboarding >= 0 ? renderOnboarding() : ""}
     <a href="#main-content" class="skip-link">Skip to content</a>
     <div class="app-shell view-${state.view}" role="application" aria-label="Ultimate Network Expert">
@@ -2942,6 +2943,11 @@ function _renderSync() {
     ${renderDrawer()}
     ${renderModal()}
   `;
+  if (window.Idiomorph) {
+    Idiomorph.morph(app, newHtml, { morphStyle: "innerHTML" });
+  } else {
+    app.innerHTML = newHtml;
+  }
   bindEvents();
   _staggerReveal();
   _positionTabIndicator();
@@ -3441,7 +3447,7 @@ function renderIngestPage() {
           <span class="ingest-toolbar-spacer"></span>
           <button data-action="toggleWordWrap" class="${state.editorWordWrap ? "primary" : ""}" title="Toggle word wrap"><i class="ri-text-wrap"></i> Wrap</button>
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
-          <button class="primary" data-action="parse"><i class="ri-play-line"></i> Analyze</button>
+          <button data-action="parse" title="Re-analyze current text"><i class="ri-play-line"></i> Analyze</button>
         </div>
         ${activePanel === "capture" ? `<div class="ingest-ss-command-panel">
             <div class="capture-flow-card">
@@ -6892,18 +6898,98 @@ function renderTimeline() {
       <span><b>${formatNumber(events.filter(event => riskRank(event.severity) >= 3).length)}</b> high/critical</span>
       ${stories.length ? `<span><b>${formatNumber(stories.length)}</b> stories</span>` : ""}
     </div>
-    <div class="pill-toggle" data-active="${view === "events" ? "1" : "0"}">
+    <div class="pill-toggle" data-active="${view === "events" ? "1" : view === "heatmap" ? "2" : "0"}">
       <div class="pill-slider"></div>
       <button class="${view === "stories" ? "active" : ""}" data-action="timelineView" data-value="stories"><i class="ri-book-open-line"></i> Stories</button>
       <button class="${view === "events" ? "active" : ""}" data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> All events</button>
+      <button class="${view === "heatmap" ? "active" : ""}" data-action="timelineView" data-value="heatmap"><i class="ri-fire-line"></i> Heatmap</button>
     </div>
-    ${view === "stories" ? renderTimelineStoriesView(stories) : renderTimelineEventsView(events)}
+    ${view === "heatmap" ? renderTimelineHeatmap(events) : view === "stories" ? renderTimelineStoriesView(stories) : renderTimelineEventsView(events)}
   </div>`;
 }
 
 function storyStepMetric(key) {
   const map = { "sendQ-grow": "sendQ", "persist-appears": "sendQ", "backoff-rises": "backoff", "fin-or-close": "sendQ", "recvQ-grow": "recvQ", "drops-appear": "skmem.d", "rcv-space-shrink": "rcv_space", "rto-grow": "rto", "backoff-high": "backoff", "cwnd-collapse": "cwnd", "retrans-appear": "retrans", "rwnd-high": "sendQ", "sendQ-present": "sendQ", "no-retrans": "rto", "skmem-r-grow": "skmem.r", "recvQ-high": "recvQ", "rwnd-limited": "sendQ" };
   return map[key] || "";
+}
+
+function renderTimelineHeatmap(events) {
+  const snapshots = parsedTimestampSnapshots();
+  if (!snapshots.length) return `<div class="empty">No timestamped snapshots for heatmap. Import multiple ss captures with timestamps.</div>`;
+  const first = snapshots[0].epochMs;
+  const last = snapshots[snapshots.length - 1].epochMs;
+  const span = Math.max(1, last - first);
+  const allSocketKeys = new Map();
+  for (const snap of snapshots) {
+    for (const s of snap.sockets) {
+      const key = socketIdentityKey(s);
+      if (!allSocketKeys.has(key)) allSocketKeys.set(key, { key, label: (s.details?.process?.name ? s.details.process.name + ":" + s.details.process.pid : s.local).slice(0, 24), local: s.local, peer: s.peer });
+    }
+  }
+  const socketList = [...allSocketKeys.values()].slice(0, 30);
+  if (!socketList.length) return `<div class="empty">No socket data for heatmap.</div>`;
+  const resolutions = [
+    { label: "10ms", ms: 10 }, { label: "20ms", ms: 20 }, { label: "50ms", ms: 50 },
+    { label: "100ms", ms: 100 }, { label: "200ms", ms: 200 }, { label: "500ms", ms: 500 },
+    { label: "1s", ms: 1000 }, { label: "5s", ms: 5000 }, { label: "10s", ms: 10000 }, { label: "30s", ms: 30000 }
+  ];
+  const detectedInterval = snapshots.length > 1 ? span / (snapshots.length - 1) : 1000;
+  const defaultRes = resolutions.reduce((best, r) => Math.abs(r.ms - detectedInterval) < Math.abs(best.ms - detectedInterval) ? r : best).ms;
+  const activeRes = state._heatmapResMs || defaultRes;
+  const bucketMs = activeRes;
+  const cols = Math.max(1, Math.ceil(span / bucketMs));
+  // Build grid from raw snapshots
+  const grid = socketList.map(sk => {
+    const row = Array(cols).fill(0);
+    for (const snap of snapshots) {
+      const col = Math.min(cols - 1, Math.floor((snap.epochMs - first) / bucketMs));
+      for (const s of snap.sockets) {
+        if (socketIdentityKey(s) !== sk.key) continue;
+        let sev = 0;
+        const rtt = s.details?.values?.rtt?.avg || 0;
+        const backoff = s.details?.values?.backoff || 0;
+        const rto = s.details?.values?.rto || 0;
+        const cwnd = s.details?.values?.cwnd;
+        const timerRetrans = s.details?.timer?.retrans || 0;
+        const tRtt = thresholdFor("rtt");
+        const tSendQ = thresholdFor("sendQ");
+        const tRecvQ = thresholdFor("recvQ");
+        if (backoff > 2 || s.sendQ >= tSendQ.danger || s.recvQ >= tRecvQ.danger) sev = 4;
+        else if (backoff > 0 || rto >= 1000 || s.sendQ >= tSendQ.warn || s.recvQ >= tRecvQ.warn || timerRetrans > 2) sev = 3;
+        else if (rtt >= tRtt.warn || timerRetrans > 0 || (cwnd != null && cwnd <= 4)) sev = 2;
+        else if (rtt > 0) sev = 1;
+        row[col] = Math.max(row[col], sev);
+      }
+    }
+    return { socket: sk, row };
+  });
+  const colors = ["var(--panel-2)", "rgba(76,222,138,0.6)", "rgba(255,209,102,0.7)", "rgba(255,159,67,0.8)", "rgba(255,92,119,0.9)"];
+  const gridWidth = cols * 5;
+  const timeLabels = [];
+  const maxLabels = Math.max(2, Math.floor(gridWidth / 80));
+  const labelCount = Math.min(maxLabels, cols);
+  for (let i = 0; i < labelCount; i++) {
+    const col = Math.round(i * (cols - 1) / (labelCount - 1));
+    timeLabels.push({ col, label: new Date(first + col * bucketMs).toISOString().slice(11, 19) });
+  }
+  return `<div class="heatmap-container">
+    <div class="heatmap-toolbar">
+      <label class="heatmap-toolbar-label">Resolution: <select id="heatmapResSelect">${resolutions.map(r => `<option value="${r.ms}" ${r.ms === activeRes ? "selected" : ""}>${r.label}</option>`).join("")}</select></label>
+      <span class="heatmap-toolbar-info">${new Date(first).toISOString().slice(11,19)} → ${new Date(last).toISOString().slice(11,19)} (${cols} buckets)</span>
+    </div>
+    <div class="heatmap-grid">
+      <div class="heatmap-row heatmap-axis-row">
+        <span class="heatmap-row-label"></span>
+        <div class="heatmap-axis" style="width:${gridWidth}px">${timeLabels.map(t => `<span style="left:${(t.col / cols) * 100}%">${t.label}</span>`).join("")}</div>
+      </div>
+      ${grid.map(({ socket, row }) => `<div class="heatmap-row">
+        <span class="heatmap-row-label" title="${escapeHtml(socket.local + " → " + socket.peer)}">${escapeHtml(socket.label)}</span>
+        <div class="heatmap-cells-row" style="width:${gridWidth}px">${row.map((v, ci) => `<div class="heatmap-cell" style="background:${colors[v]}" title="${new Date(first + ci * bucketMs).toISOString().slice(11, 19)} — ${["none","low","medium","high","critical"][v]}"></div>`).join("")}</div>
+      </div>`).join("")}
+    </div>
+    <div class="heatmap-legend"><span style="background:rgba(76,222,138,0.6)"></span>normal <span style="background:rgba(255,209,102,0.7)"></span>RTT &gt;100ms / queue / retrans / cwnd≤4 <span style="background:rgba(255,159,67,0.8)"></span>backoff / RTO≥1s / retrans&gt;2 <span style="background:rgba(255,92,119,0.9)"></span>stall / overflow</div>
+    <p class="heatmap-note">This heatmap shows <b>instantaneous socket state</b> per time bucket using your configured thresholds (Settings → Thresholds). It does NOT use cumulative counters (drops, bytes_sent) — only point-in-time metrics: RTT, Send-Q, Recv-Q, backoff, RTO, cwnd, retrans timer. Black = no data.</p>
+  </div>`;
 }
 
 function renderTimelineStoriesView(stories) {
@@ -10847,6 +10933,10 @@ function bindEvents() {
       state.timelineView = event.currentTarget.dataset.value || "stories";
       render();
     }
+    if (action === "heatmapRes") {
+      state._heatmapResMs = Number(event.currentTarget.value);
+      render();
+    }
     if (action === "diagnosisView") {
       state.diagnosisView = event.currentTarget.dataset.value || "matrix";
       render();
@@ -12374,6 +12464,7 @@ function bindEvents() {
     renderKeepingWorkspacePosition();
   });
   document.querySelector("#corrX")?.addEventListener("change", e => { state.correlation.x = e.target.value; renderKeepingWorkspacePosition(); });
+  document.querySelector("#heatmapResSelect")?.addEventListener("change", e => { state._heatmapResMs = Number(e.target.value); render(); });
   document.querySelector("#corrY")?.addEventListener("change", e => { state.correlation.y = e.target.value; renderKeepingWorkspacePosition(); });
 }
 
@@ -12612,5 +12703,7 @@ function toggleCommandPalette() {
   state.modal = "commandPalette"; state.commandPaletteQuery = ""; render();
   setTimeout(() => document.querySelector("#cmdPaletteInput")?.focus(), 50);
 }
+
+window._debug = { get state() { return state; }, snapshots: () => parsedTimestampSnapshots() };
 
 render();
