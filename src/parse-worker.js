@@ -1,10 +1,12 @@
 /**
  * Web Worker for heavy ss parsing operations.
- * Offloads parseSs + analysis + FIX correlation from the main thread.
+ * Offloads parseSs + analysis + diagnostics + stories from the main thread.
  */
 import { parseSs, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { correlateFixLatency } from "./fix-correlation.js";
+import { buildDiagnosticHypotheses } from "./diagnostics.js";
+import { detectTimelineStories } from "./timeline-stories.js";
 
 self.onmessage = function(e) {
   const { type, payload } = e.data;
@@ -25,6 +27,24 @@ self.onmessage = function(e) {
       self.postMessage({ type: "analyze:done", payload: { sockets: withRisks } });
     } catch (err) {
       self.postMessage({ type: "analyze:error", payload: { message: err.message } });
+    }
+  }
+
+  if (type === "diagnose") {
+    try {
+      const hypotheses = buildDiagnosticHypotheses(payload.sockets, payload.anomalies, payload.options);
+      self.postMessage({ type: "diagnose:done", payload: { hypotheses } });
+    } catch (err) {
+      self.postMessage({ type: "diagnose:error", payload: { message: err.message } });
+    }
+  }
+
+  if (type === "stories") {
+    try {
+      const stories = detectTimelineStories(payload.history, payload.options);
+      self.postMessage({ type: "stories:done", payload: { stories } });
+    } catch (err) {
+      self.postMessage({ type: "stories:error", payload: { message: err.message } });
     }
   }
 
