@@ -16,7 +16,7 @@ export function renderSocketTableView({
   const allRows = sortedFilteredSockets();
   const columns = visibleColumns();
   const ROW_HEIGHT = 32;
-  const useVirtual = allRows.length > 200;
+  const useVirtual = allRows.length > 50;
 
   if (useVirtual) {
     const visibleCount = Math.ceil(600 / ROW_HEIGHT) + 4;
