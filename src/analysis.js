@@ -1,15 +1,18 @@
 import { metricValue } from "./parser.js";
 
+/** @param {import('./types.js').Anomaly[]} list @param {import('./types.js').Socket} socket @param {"critical"|"high"|"medium"|"low"} severity @param {string} title @param {string} detail @param {string} metric */
 export function addAnomaly(list, socket, severity, title, detail, metric) {
   list.push({ socketId: socket.id, severity, title, detail, metric });
 }
 
+/** @param {import('./types.js').Socket} socket @returns {"critical"|"high"|"medium"|"low"} */
 export function riskForSocket(socket) {
   const scores = { critical: 4, high: 3, medium: 2, low: 1 };
   const anomalies = analyzeSocket(socket);
   return anomalies.reduce((max, item) => scores[item.severity] > scores[max] ? item.severity : max, "low");
 }
 
+/** @param {import('./types.js').Socket} socket @returns {import('./types.js').Anomaly[]} */
 export function analyzeSocket(socket) {
   const a = [];
   const v = socket.details.values;
@@ -44,12 +47,14 @@ export function analyzeSocket(socket) {
   return a;
 }
 
+/** @param {import('./types.js').Socket[]} sockets @returns {import('./types.js').Anomaly[]} */
 export function analyzeAll(sockets) {
   const all = sockets.flatMap(analyzeSocket);
   const order = { critical: 0, high: 1, medium: 2, low: 3 };
   return all.sort((a, b) => order[a.severity] - order[b.severity]);
 }
 
+/** @param {import('./types.js').Socket[]} sockets @returns {import('./types.js').Socket[]} */
 export function applyRisks(sockets) {
   return sockets.map(socket => ({ ...socket, risk: riskForSocket(socket) }));
 }

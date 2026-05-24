@@ -1,3 +1,4 @@
+/** @param {string} [token] @returns {import('./types.js').Address} */
 export function parseAddress(token = "") {
   const trimmed = token.trim();
   if (!trimmed) return { host: "", port: "" };
@@ -9,6 +10,7 @@ export function parseAddress(token = "") {
   return idx > -1 ? { host: trimmed.slice(0, idx), port: trimmed.slice(idx + 1) } : { host: trimmed, port: "" };
 }
 
+/** @param {string} [value] @returns {number|null} */
 export function parseDuration(value = "") {
   const num = Number.parseFloat(value);
   if (Number.isNaN(num)) return null;
@@ -24,6 +26,7 @@ export function stripAnsi(value = "") {
   return String(value).replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
+/** @param {*} value @returns {number|null} */
 export function parseNumber(value) {
   if (value == null) return null;
   const raw = String(value).trim();
@@ -40,6 +43,7 @@ export function parseNumber(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+/** @param {string} text @returns {import('./types.js').SocketDetails} */
 export function parseDetails(text) {
   const details = { flags: [], values: {}, skmem: {}, timer: null, process: null, raw: text };
   const skmem = text.match(/skmem:\(([^)]*)\)/);
@@ -91,6 +95,7 @@ export function parseDetails(text) {
   return details;
 }
 
+/** @param {string} raw @returns {import('./types.js').Socket[]} */
 export function parseSs(raw) {
   const lines = raw.split(/\r?\n/).map(line => stripAnsi(line).trim()).filter(Boolean);
   const sockets = [];
@@ -145,6 +150,7 @@ export function inferFamily(local, peer, text) {
   return "tcp";
 }
 
+/** @param {string} line @returns {number|null} */
 export function parseTimestampLine(line) {
   if (!line) return null;
   const cleaned = stripAnsi(line).trim();
@@ -167,6 +173,7 @@ export function parseTimestampLine(line) {
   return null;
 }
 
+/** @param {import('./types.js').Socket|null} socket @param {string} metric @returns {number} */
 export function metricValue(socket, metric) {
   if (!socket) return 0;
   const v = socket.details.values;
