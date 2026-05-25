@@ -1714,6 +1714,7 @@ function buildTimelineEvents() {
   const selected = socketsById().get(state.selectedId) || state.sockets[0];
   const metrics = ["rto", "rtt", "sendQ", "recvQ", "skmem.d", "skmem.d_rate", "cwnd", "tx_bps", "rx_bps"];
   let previousTimerName = "";
+  const prevMetricValue = {};
   for (const row of rows) {
     const timerName = String(row.timerName || "").toLowerCase();
     if (timerName === "persist" && previousTimerName !== "persist") {
@@ -1735,6 +1736,7 @@ function buildTimelineEvents() {
       const value = Number(row[metric] || 0);
       const severity = thresholdSeverity(metric, value);
       if (severity === "danger" || severity === "warn") {
+        if (prevMetricValue[metric] === value) continue;
         events.push({
           epochMs: row.epochMs,
           t: row.t,
@@ -1745,6 +1747,7 @@ function buildTimelineEvents() {
           socketId: selected?.id
         });
       }
+      prevMetricValue[metric] = value;
     }
   }
   state.anomalies.slice(0, 80).forEach((anomaly, index) => {
@@ -4598,6 +4601,13 @@ function attachFixChartCrosshair(svg, pad, w, h, t0, span, data, labelFn) {
     syncFixCrosshairs(epoch, svg);
   });
   zone.addEventListener("mouseleave", () => { g.style.display = "none"; syncFixCrosshairs(null, svg); });
+  // Drag-to-zoom
+  let dragStart = null;
+  let dragOverlay = svg.querySelector(".fix-drag-overlay");
+  if (!dragOverlay) { dragOverlay = document.createElementNS("http://www.w3.org/2000/svg", "rect"); dragOverlay.classList.add("fix-drag-overlay"); dragOverlay.setAttribute("y", pad.t); dragOverlay.setAttribute("height", h - pad.t - pad.b); dragOverlay.setAttribute("fill", "rgba(93,183,255,0.12)"); dragOverlay.setAttribute("stroke", "#5db7ff"); dragOverlay.setAttribute("stroke-width", "1"); dragOverlay.style.display = "none"; dragOverlay.style.pointerEvents = "none"; svg.appendChild(dragOverlay); }
+  zone.addEventListener("pointerdown", e => { if (e.button !== 0) return; const rect = svg.getBoundingClientRect(); dragStart = e.clientX - rect.left; zone.setPointerCapture(e.pointerId); });
+  zone.addEventListener("pointermove", e => { if (dragStart === null) return; const rect = svg.getBoundingClientRect(); const mx = e.clientX - rect.left; const x1 = Math.max(pad.l, Math.min(w - pad.r, dragStart)); const x2 = Math.max(pad.l, Math.min(w - pad.r, mx)); dragOverlay.setAttribute("x", Math.min(x1, x2)); dragOverlay.setAttribute("width", Math.abs(x2 - x1)); dragOverlay.style.display = Math.abs(x2 - x1) > 5 ? "" : "none"; });
+  zone.addEventListener("pointerup", e => { if (dragStart === null) return; const rect = svg.getBoundingClientRect(); const mx = e.clientX - rect.left; const plotW = w - pad.l - pad.r; const dist = Math.abs(mx - dragStart); dragOverlay.style.display = "none"; dragStart = null; if (dist < 12) return; const left = Math.max(0, Math.min(1, (Math.min(mx, dragStart) - pad.l) / plotW)); const right = Math.max(0, Math.min(1, (Math.max(mx, dragStart) - pad.l) / plotW)); if (right - left < 0.01) return; const chartId = svg.dataset.fixChart; if (!chartId) return; const z = state.fixLatency.zoom[chartId] || { start: 0, end: 1 }; const zSpan = z.end - z.start; state.fixLatency.zoom[chartId] = { start: z.start + left * zSpan, end: z.start + right * zSpan }; drawFixCharts(); });
 }
 
 function renderActiveTab() {
