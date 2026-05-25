@@ -315,6 +315,8 @@ import { renderSsCommandBuilder as renderSsCommandBuilderView, renderSsOptionChi
 import { renderPrefsView } from "./preferences-view.js";
 import { analysisTabGuide as analysisTabGuideView, renderAnalysisPageView, renderAnalysisTabsView } from "./analysis-shell-view.js";
 import { metricCorrelations, metricDiagnosticGuidance, metricInterpretation, metricReliabilityProfile, metricSource } from "./metric-intelligence.js";
+import { buildGuidedChecklistItems } from "./guided-checklist.js";
+import { buildServiceMapData, buildServiceMapRoutes, serviceMapConnectivityOrder as orderServiceMapConnectivity } from "./service-map-model.js";
 
 function dashboardPresetIdOrDefault(value) {
   const fallback = DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]
@@ -2075,161 +2077,20 @@ function mapNodeTitle(node) {
 }
 
 function buildServiceMap() {
-  const sockets = sortedFilteredSockets().slice(0, 120);
-  const anomalyMap = anomaliesBySocketId();
-  const processNodes = new Map();
-  const localNodes = new Map();
-  const peerNodes = new Map();
-  const edges = [];
-  const ensure = (map, id, label, kind, endpoint = "") => {
-    if (!map.has(id)) {
-      const presentation = endpoint ? endpointPresentation(endpoint) : null;
-      map.set(id, {
-        id,
-        label: presentation?.label || label,
-        rawLabel: label,
-        endpoint,
-        alias: presentation?.alias || null,
-        topologyGroup: endpoint ? topologyGroupForEndpoint(state.topology, endpoint) : null,
-        kind,
-        count: 0,
-        risk: "low",
-        anomalies: 0
-      });
-    }
-    return map.get(id);
-  };
-  for (const socket of sockets) {
-    const processLabel = socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "unknown process";
-    const process = ensure(processNodes, `process:${processLabel}`, processLabel, "process");
-    const local = ensure(localNodes, `local:${socket.local}`, socket.local, "local", socket.local);
-    const peer = ensure(peerNodes, `peer:${socket.peer}`, socket.peer, "peer", socket.peer);
-    const anomalyCount = anomalyMap.get(socket.id)?.length || 0;
-    for (const node of [process, local, peer]) {
-      node.count += 1;
-      node.anomalies += anomalyCount;
-      node.risk = riskRank(socket.risk) > riskRank(node.risk) ? socket.risk : node.risk;
-    }
-    edges.push({
-      id: socket.id,
-      from: process.id,
-      mid: local.id,
-      to: peer.id,
-      risk: socket.risk,
-      socket,
-      anomalies: anomalyCount,
-      weight: Math.max(1, socket.sendQ + socket.recvQ + socketBandwidth(socket, "tx_bps") / 100000)
-    });
-  }
-  const sortNodes = nodes => [...nodes.values()].sort((a, b) => {
-    const groupA = a.topologyGroup?.name || "\uffff";
-    const groupB = b.topologyGroup?.name || "\uffff";
-    return SERVICE_MAP_SORT_COLLATOR.compare(groupA, groupB)
-      || riskRank(b.risk) - riskRank(a.risk)
-      || b.anomalies - a.anomalies
-      || b.count - a.count;
-  }).slice(0, 18);
-  return {
-    processes: sortNodes(processNodes),
-    locals: sortNodes(localNodes),
-    peers: sortNodes(peerNodes),
-    edges
-  };
+  return buildServiceMapData({
+    sockets: sortedFilteredSockets(),
+    anomalyMap: anomaliesBySocketId(),
+    topology: state.topology,
+    endpointPresentation,
+    topologyGroupForEndpoint,
+    riskRank,
+    socketBandwidth,
+    sortCollator: SERVICE_MAP_SORT_COLLATOR
+  });
 }
 
 function serviceMapConnectivityOrder(map) {
-  const baseSort = nodes => nodes.map((node, index) => ({ ...node, _mapOrder: index }));
-  let processes = baseSort(map.processes);
-  let locals = baseSort(map.locals);
-  let peers = baseSort(map.peers);
-  const averageRank = (ids, rank) => {
-    const values = ids.map(id => rank.get(id)).filter(Number.isFinite);
-    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : Number.POSITIVE_INFINITY;
-  };
-  const sortByBarycenter = (nodes, connectedIds) => nodes.sort((a, b) =>
-    averageRank(connectedIds(a), processRank) - averageRank(connectedIds(b), processRank)
-    || riskRank(b.risk) - riskRank(a.risk)
-    || b.anomalies - a.anomalies
-    || b.count - a.count
-    || a._mapOrder - b._mapOrder
-  );
-
-  let processRank = new Map(processes.map((node, index) => [node.id, index]));
-  let localRank = new Map(locals.map((node, index) => [node.id, index]));
-  let peerRank = new Map(peers.map((node, index) => [node.id, index]));
-
-  locals = sortByBarycenter(locals, node => map.edges.filter(edge => edge.mid === node.id).map(edge => edge.from));
-  localRank = new Map(locals.map((node, index) => [node.id, index]));
-  peers.sort((a, b) =>
-    averageRank(map.edges.filter(edge => edge.to === a.id).map(edge => edge.mid), localRank)
-    - averageRank(map.edges.filter(edge => edge.to === b.id).map(edge => edge.mid), localRank)
-    || riskRank(b.risk) - riskRank(a.risk)
-    || b.anomalies - a.anomalies
-    || b.count - a.count
-    || a._mapOrder - b._mapOrder
-  );
-  peerRank = new Map(peers.map((node, index) => [node.id, index]));
-  locals.sort((a, b) =>
-    averageRank(map.edges.filter(edge => edge.mid === a.id).map(edge => edge.to), peerRank)
-    - averageRank(map.edges.filter(edge => edge.mid === b.id).map(edge => edge.to), peerRank)
-    || averageRank(map.edges.filter(edge => edge.mid === a.id).map(edge => edge.from), processRank)
-    - averageRank(map.edges.filter(edge => edge.mid === b.id).map(edge => edge.from), processRank)
-    || riskRank(b.risk) - riskRank(a.risk)
-    || b.anomalies - a.anomalies
-    || b.count - a.count
-    || a._mapOrder - b._mapOrder
-  );
-  localRank = new Map(locals.map((node, index) => [node.id, index]));
-  processes.sort((a, b) =>
-    averageRank(map.edges.filter(edge => edge.from === a.id).map(edge => edge.mid), localRank)
-    - averageRank(map.edges.filter(edge => edge.from === b.id).map(edge => edge.mid), localRank)
-    || riskRank(b.risk) - riskRank(a.risk)
-    || b.anomalies - a.anomalies
-    || b.count - a.count
-    || a._mapOrder - b._mapOrder
-  );
-
-  const clean = nodes => nodes.map(({ _mapOrder, ...node }) => node);
-  return { processes: clean(processes), locals: clean(locals), peers: clean(peers) };
-}
-
-function buildServiceMapRoutes(edges, positions) {
-  const sideEdges = new Map();
-  const add = (nodeId, side, edge, otherY) => {
-    const key = `${nodeId}|${side}`;
-    if (!sideEdges.has(key)) sideEdges.set(key, []);
-    sideEdges.get(key).push({ edge, otherY });
-  };
-  for (const edge of edges) {
-    const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
-    add(edge.from, "right", edge, b.y);
-    add(edge.mid, "left", edge, a.y);
-    add(edge.mid, "right", edge, c.y);
-    add(edge.to, "left", edge, b.y);
-  }
-  const offsets = new Map();
-  for (const [key, items] of sideEdges) {
-    const sorted = items.sort((a, b) => a.otherY - b.otherY || a.edge.id.localeCompare(b.edge.id));
-    const step = Math.min(8, Math.max(4, 22 / Math.max(1, sorted.length - 1 || 1)));
-    sorted.forEach((item, index) => {
-      offsets.set(`${item.edge.id}|${key}`, (index - (sorted.length - 1) / 2) * step);
-    });
-  }
-  const offset = (edge, nodeId, side) => offsets.get(`${edge.id}|${nodeId}|${side}`) || 0;
-  return new Map(edges.map(edge => {
-    const a = positions[edge.from], b = positions[edge.mid], c = positions[edge.to];
-    const p1 = { x: a.x + 146, y: a.y + offset(edge, edge.from, "right") };
-    const p2 = { x: b.x - 146, y: b.y + offset(edge, edge.mid, "left") };
-    const p3 = { x: b.x + 146, y: b.y + offset(edge, edge.mid, "right") };
-    const p4 = { x: c.x - 146, y: c.y + offset(edge, edge.to, "left") };
-    const bend1 = Math.max(70, (p2.x - p1.x) * .42);
-    const bend2 = Math.max(70, (p4.x - p3.x) * .42);
-    const d = [
-      `M ${p1.x} ${p1.y} C ${p1.x + bend1} ${p1.y}, ${p2.x - bend1} ${p2.y}, ${p2.x} ${p2.y}`,
-      `M ${p3.x} ${p3.y} C ${p3.x + bend2} ${p3.y}, ${p4.x - bend2} ${p4.y}, ${p4.x} ${p4.y}`
-    ].join(" ");
-    return [edge.id, { d }];
-  }));
+  return orderServiceMapConnectivity(map, { riskRank });
 }
 
 function evaluateAlertRules() {
@@ -2693,89 +2554,15 @@ function renderApplicationServiceChip(socket, extraClass = "") {
 }
 
 function guidedChecklistItems(socket = selectedSocket()) {
-  if (!socket) return [];
-  const lens = tailLatencyLens();
-  const burst = microburstSummary();
-  const anomalies = anomaliesBySocketId().get(socket.id) || [];
-  const v = socket.details.values;
-  const m = socket.details.skmem;
-  const recvPressure = socket.recvQ >= thresholdFor("recvQ").warn || (m.rb && m.r && m.r / m.rb > 0.75);
-  const sendPressure = socket.sendQ >= thresholdFor("sendQ").warn || (m.tb && (m.t + (m.w || 0)) / m.tb > 0.75);
-  const dropPressure = (m.d || 0) > 0 || anomalies.some(item => item.metric === "skmem.d");
-  const pathSignals = (socket.details.timer?.retrans || 0) > 0 || (v.backoff || 0) > 0 || (v.rto || 0) >= thresholdFor("rto").warn || anomalies.some(item => ["rto", "backoff", "timer", "mss"].includes(item.metric));
-  const items = [];
-
-  if (recvPressure) {
-    items.push({
-      id: "slow-consumer",
-      severity: socket.recvQ >= thresholdFor("recvQ").danger ? "critical" : "high",
-      title: "slow consumer probable",
-      why: socket.details.process
-        ? `Recv-Q and receive memory suggest ${socket.details.process.name}:${socket.details.process.pid} may not be draining data fast enough.`
-        : "Recv-Q and receive memory are rising in a way that usually points to a local reader stall or scheduler delay.",
-      next: "Open charts with the Microburst investigation preset and compare Recv-Q, RX bandwidth, skmem.r, and drops.",
-      action: "openChecklistCharts",
-      actionLabel: "Open microburst charts",
-      preset: "microburst"
-    });
-  }
-
-  if (burst || (recvPressure && dropPressure)) {
-    items.push({
-      id: "receive-pressure",
-      severity: burst?.severity || "high",
-      title: "receive-side pressure",
-      why: burst
-        ? `A short burst window was detected at ${formatMicroburstWindow(burst)} with queue, receive-memory, and drop growth together.`
-        : "Receive pressure is visible in the current socket, and drops suggest the kernel burst absorber is being stressed.",
-      next: "Keep the yellow microburst band in view and verify whether the same process or peer repeats it.",
-      action: "openChecklistCharts",
-      actionLabel: "Review burst window",
-      preset: "microburst"
-    });
-  }
-
-  if (lens?.suspicion === "path instability" || pathSignals) {
-    items.push({
-      id: "path-instability",
-      severity: lens?.severity || "high",
-      title: "path instability",
-      why: lens
-        ? `The tail-latency lens isolated ${formatTailLatencyWindow(lens)} as the worst short RTT/RTO window, which is more informative than the average latency.`
-        : "RTO, retransmission, backoff, or tiny-MSS symptoms suggest the path or negotiation is unstable.",
-      next: "Use the Tail latency preset, then zoom to the worst window and correlate RTT variance, RTO, Send-Q, and retransmission signals.",
-      action: lens ? "zoomTailWindow" : "openChecklistCharts",
-      actionLabel: lens ? "Zoom worst tail window" : "Open tail charts",
-      preset: "tail"
-    });
-  }
-
-  if (sendPressure || lens?.suspicion === "peer-side drain issue") {
-    items.push({
-      id: "peer-drain",
-      severity: socket.sendQ >= thresholdFor("sendQ").danger ? "critical" : "high",
-      title: "peer-side drain issue",
-      why: "Outbound data is not draining cleanly. This can be a slow peer, congested path, or TCP recovery rather than a purely local sender problem.",
-      next: "Compare Send-Q, TX bandwidth, RTO, and cwnd on the worst tail window before blaming application throughput.",
-      action: "openChecklistCharts",
-      actionLabel: "Open tail charts",
-      preset: "tail"
-    });
-  }
-
-  if ((recvPressure || sendPressure || dropPressure) && (pathSignals || burst || lens)) {
-    items.push({
-      id: "buffer-tuning",
-      severity: "medium",
-      title: "buffer tuning suspicious but not root cause",
-      why: "Queue and socket-memory pressure are visible, but the surrounding symptoms suggest an upstream bottleneck, tail spike, or burst pattern is the primary issue.",
-      next: "Do not jump straight to rmem/wmem tuning. Prove whether the root cause is local draining, peer-side slowness, or path instability first.",
-      action: "openChecklistAdvisor",
-      actionLabel: "Review advisor path"
-    });
-  }
-
-  return items.slice(0, 5);
+  return buildGuidedChecklistItems({
+    socket,
+    lens: tailLatencyLens(),
+    burst: microburstSummary(),
+    anomalies: socket ? anomaliesBySocketId().get(socket.id) || [] : [],
+    thresholdFor,
+    formatMicroburstWindow,
+    formatTailLatencyWindow
+  });
 }
 
 function renderGuidedChecklistPanel(socket = selectedSocket()) {
