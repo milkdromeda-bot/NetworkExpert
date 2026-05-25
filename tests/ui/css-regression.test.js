@@ -9,6 +9,9 @@ const ssCommandView = readFileSync(new URL("../../src/ss-command-view.js", impor
 const captureQualityView = readFileSync(new URL("../../src/capture-quality-view.js", import.meta.url), "utf8");
 const chartsToolbarView = readFileSync(new URL("../../src/charts-toolbar-view.js", import.meta.url), "utf8");
 const dashboardView = readFileSync(new URL("../../src/dashboard-view.js", import.meta.url), "utf8");
+const preferencesView = readFileSync(new URL("../../src/preferences-view.js", import.meta.url), "utf8");
+const analysisShellView = readFileSync(new URL("../../src/analysis-shell-view.js", import.meta.url), "utf8");
+const metricIntelligence = readFileSync(new URL("../../src/metric-intelligence.js", import.meta.url), "utf8");
 const constants = readFileSync(new URL("../../src/constants.js", import.meta.url), "utf8");
 const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
 const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
@@ -235,12 +238,13 @@ test("diagnostic cards expose optional deep explanations", () => {
 });
 
 test("deep analysis control is rendered as an explicit on off switch", () => {
-  assert.match(main, /const deepAnalysisOn = Boolean\(state\.prefs\.deepAnalysis\);/);
-  assert.match(main, /data-action="toggleDeepAnalysis"[\s\S]*class="deep-analysis-toggle \$\{deepAnalysisOn \? "is-on" : "is-off"\}"/);
-  assert.match(main, /role="switch"/);
-  assert.match(main, /aria-checked="\$\{deepAnalysisOn \? "true" : "false"\}"/);
-  assert.match(main, /<span class="deep-analysis-label"><strong>Deep analysis<\/strong><small>\$\{deepAnalysisOn \? "On" : "Paused"\}<\/small><\/span>/);
-  assert.match(main, /<span class="deep-analysis-switch" aria-hidden="true"><span><\/span><\/span>/);
+  assert.match(main, /function renderAnalysisPage\(\)[\s\S]*renderAnalysisPageView/);
+  assert.match(analysisShellView, /const deepAnalysisOn = Boolean\(state\.prefs\?\.deepAnalysis\);/);
+  assert.match(analysisShellView, /data-action="toggleDeepAnalysis"[\s\S]*class="deep-analysis-toggle \$\{deepAnalysisOn \? "is-on" : "is-off"\}"/);
+  assert.match(analysisShellView, /role="switch"/);
+  assert.match(analysisShellView, /aria-checked="\$\{deepAnalysisOn \? "true" : "false"\}"/);
+  assert.match(analysisShellView, /<span class="deep-analysis-label"><strong>Deep analysis<\/strong><small>\$\{deepAnalysisOn \? "On" : "Paused"\}<\/small><\/span>/);
+  assert.match(analysisShellView, /<span class="deep-analysis-switch" aria-hidden="true"><span><\/span><\/span>/);
   assert.doesNotMatch(main, /data-action="toggleDeepAnalysis" class="\$\{state\.prefs\.deepAnalysis \? "primary" : ""\}"/);
   assert.match(css, /\.deep-analysis-toggle\s*\{[^}]*max-width:\s*196px;/s);
   assert.match(css, /\.deep-analysis-label strong,\s*\.deep-analysis-label small\s*\{[^}]*text-overflow:\s*ellipsis;/s);
@@ -255,8 +259,9 @@ test("modal headers stay visible while long preference dialogs scroll", () => {
 });
 
 test("preferences active tab matches the primary blue selected state", () => {
-  assert.match(main, /<div class="app-tabs" style="margin-bottom:12px">/);
-  assert.match(main, /<button class="app-tab \$\{tab === key \? "active" : ""\}" data-pref-tab="\$\{key\}">/);
+  assert.match(main, /function renderPrefs\(\)[\s\S]*renderPrefsView/);
+  assert.match(preferencesView, /<div class="app-tabs" style="margin-bottom:12px">/);
+  assert.match(preferencesView, /<button class="app-tab \$\{tab === key \? "active" : ""\}" data-pref-tab="\$\{key\}">/);
   assert.match(css, /\.app-tabs\s*\{[^}]*display:\s*inline-flex;[^}]*padding:\s*3px;[^}]*border:\s*1px solid rgba\(255,255,255,\.08\);/s);
   assert.match(css, /\.app-tab\s*\{[^}]*min-height:\s*36px;[^}]*border-radius:\s*9px;/s);
   assert.match(css, /\.app-tab\.active\s*\{[^}]*background:\s*linear-gradient\(135deg,\s*#0f3a5c,\s*#0d5f8a\) !important;[^}]*color:\s*#fff !important;/s);
@@ -314,9 +319,9 @@ test("chart-only toolbar is hidden from the charts advisor tab", () => {
 
 test("analysis tabs expose short guidance and a single detailed view guide", () => {
   assert.match(constants, /export const ANALYSIS_TAB_GUIDE = \[/);
-  assert.match(main, /function renderAnalysisTabs\(\)/);
-  assert.match(main, /aria-label="\$\{escapeHtml\(`\$\{tab\.label\}: \$\{tab\.short\}`\)\}"/);
-  assert.match(main, /title="\$\{escapeHtml\(tab\.short\)\}"/);
+  assert.match(main, /function renderAnalysisTabs\(\)[\s\S]*renderAnalysisTabsView/);
+  assert.match(analysisShellView, /aria-label="\$\{escapeHtml\(`\$\{tab\.label\}: \$\{tab\.short\}`\)\}"/);
+  assert.match(analysisShellView, /title="\$\{escapeHtml\(tab\.short\)\}"/);
   assert.doesNotMatch(main, /class="analysis-tab-tooltip"/);
   assert.match(main, /analysisTabDocs:\s*ANALYSIS_TAB_GUIDE/);
   assert.match(modalView, /state\.modal === "analysisViewGuide" \? "Analysis view guide"/);
@@ -369,11 +374,12 @@ test("metric charts expose BDP-like interactive legends and detailed crosshair",
   assert.match(main, /function metricChartSeries\(metric, showThreshold = true\)/);
   assert.match(main, /function renderMetricChartLegend\(metric\)/);
   assert.match(main, /function metricHelp\(metric\)/);
-  assert.match(main, /function metricReliabilityProfile\(metric\)/);
-  assert.match(main, /function metricDiagnosticGuidance\(metric\)/);
+  assert.match(main, /import \{ metricCorrelations, metricDiagnosticGuidance, metricInterpretation, metricReliabilityProfile, metricSource \} from "\.\/metric-intelligence\.js";/);
+  assert.match(metricIntelligence, /export function metricReliabilityProfile\(metric\)/);
+  assert.match(metricIntelligence, /export function metricDiagnosticGuidance\(metric\)/);
   assert.match(main, /profile:\s*metricReliabilityProfile\(key\)/);
   assert.match(main, /guidance:\s*metricDiagnosticGuidance\(key\)/);
-  assert.match(main, /Backoff is defensive waiting, not automatically a bad network/);
+  assert.match(metricIntelligence, /Backoff is defensive waiting, not automatically a bad network/);
   assert.match(main, /data-metric-help="\$\{escapeHtml\(metric\)\}"/);
   assert.match(main, /state\.modal = "metricHelp"/);
   assert.match(main, /function ensureFloatingChartTooltip\(\)/);
