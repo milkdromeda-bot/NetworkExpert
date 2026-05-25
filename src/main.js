@@ -3381,8 +3381,26 @@ function runJvmCorrelation() {
   if (state.fixLatency.records.length) runFixCorrelation();
 }
 
-function drawJvmCharts() {
-  const gc = state.jvmGc;
+function jvmDrawDependencies() {
+  return {
+    root: document,
+    state,
+    drawJvmTimelineChartInteractive,
+    drawJvmScatterChartInteractive,
+    attachJvmTimelineInteractions,
+    attachJvmScatterInteractions,
+    drawJvmCharts
+  };
+}
+
+function drawJvmCharts(deps = jvmDrawDependencies()) {
+  const {
+    root = document,
+    state: appState = state,
+    drawJvmTimelineChartInteractive: drawTimeline = drawJvmTimelineChartInteractive,
+    drawJvmScatterChartInteractive: drawScatter = drawJvmScatterChartInteractive
+  } = deps;
+  const gc = appState.jvmGc;
   if (!gc.correlation?.results?.length) return;
   const history = visibleHistory().filter(s => s.epochMs);
   if (!history.length) return;
@@ -3393,19 +3411,20 @@ function drawJvmCharts() {
   const selected = gc.selectedEpoch ? filtered.filter(r => r.epochMs === gc.selectedEpoch) : filtered;
 
   // Timeline chart: Recv-Q + GC bars
-  const svg1 = document.querySelector("[data-jvm-chart='recvq']");
-  if (svg1) drawJvmTimelineChartInteractive(svg1, selected, history);
+  const svg1 = root.querySelector("[data-jvm-chart='recvq']");
+  if (svg1) drawTimeline(svg1, selected, history, deps);
 
   // Scatter plot
-  const svg2 = document.querySelector("[data-jvm-chart='scatter']");
-  if (svg2) drawJvmScatterChartInteractive(svg2, selected);
+  const svg2 = root.querySelector("[data-jvm-chart='scatter']");
+  if (svg2) drawScatter(svg2, selected, deps);
 }
 
 function jvmPauseColor(score) {
   return score > 0.5 ? "#ef4444" : score > 0.2 ? "#fbbf24" : "#7dd3fc";
 }
 
-function drawJvmTimelineChartInteractive(svg, results, history) {
+function drawJvmTimelineChartInteractive(svg, results, history, deps = jvmDrawDependencies()) {
+  const { state: appState = state, attachJvmTimelineInteractions: attachTimeline = attachJvmTimelineInteractions } = deps;
   const w = svg.clientWidth || 700;
   const h = svg.clientHeight || 300;
   const pad = { l: 96, r: 22, t: 28, b: 46 };
@@ -3471,7 +3490,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   // Detect TCP state changes from raw timestamped snapshots
   const stateChanges = [];
   const rawSnaps = parsedTimestampSnapshots();
-  const selected = socketsById().get(state.selectedId) || state.sockets[0];
+  const selected = socketsById().get(appState.selectedId) || appState.sockets[0];
   if (selected && rawSnaps.length) {
     const localPeer = `${selected.local}|${selected.peer}`;
     let prevState = "";
@@ -3514,7 +3533,7 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
     <g class="jvm-crosshair" visibility="hidden" pointer-events="none"></g>
   `;
-  attachJvmTimelineInteractions(svg, results, history, x, pad, w, h, t0, span);
+  attachTimeline(svg, results, history, x, pad, w, h, t0, span, deps);
   // Expose for cross-chart sync
   svg._jvmShowTooltipForId = (gcId) => {
     const r = results.find(item => item.pause.id === gcId);
@@ -3538,7 +3557,8 @@ function drawJvmTimelineChartInteractive(svg, results, history) {
   svg._jvmHideTooltip = () => { const l = svg.querySelector(".jvm-crosshair"); if (l) l.setAttribute("visibility", "hidden"); };
 }
 
-function drawJvmScatterChartInteractive(svg, results) {
+function drawJvmScatterChartInteractive(svg, results, deps = jvmDrawDependencies()) {
+  const { attachJvmScatterInteractions: attachScatter = attachJvmScatterInteractions } = deps;
   const w = svg.clientWidth || 700;
   const h = svg.clientHeight || 300;
   const pad = { l: 96, r: 22, t: 28, b: 46 };
@@ -3587,13 +3607,14 @@ function drawJvmScatterChartInteractive(svg, results) {
     <rect class="jvm-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent" pointer-events="all"/>
     <g class="jvm-crosshair" visibility="hidden" pointer-events="none"></g>
   `;
-  attachJvmScatterInteractions(svg, points, x, y, pad, w, h);
+  attachScatter(svg, points, x, y, pad, w, h, deps);
   // Expose coordinate fns for cross-chart sync
   svg._jvmScatterX = r => { const p = points.find(pt => pt.id === r.pause?.id); return p ? x(p.durationMs) : 0; };
   svg._jvmScatterY = r => { const p = points.find(pt => pt.id === r.pause?.id); return p ? y(p.delta) : 0; };
 }
 
-function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0, span) {
+function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0, span, deps = jvmDrawDependencies()) {
+  const { root = document, state: appState = state, drawJvmCharts: drawJvm = drawJvmCharts } = deps;
   const zone = svg.querySelector(".jvm-hover-zone");
   const layer = svg.querySelector(".jvm-crosshair");
   if (!zone || !layer) return;
@@ -3624,8 +3645,8 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
       <text x="${tooltipX + 9}" y="${pad.t + 73}" fill="#cbd5e1" font-size="10">Signals: ${escapeHtml(pause?.symptoms?.signals?.map(signal => signal.signal).join(", ") || "none")}</text>
     `;
     // Sync crosshair to scatter chart
-    if (state.jvmGc.syncCrosshair !== false && pause) {
-      const scatterSvg = document.querySelector("[data-jvm-chart='scatter']");
+    if (appState.jvmGc.syncCrosshair !== false && pause) {
+      const scatterSvg = root.querySelector("[data-jvm-chart='scatter']");
       if (scatterSvg?._jvmShowTooltipForId) scatterSvg._jvmShowTooltipForId(pause.pause.id);
     }
   });
@@ -3639,22 +3660,24 @@ function attachJvmTimelineInteractions(svg, results, history, xFn, pad, w, h, t0
     const start = svg._jvmDragStart;
     svg._jvmDragStart = null;
     if (Math.abs(end - start) < 0.02) return;
-    const current = state.chartZoom;
+    const current = appState.chartZoom;
     const range = current.end - current.start;
     setZoom(current.start + Math.min(start, end) * range, current.start + Math.max(start, end) * range);
-    drawJvmCharts();
+    drawJvm(deps);
   });
   zone.addEventListener("mouseleave", () => {
     svg._jvmDragStart = null;
     layer.setAttribute("visibility", "hidden");
-    if (state.jvmGc.syncCrosshair !== false) {
-      const scatterSvg = document.querySelector("[data-jvm-chart='scatter']");
+    if (appState.jvmGc.syncCrosshair !== false) {
+      const scatterSvg = root.querySelector("[data-jvm-chart='scatter']");
       if (scatterSvg?._jvmHideTooltip) scatterSvg._jvmHideTooltip();
     }
   });
 }
 
-function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
+function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h, deps = jvmDrawDependencies()) {
+  const { root = document, state: appState = state, drawJvmCharts: drawJvm = drawJvmCharts } = deps;
+  const dom = root.ownerDocument || root;
   const zone = svg.querySelector(".jvm-hover-zone");
   const layer = svg.querySelector(".jvm-crosshair");
   if (!zone || !layer) return;
@@ -3688,15 +3711,15 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
       <text x="${tooltipX + 9}" y="${tooltipY + 68}" fill="#cbd5e1" font-size="10">${escapeHtml(point.signals || "no signals")}</text>
     `;
     // Sync to timeline chart
-    if (state.jvmGc.syncCrosshair !== false) {
-      const tlSvg = document.querySelector("[data-jvm-chart='recvq']");
+    if (appState.jvmGc.syncCrosshair !== false) {
+      const tlSvg = root.querySelector("[data-jvm-chart='recvq']");
       if (tlSvg?._jvmShowTooltipForId) tlSvg._jvmShowTooltipForId(point.id);
     }
   });
   zone.addEventListener("mouseleave", () => {
     layer.setAttribute("visibility", "hidden");
-    if (state.jvmGc.syncCrosshair !== false) {
-      const tlSvg = document.querySelector("[data-jvm-chart='recvq']");
+    if (appState.jvmGc.syncCrosshair !== false) {
+      const tlSvg = root.querySelector("[data-jvm-chart='recvq']");
       if (tlSvg?._jvmHideTooltip) tlSvg._jvmHideTooltip();
     }
   });
@@ -3719,17 +3742,17 @@ function attachJvmScatterInteractions(svg, points, xFn, yFn, pad, w, h) {
     const windowMs = 5000;
     const center = (point.epochMs - t0) / totalSpan;
     const halfW = windowMs / totalSpan;
-    const current = state.chartZoom;
+    const current = appState.chartZoom;
     const range = current.end - current.start;
     const absCenter = current.start + center * range;
     setZoom(Math.max(0, absCenter - halfW), Math.min(1, absCenter + halfW));
-    state._bdpCache = null;
-    state.jvmGc.selectedEpoch = null;
-    drawJvmCharts();
+    appState._bdpCache = null;
+    appState.jvmGc.selectedEpoch = null;
+    drawJvm(deps);
     // Show a red vertical marker on the timeline at the clicked point
-    const tlSvg = document.querySelector("[data-jvm-chart='recvq']");
+    const tlSvg = root.querySelector("[data-jvm-chart='recvq']");
     if (tlSvg) {
-      const marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      const marker = dom.createElementNS("http://www.w3.org/2000/svg", "g");
       marker.setAttribute("class", "jvm-click-marker");
       const history2 = visibleHistory().filter(s => s.epochMs);
       if (history2.length) {
@@ -4217,9 +4240,30 @@ function renderFixLatencyPanel() {
   </section>`;
 }
 
-function drawFixCharts() {
+function fixDrawDependencies() {
+  return {
+    root: document,
+    state,
+    drawFixTimelineChart,
+    drawFixScatterChart,
+    drawFixVmstatChart,
+    drawFixNstatChart,
+    drawFixHeatmap
+  };
+}
+
+function drawFixCharts(deps = fixDrawDependencies()) {
  try {
-  const fix = state.fixLatency;
+  const {
+    root = document,
+    state: appState = state,
+    drawFixTimelineChart: drawTimeline = drawFixTimelineChart,
+    drawFixScatterChart: drawScatter = drawFixScatterChart,
+    drawFixVmstatChart: drawVmstat = drawFixVmstatChart,
+    drawFixNstatChart: drawNstat = drawFixNstatChart,
+    drawFixHeatmap: drawHeatmap = drawFixHeatmap
+  } = deps;
+  const fix = appState.fixLatency;
   if (!fix.correlation?.results?.length) return;
   const history = visibleHistory().filter(s => s.epochMs);
   const allResults = fix.correlation.results;
@@ -4231,45 +4275,45 @@ function drawFixCharts() {
   const results = allResults;
 
   // Timeline chart
-  const svg1 = document.querySelector("[data-fix-chart='timeline']");
+  const svg1 = root.querySelector("[data-fix-chart='timeline']");
   if (svg1 && results.length) {
     const tz = fix.zoom?.timeline || { start: 0, end: 1 };
     const ztStart = tMin + tz.start * tSpan;
     const ztEnd = tMin + tz.end * tSpan;
     const r1 = results.filter(r => r.receiveMs >= ztStart && r.receiveMs <= ztEnd);
-    if (r1.length) drawFixTimelineChart(svg1, r1, history, state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || (state.jvmGc.pauses.length ? state.jvmGc.pauses : null), fix.gcWindowMs || 200);
+    if (r1.length) drawTimeline(svg1, r1, history, appState.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || (appState.jvmGc.pauses.length ? appState.jvmGc.pauses : null), fix.gcWindowMs || 200, deps);
   }
 
   // Scatter chart
-  const svg2 = document.querySelector("[data-fix-chart='scatter']");
-  if (svg2 && results.length) drawFixScatterChart(svg2, results);
+  const svg2 = root.querySelector("[data-fix-chart='scatter']");
+  if (svg2 && results.length) drawScatter(svg2, results, deps);
 
   // vmstat chart (zoom based on vmstat own time range)
-  const svg3 = document.querySelector("[data-fix-chart='vmstat']");
+  const svg3 = root.querySelector("[data-fix-chart='vmstat']");
   if (svg3 && fix.vmstat?.length) {
     const vz = fix.zoom?.vmstat || { start: 0, end: 1 };
     const vt0 = fix.vmstat[0].epochMs, vt1 = fix.vmstat[fix.vmstat.length-1].epochMs, vspan = vt1-vt0||1;
     const vzStart = vt0 + vz.start * vspan, vzEnd = vt0 + vz.end * vspan;
     const vm = fix.vmstat.filter(s => s.epochMs >= vzStart && s.epochMs <= vzEnd);
-    drawFixVmstatChart(svg3, vm.length ? vm : fix.vmstat, results, fix.cpuCores);
+    drawVmstat(svg3, vm.length ? vm : fix.vmstat, results, fix.cpuCores, deps);
   }
 
   // nstat chart (zoom based on nstat own time range)
-  const svg4 = document.querySelector("[data-fix-chart='nstat']");
+  const svg4 = root.querySelector("[data-fix-chart='nstat']");
   if (svg4 && fix.nstat?.length) {
     const nz = fix.zoom?.nstat || { start: 0, end: 1 };
     const nt0 = fix.nstat[0].epochMs, nt1 = fix.nstat[fix.nstat.length-1].epochMs, nspan = nt1-nt0||1;
     const nzStart = nt0 + nz.start * nspan, nzEnd = nt0 + nz.end * nspan;
     const ns = fix.nstat.filter(s => s.epochMs >= nzStart && s.epochMs <= nzEnd);
-    drawFixNstatChart(svg4, ns.length ? ns : fix.nstat, results);
+    drawNstat(svg4, ns.length ? ns : fix.nstat, results, deps);
   }
   // Heatmap
-  const heatCanvases = document.querySelectorAll("[data-fix-heatmap]");
-  if (results.length > 5) heatCanvases.forEach(c => drawFixHeatmap(c, results, tMin, tMax));
+  const heatCanvases = root.querySelectorAll("[data-fix-heatmap]");
+  if (results.length > 5) heatCanvases.forEach(c => drawHeatmap(c, results, tMin, tMax, deps));
  } catch(e) { console.error("drawFixCharts error:", e); }
 }
 
-function drawFixHeatmap(canvas, results, fullT0, fullT1) {
+function drawFixHeatmap(canvas, results, fullT0, fullT1, deps = fixDrawDependencies()) {
   const w = canvas.clientWidth || 600, h = canvas.clientHeight || 80;
   canvas.width = w * 2; canvas.height = h * 2;
   const ctx = canvas.getContext("2d");
@@ -4399,7 +4443,8 @@ function fixSeverityColor(severity) {
   return severity === "critical" ? "#ff5c77" : severity === "warning_high" ? "#ff9f43" : severity === "warning" ? "#ffd166" : severity === "info" ? "#39d6d6" : "#8c9aab";
 }
 
-function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs = 200) {
+function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs = 200, deps = fixDrawDependencies()) {
+  const { state: appState = state } = deps;
   const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 60, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
@@ -4433,7 +4478,7 @@ function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs
   const recvQArea = recvQPath ? `${recvQPath}L${x(history[history.length - 1].epochMs)},${pad.t + plotH}L${x(history[0].epochMs)},${pad.t + plotH}Z` : "";
 
   // Lag points
-  const hidden = state.fixLatency.hiddenSeries;
+  const hidden = appState.fixLatency.hiddenSeries;
   const points = results.filter(r => !hidden.has(`sev_${r.severity || "none"}`)).map(r => {
     const color = fixSeverityColor(r.severity);
     return `<circle cx="${x(r.receiveMs)}" cy="${yLag(r.lagMs)}" r="3.5" fill="${color}" opacity="0.85" style="cursor:pointer"><title>${r.lagMs.toFixed(1)}ms | ${r.direction} ${r.msgType} | ${r.endpoint} | ${r.severity}${r.cause ? " | cause: " + r.cause : ""}${r.signals.length ? "\nsignals: " + r.signals.join(", ") : ""}</title></circle>`;
@@ -4454,12 +4499,13 @@ function drawFixTimelineChart(svg, results, history, gcPauses = null, gcWindowMs
 
     ${legend}
     <rect class="fix-hover-zone" x="${pad.l}" y="${pad.t}" width="${plotW}" height="${plotH}" fill="transparent"/>
-    ${(() => { const sel = results.find(r => r.receiveMs === state.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.receiveMs), sy = yLag(sel.lagMs); return `<line x1="${sx}" y1="${pad.t}" x2="${sx}" y2="${pad.t + plotH}" stroke="#fff" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.9"/><circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx}" y="${pad.t - 6}" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms ${sel.cause || ""}</text>`; })()}
+    ${(() => { const sel = results.find(r => r.receiveMs === appState.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.receiveMs), sy = yLag(sel.lagMs); return `<line x1="${sx}" y1="${pad.t}" x2="${sx}" y2="${pad.t + plotH}" stroke="#fff" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.9"/><circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx}" y="${pad.t - 6}" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms ${sel.cause || ""}</text>`; })()}
   `;
   attachFixChartCrosshair(svg, pad, w, h, t0, span, results, r => `${r.lagMs.toFixed(1)}ms · ${r.direction} ${r.msgType} ${r.symbol} · ${r.endpoint} · Cause: ${r.cause || "unknown"} · Score: ${r.score ? r.score.toFixed(2) : "0"}`);
 }
 
-function drawFixScatterChart(svg, results) {
+function drawFixScatterChart(svg, results, deps = fixDrawDependencies()) {
+  const { state: appState = state } = deps;
   const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 26, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
@@ -4474,7 +4520,7 @@ function drawFixScatterChart(svg, results) {
   const xLabels = xTicks.map(t => `<text x="${t.px}" y="${h - 20}" text-anchor="middle" fill="var(--muted)" font-size="10">${t.val >= 1000 ? `${(t.val/1000).toFixed(1)}s` : `${Math.round(t.val)}ms`}</text>`).join("");
   const yLabels = yTicks.map(t => `<text x="${pad.l - 6}" y="${t.py + 3}" text-anchor="end" fill="var(--muted)" font-size="10">${t.val.toFixed(2)}</text>`).join("");
 
-  const hidden = state.fixLatency.hiddenSeries;
+  const hidden = appState.fixLatency.hiddenSeries;
   const points = results.filter(r => !hidden.has(`sev_${r.severity || "none"}`)).map(r => {
     const color = fixSeverityColor(r.severity);
     return `<circle cx="${x(r.lagMs)}" cy="${y(r.score)}" r="3.5" fill="${color}" opacity="0.8" style="cursor:pointer"><title>Lag: ${r.lagMs.toFixed(1)}ms | Score: ${r.score.toFixed(2)} | ${r.severity}\nCause: ${r.cause || "unknown"}\nSignals: ${r.signals.join(", ") || "none"}\n${r.endpoint} ${r.direction} ${r.msgType}</title></circle>`;
@@ -4491,7 +4537,7 @@ function drawFixScatterChart(svg, results) {
     <text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle" fill="var(--muted)" font-size="11">Correlation Score</text>
 
     ${legend}
-    ${(() => { const sel = results.find(r => r.receiveMs === state.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.lagMs), sy = y(sel.score); return `<circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx + 10}" y="${sy - 4}" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms</text>`; })()}
+    ${(() => { const sel = results.find(r => r.receiveMs === appState.fixTable.selectedEpoch); if (!sel) return ""; const sx = x(sel.lagMs), sy = y(sel.score); return `<circle cx="${sx}" cy="${sy}" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="${sx + 10}" y="${sy - 4}" fill="#fff" font-size="10" font-weight="700">${sel.lagMs.toFixed(1)}ms</text>`; })()}
   `;
 }
 function renderWhatIfSimulation() {
@@ -4635,7 +4681,8 @@ function renderFixSpikeMarkers(fixResults, t0, t1, x, pad, plotH, hidden) {
   }).join("");
 }
 
-function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
+function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0, deps = fixDrawDependencies()) {
+  const { state: appState = state } = deps;
   const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 50, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
@@ -4674,7 +4721,7 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
   for (let i = 0; i < vmsamples.length; i++) {
     rPath += (i === 0 ? "M" : "L") + `${x(vmsamples[i].epochMs)},${yR(vmsamples[i].r)}`;
   }
-  const hidden = state.fixLatency.hiddenSeries;
+  const hidden = appState.fixLatency.hiddenSeries;
   // FIX spike markers
   const markers = renderFixSpikeMarkers(fixResults, t0, t1, x, pad, plotH, hidden);
   const legend = "";
@@ -4702,7 +4749,8 @@ function drawFixVmstatChart(svg, vmsamples, fixResults, cpuCores = 0) {
   attachFixChartCrosshair(svg, pad, w, h, t0, span, vmsamples, s => `r=${s.r} · b=${s.b || 0} · us=${s.us}% · sy=${s.sy}% · wa=${s.wa}% · us+sy+wa=${s.us + s.sy + s.wa}% · idle=${s.id}% · cs=${formatNumber(s.cs)} · bo=${s.bo}`);
 }
 
-function drawFixNstatChart(svg, nsamples, fixResults) {
+function drawFixNstatChart(svg, nsamples, fixResults, deps = fixDrawDependencies()) {
+  const { state: appState = state } = deps;
   const w = svg.clientWidth || svg.parentElement?.clientWidth || 640, h = svg.clientHeight || 200;
   const pad = { t: 32, r: 26, b: 48, l: 70 };
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
@@ -4715,7 +4763,7 @@ function drawFixNstatChart(svg, nsamples, fixResults) {
   const colors = ["#ff5c77", "#ff9f43", "#a855f7", "#ffd166", "#39d6d6"];
   const labels = ["Retrans", "Timeouts", "BacklogDrop", "ListenDrop", "RcvQDrop"];
 
-  const hidden = state.fixLatency.hiddenSeries;
+  const hidden = appState.fixLatency.hiddenSeries;
   const seriesKeys = ["retrans", "timeouts", "backlogdrop", "listendrop", "rcvqdrop"];
   const visibleKeys = keys.filter((_, i) => !hidden?.has(seriesKeys[i]));
   const visibleValues = nsamples.flatMap(s => visibleKeys.map(k => s.counters[k] || 0));
@@ -7121,17 +7169,34 @@ function renderChartThresholdOverlay(items, pad, w, h) {
     }).join("")}
   </g>`;
 }
-function drawChart() {
-  const svg = document.querySelector("#chart");
+function drawChart(deps = chartDrawDependencies()) {
+  const { root = document, state: appState = state, drawChartInto: drawInto = drawChartInto } = deps;
+  const svg = root.querySelector("#chart");
   if (!svg) return;
-  drawChartInto(svg, state.prefs.graphMetric, state.prefs.graphStyle, true);
+  drawInto(svg, appState.prefs.graphMetric, appState.prefs.graphStyle, true, deps);
 }
 
-function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshold = false) {
+function chartDrawDependencies() {
+  return {
+    root: document,
+    state,
+    drawChartInto,
+    drawSingleMinimap,
+    drawMinimaps,
+    attachChartInteractions,
+    chartRenderStyle,
+    chartCardForMetric,
+    updateChartActiveChrome
+  };
+}
+
+function drawChartInto(svg, metric, style = null, showThreshold = false, deps = chartDrawDependencies()) {
+  const { state: appState = state, attachChartInteractions: attachInteractions = attachChartInteractions } = deps;
+  const renderStyle = style || appState.prefs.graphStyle;
   const w = svg.clientWidth || 640;
   const h = svg.clientHeight || 300;
   const visibleData = visibleHistory(metric);
-  const renderData = renderableHistory(visibleData, metric, style, w);
+  const renderData = renderableHistory(visibleData, metric, renderStyle, w);
   const data = renderData.rows;
   const values = data.map(d => d[metric] || 0);
   const t = thresholdFor(metric);
@@ -7157,8 +7222,8 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   const line = values.map((v, i) => `${i ? "L" : "M"}${x(data[i], i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const base = `${x(data[values.length - 1], values.length - 1)},${h - pad.b} L${pad.l},${h - pad.b} Z`;
   const barWidth = Math.max(4, Math.min(18, (w - pad.l - pad.r) / Math.max(8, data.length) * 0.55));
-  const pointRadius = chartPointRadius(data.length, style);
-  const showPoints = style === "points" || style === "xy" || data.length <= 1500;
+  const pointRadius = chartPointRadius(data.length, renderStyle);
+  const showPoints = renderStyle === "points" || renderStyle === "xy" || data.length <= 1500;
   const showMetricSeries = !chartSeriesHidden(metric, "value");
   const anyDanger = values.some(v => thresholdSeverity(metric, v) === "danger");
   const anyWarn = values.some(v => thresholdSeverity(metric, v) === "warn");
@@ -7180,8 +7245,8 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     }
     return { x: pad.l + f * (w - pad.l - pad.r), label };
   });
-  const showWarnLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.warn) && !chartSeriesHidden(metric, "warn");
-  const showDangerLine = showThreshold && state.prefs.chartLayout.showThresholds && Number.isFinite(t.danger) && !chartSeriesHidden(metric, "danger");
+  const showWarnLine = showThreshold && appState.prefs.chartLayout.showThresholds && Number.isFinite(t.warn) && !chartSeriesHidden(metric, "warn");
+  const showDangerLine = showThreshold && appState.prefs.chartLayout.showThresholds && Number.isFinite(t.danger) && !chartSeriesHidden(metric, "danger");
   const warnY = showWarnLine ? y(t.warn) : 0;
   const dangerY = showDangerLine ? y(t.danger) : 0;
   const thresholdOverlay = renderChartThresholdOverlay([
@@ -7196,7 +7261,7 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
   svg.dataset.plotRight = String(w - pad.r);
   svg.dataset.plotTop = String(pad.t);
   svg.dataset.plotBottom = String(h - pad.b);
-  svg.dataset.renderStyle = style;
+  svg.dataset.renderStyle = renderStyle;
   svg.innerHTML = `
     <defs><linearGradient id="areaFill-${metric.replace(/\W/g, "")}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${stroke}" stop-opacity=".48"/><stop offset="1" stop-color="${stroke}" stop-opacity="0"/></linearGradient></defs>
     <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="${chartBgColor()}"/>
@@ -7207,48 +7272,51 @@ function drawChartInto(svg, metric, style = state.prefs.graphStyle, showThreshol
     <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(metric)}${axis.zoomed ? " - zoomed Y" : ""}${renderData.reduced ? ` (${formatNumber(data.length)}/${formatNumber(renderData.total)} pts)` : ""}</text>
     <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">Time since first snapshot (${escapeHtml(resolvedTimeZone())})</text>
     <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(metric)} ${metricUnit(metric) ? `(${metricUnit(metric)})` : ""}</text>
-    ${showMetricSeries && style === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="1.5"/>${points}` : ""}
-    ${showMetricSeries && style === "bars" ? bars : ""}
-    ${showMetricSeries && style === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="1.5"/>${points}` : ""}
-    ${showMetricSeries && (style === "points" || style === "xy") ? points : ""}
+    ${showMetricSeries && renderStyle === "area" ? `${singlePointLine}<path d="${line} L${base}" fill="url(#areaFill-${metric.replace(/\W/g, "")})"/><path d="${line}" fill="none" stroke="${stroke}" stroke-width="1.5"/>${points}` : ""}
+    ${showMetricSeries && renderStyle === "bars" ? bars : ""}
+    ${showMetricSeries && renderStyle === "line" ? `${singlePointLine}<path d="${line}" fill="none" stroke="${stroke}" stroke-width="1.5"/>${points}` : ""}
+    ${showMetricSeries && (renderStyle === "points" || renderStyle === "xy") ? points : ""}
     ${annotationOverlay}
-    ${state.baseline?.history?.length && !chartSeriesHidden(metric, "baseline") ? (() => { const bh = state.baseline.history; const bValues = bh.map(d => d[metric] || 0); if (!bValues.some(v => v > 0)) return ""; const bLine = bValues.map((v, i) => `${i ? "L" : "M"}${(pad.l + (i / Math.max(1, bh.length - 1)) * (w - pad.l - pad.r)).toFixed(1)},${y(v).toFixed(1)}`).join(" "); return `<path d="${bLine}" fill="none" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.6"/>`; })() : ""}
+    ${appState.baseline?.history?.length && !chartSeriesHidden(metric, "baseline") ? (() => { const bh = appState.baseline.history; const bValues = bh.map(d => d[metric] || 0); if (!bValues.some(v => v > 0)) return ""; const bLine = bValues.map((v, i) => `${i ? "L" : "M"}${(pad.l + (i / Math.max(1, bh.length - 1)) * (w - pad.l - pad.r)).toFixed(1)},${y(v).toFixed(1)}`).join(" "); return `<path d="${bLine}" fill="none" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.6"/>`; })() : ""}
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
     <g class="crosshair-layer" data-crosshair-layer="1" pointer-events="none"></g>
     <rect class="zoom-capture" x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="transparent" pointer-events="all"/>
   `;
   attachChartContextAnnotation(svg);
-  if (state.prefs.chartLayout.showCrosshair) attachChartInteractions(svg);
+  if (appState.prefs.chartLayout.showCrosshair) attachInteractions(svg, deps);
 }
 
-function scheduleMultiChartDraw() {
-  const charts = [...document.querySelectorAll("[data-mini-chart]")];
+function scheduleMultiChartDraw(deps = chartDrawDependencies()) {
+  const { root = document, state: appState = state, drawChartInto: drawInto = drawChartInto, drawMinimaps: drawMaps = drawMinimaps } = deps;
+  const charts = [...root.querySelectorAll("[data-mini-chart]")];
   if (!charts.length) return;
-  const token = state.chartRenderToken + 1;
-  state.chartRenderToken = token;
-  const renderStyle = state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle;
+  const token = appState.chartRenderToken + 1;
+  appState.chartRenderToken = token;
+  const renderStyle = appState.prefs.graphStyle === "xy" ? "points" : appState.prefs.graphStyle;
   let index = 0;
   const drawSlice = () => {
-    if (state.chartRenderToken !== token) return;
+    if (appState.chartRenderToken !== token) return;
     const frameStart = performance.now();
     while (index < charts.length && performance.now() - frameStart < 12) {
       const svg = charts[index];
-      if (svg?.isConnected) drawChartInto(svg, svg.dataset.miniChart, renderStyle, true);
+      if (svg?.isConnected) drawInto(svg, svg.dataset.miniChart, renderStyle, true, deps);
       index += 1;
     }
     if (index < charts.length) requestAnimationFrame(drawSlice);
-    else drawMinimaps();
+    else drawMaps(deps);
   };
   requestAnimationFrame(drawSlice);
 }
 
-function drawMinimaps() {
-  document.querySelectorAll("[data-minimap]").forEach(canvas => drawSingleMinimap(canvas, canvas.dataset.minimap));
+function drawMinimaps(deps = chartDrawDependencies()) {
+  const { root = document, drawSingleMinimap: drawMinimap = drawSingleMinimap } = deps;
+  root.querySelectorAll("[data-minimap]").forEach(canvas => drawMinimap(canvas, canvas.dataset.minimap, deps));
 }
 
-function drawSingleMinimap(canvas, metric) {
-    const history = state.history;
+function drawSingleMinimap(canvas, metric, deps = chartDrawDependencies()) {
+    const { state: appState = state } = deps;
+    const history = appState.history;
     if (!history.length) return;
     const vals = history.map(r => Number(r[metric]) || 0);
     if (!vals.some(v => v > 0)) return;
@@ -7302,14 +7370,16 @@ function chartRenderStyle() {
   return state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle;
 }
 
-function chartCardForMetric(metric) {
-  return [...document.querySelectorAll("[data-chart-card]")].find(card => card.dataset.chartCard === metric) || null;
+function chartCardForMetric(metric, deps = chartDrawDependencies()) {
+  const { root = document } = deps;
+  return [...root.querySelectorAll("[data-chart-card]")].find(card => card.dataset.chartCard === metric) || null;
 }
 
-function updateChartActiveChrome(metric, action) {
-  document.querySelectorAll(".chart-card.active-chart").forEach(card => card.classList.remove("active-chart"));
-  document.querySelectorAll(".chart-card-tools .active-chart-tool").forEach(button => button.classList.remove("active-chart-tool"));
-  const card = chartCardForMetric(metric);
+function updateChartActiveChrome(metric, action, deps = chartDrawDependencies()) {
+  const { root = document } = deps;
+  root.querySelectorAll(".chart-card.active-chart").forEach(card => card.classList.remove("active-chart"));
+  root.querySelectorAll(".chart-card-tools .active-chart-tool").forEach(button => button.classList.remove("active-chart-tool"));
+  const card = chartCardForMetric(metric, deps);
   if (!card) return;
   card.classList.add("active-chart");
   const button = [...card.querySelectorAll("[data-chart-zoom]")].find(item => item.dataset.chartZoom === action);
@@ -7320,29 +7390,31 @@ function updateChartActiveChrome(metric, action) {
   }
 }
 
-function redrawChartCardMetric(metric, action = state.activeChartAction) {
-  const card = chartCardForMetric(metric);
+function redrawChartCardMetric(metric, action = state.activeChartAction, deps = chartDrawDependencies()) {
+  const { state: appState = state, drawChartInto: drawInto = drawChartInto, drawSingleMinimap: drawMinimap = drawSingleMinimap } = deps;
+  const card = chartCardForMetric(metric, deps);
   const svg = card?.querySelector("[data-mini-chart]");
   if (!svg?.isConnected) return false;
-  state.chartRenderToken += 1;
-  drawChartInto(svg, metric, chartRenderStyle(), true);
+  appState.chartRenderToken += 1;
+  drawInto(svg, metric, chartRenderStyle(), true, deps);
   const minimap = card?.querySelector("[data-minimap]");
-  if (minimap) drawSingleMinimap(minimap, metric);
-  updateChartActiveChrome(metric, action);
+  if (minimap) drawMinimap(minimap, metric, deps);
+  updateChartActiveChrome(metric, action, deps);
   return true;
 }
-function drawCorrelation() {
-  const svg = document.querySelector("#correlationChart");
+function drawCorrelation(deps = chartDrawDependencies()) {
+  const { root = document, state: appState = state } = deps;
+  const svg = root.querySelector("#correlationChart");
   if (!svg) return;
   const w = svg.clientWidth || 640;
   const h = svg.clientHeight || 300;
-  const rows = renderableHistory(visibleHistory(), state.correlation.y, "xy", w).rows;
-  const xs = rows.map(d => d[state.correlation.x] || 0);
-  const ys = rows.map(d => d[state.correlation.y] || 0);
+  const rows = renderableHistory(visibleHistory(), appState.correlation.y, "xy", w).rows;
+  const xs = rows.map(d => d[appState.correlation.x] || 0);
+  const ys = rows.map(d => d[appState.correlation.y] || 0);
   const maxX = Math.max(...xs, 1);
   const maxY = Math.max(...ys, 1);
   const yTicks = [0, .25, .5, .75, 1].map(f => f * maxY);
-  const longestYTick = yTicks.map(v => formatMetricValue(state.correlation.y, v)).reduce((longest, value) => value.length > longest.length ? value : longest, "");
+  const longestYTick = yTicks.map(v => formatMetricValue(appState.correlation.y, v)).reduce((longest, value) => value.length > longest.length ? value : longest, "");
   const yTickWidth = Math.min(150, Math.max(48, longestYTick.length * 6.4));
   const pad = { l: Math.min(Math.max(78, yTickWidth + 54), Math.max(112, w * 0.3)), r: 24, t: 32, b: 58 };
   const axisLabelX = Math.max(14, pad.l - yTickWidth - 34);
@@ -7352,31 +7424,32 @@ function drawCorrelation() {
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.innerHTML = `
     <rect x="${pad.l}" y="${pad.t}" width="${w - pad.l - pad.r}" height="${h - pad.t - pad.b}" fill="${chartBgColor()}"/>
-    ${yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(state.correlation.y, v)}</text>`).join("")}
-    ${xTicks.map(v => `<line x1="${x(v)}" x2="${x(v)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(v)}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${formatMetricValue(state.correlation.x, v)}</text>`).join("")}
-    ${xs.map((value, i) => `<circle cx="${x(value)}" cy="${y(ys[i])}" r="1" fill="${thresholdColor(state.correlation.y, ys[i])}" opacity=".9"><title>${metricLabel(state.correlation.x)}=${formatMetricValue(state.correlation.x, value)}, ${metricLabel(state.correlation.y)}=${formatMetricValue(state.correlation.y, ys[i])}</title></circle>`).join("")}
-    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(state.correlation.x)} vs ${metricLabel(state.correlation.y)}</text>
-    <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(state.correlation.x)} (${metricUnit(state.correlation.x)})</text>
-    <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(state.correlation.y)} (${metricUnit(state.correlation.y)})</text>
+    ${yTicks.map(v => `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#263241"/><text x="${pad.l - 10}" y="${y(v) + 4}" text-anchor="end" fill="#8c9aab" font-size="11">${formatMetricValue(appState.correlation.y, v)}</text>`).join("")}
+    ${xTicks.map(v => `<line x1="${x(v)}" x2="${x(v)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#182434"/><text x="${x(v)}" y="${h - 18}" text-anchor="middle" fill="#8c9aab" font-size="11">${formatMetricValue(appState.correlation.x, v)}</text>`).join("")}
+    ${xs.map((value, i) => `<circle cx="${x(value)}" cy="${y(ys[i])}" r="1" fill="${thresholdColor(appState.correlation.y, ys[i])}" opacity=".9"><title>${metricLabel(appState.correlation.x)}=${formatMetricValue(appState.correlation.x, value)}, ${metricLabel(appState.correlation.y)}=${formatMetricValue(appState.correlation.y, ys[i])}</title></circle>`).join("")}
+    <text x="${pad.l}" y="18" fill="#edf4ff" font-size="13" font-weight="700">${metricLabel(appState.correlation.x)} vs ${metricLabel(appState.correlation.y)}</text>
+    <text x="${w / 2}" y="${h - 4}" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(appState.correlation.x)} (${metricUnit(appState.correlation.x)})</text>
+    <text x="${axisLabelX}" y="${h / 2}" transform="rotate(-90 ${axisLabelX} ${h / 2})" text-anchor="middle" fill="#c4d0de" font-size="12">${metricLabel(appState.correlation.y)} (${metricUnit(appState.correlation.y)})</text>
     <line x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${h - pad.b}" stroke="#52657a"/>
     <line x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}" stroke="#52657a"/>
   `;
 }
 
-function drawBdpWindowCharts() {
-  const charts = [...document.querySelectorAll("[data-bdp-chart]")];
+function drawBdpWindowCharts(deps = chartDrawDependencies()) {
+  const { root = document, state: appState = state } = deps;
+  const charts = [...root.querySelectorAll("[data-bdp-chart]")];
   if (!charts.length) return;
   const analysis = bdpWindowAnalysis(visibleHistory());
   charts.forEach(svg => drawBdpWindowChart(svg, analysis, svg.dataset.bdpChart));
-  document.querySelectorAll("[data-bdp-legend] [data-series-key]").forEach(el => {
+  root.querySelectorAll("[data-bdp-legend] [data-series-key]").forEach(el => {
     el.onclick = () => {
       const key = el.dataset.seriesKey;
-      state.hiddenBdpSeries.has(key) ? state.hiddenBdpSeries.delete(key) : state.hiddenBdpSeries.add(key);
-      document.querySelectorAll(`[data-series-key="${key}"]`).forEach(span => {
-        span.style.opacity = state.hiddenBdpSeries.has(key) ? ".4" : "";
-        span.style.textDecoration = state.hiddenBdpSeries.has(key) ? "line-through" : "";
+      appState.hiddenBdpSeries.has(key) ? appState.hiddenBdpSeries.delete(key) : appState.hiddenBdpSeries.add(key);
+      root.querySelectorAll(`[data-series-key="${key}"]`).forEach(span => {
+        span.style.opacity = appState.hiddenBdpSeries.has(key) ? ".4" : "";
+        span.style.textDecoration = appState.hiddenBdpSeries.has(key) ? "line-through" : "";
       });
-      drawBdpWindowCharts();
+      drawBdpWindowCharts(deps);
     };
   });
 }
@@ -7651,7 +7724,8 @@ function attachChartContextAnnotation(svg) {
     });
   });
 }
-function attachChartInteractions(svg) {
+function attachChartInteractions(svg, deps = chartDrawDependencies()) {
+  const { root = document, state: appState = state } = deps;
   if (svg.dataset.interactive === "1") return;
   svg.dataset.interactive = "1";
   let dragging = false;
@@ -7722,8 +7796,8 @@ function attachChartInteractions(svg) {
     const lx = layer();
     if (!lx) return;
     const pct = (x - b.left) / Math.max(1, b.right - b.left);
-    const metric = svg.dataset.metric || state.prefs.graphMetric;
-    const renderStyle = svg.dataset.renderStyle || state.prefs.graphStyle;
+    const metric = svg.dataset.metric || appState.prefs.graphMetric;
+    const renderStyle = svg.dataset.renderStyle || appState.prefs.graphStyle;
     const rows = renderableHistory(visibleHistory(metric), metric, renderStyle, svg.clientWidth || 640).rows;
     const selection = dragX == null ? "" : `<rect x="${Math.min(startX, dragX)}" y="${b.top}" width="${Math.abs(dragX - startX)}" height="${b.bottom - b.top}" fill="#5db7ff" opacity=".18" stroke="#5db7ff" stroke-dasharray="5 4"/>`;
     lx.innerHTML = `
@@ -7738,10 +7812,10 @@ function attachChartInteractions(svg) {
     const p = svgPoint(svg, event);
     const x = clampX(p.x);
     drawOverlay(x, dragging ? x : null);
-    if (!dragging && state.prefs.chartLayout.syncCrosshair !== false) {
+    if (!dragging && appState.prefs.chartLayout.syncCrosshair !== false) {
       const b = bounds();
       const pct = (x - b.left) / Math.max(1, b.right - b.left);
-      document.querySelectorAll("svg.chart[data-interactive='1']").forEach(other => {
+      root.querySelectorAll("svg.chart[data-interactive='1']").forEach(other => {
         if (other === svg) return;
         const ol = other.querySelector("[data-crosshair-layer]");
         if (!ol) return;
@@ -7751,8 +7825,8 @@ function attachChartInteractions(svg) {
         const oBottom = Number(other.dataset.plotBottom);
         if (!Number.isFinite(oLeft) || oRight <= oLeft) return;
         const ox = oLeft + pct * (oRight - oLeft);
-        const m = other.dataset.metric || state.prefs.graphMetric;
-        const rs = other.dataset.renderStyle || state.prefs.graphStyle;
+        const m = other.dataset.metric || appState.prefs.graphMetric;
+        const rs = other.dataset.renderStyle || appState.prefs.graphStyle;
         const rows = renderableHistory(visibleHistory(m), m, rs, other.clientWidth || 640).rows;
         ol.innerHTML = `
           <line x1="${ox}" x2="${ox}" y1="${oTop}" y2="${oBottom}" stroke="#edf4ff" stroke-width="1" stroke-dasharray="4 4" opacity=".5"/>
@@ -7782,10 +7856,10 @@ function attachChartInteractions(svg) {
       const zoom = chartZoomFor(metric);
       const nextZoom = zoomRangeFromDragSelection(zoom, a, z);
       setZoom(nextZoom.start, nextZoom.end, metric);
-      state.activeChartMetric = metric;
-      state.activeChartAction = "dragZoom";
-      if (svg.matches("[data-mini-chart]") && redrawChartCardMetric(metric, "dragZoom")) return;
-      if (svg.id === "chart") drawChart();
+      appState.activeChartMetric = metric;
+      appState.activeChartAction = "dragZoom";
+      if (svg.matches("[data-mini-chart]") && redrawChartCardMetric(metric, "dragZoom", deps)) return;
+      if (svg.id === "chart") drawChart(deps);
     } else {
       drawOverlay(endX);
     }
@@ -7793,8 +7867,8 @@ function attachChartInteractions(svg) {
   svg.addEventListener("pointerleave", () => {
     if (!dragging) {
       if (layer()) layer().innerHTML = "";
-      if (state.prefs.chartLayout.syncCrosshair !== false) {
-        document.querySelectorAll("svg.chart[data-interactive='1']").forEach(other => {
+      if (appState.prefs.chartLayout.syncCrosshair !== false) {
+        root.querySelectorAll("svg.chart[data-interactive='1']").forEach(other => {
           if (other === svg) return;
           const ol = other.querySelector("[data-crosshair-layer]");
           if (ol) ol.innerHTML = "";
@@ -9035,7 +9109,153 @@ function handleGlobalKeydown(event) {
   event.preventDefault();
   renderKeepingWorkspacePosition();
 }
-function bindEvents() {
+
+function appEventDependencies() {
+  return {
+    ...chartDrawDependencies(),
+    render,
+    renderKeepingWorkspacePosition,
+    drawBdpWindowCharts,
+    drawJvmCharts,
+    drawFixCharts,
+    redrawChartCardMetric,
+    applyChartZoomAction,
+    chartZoomFor,
+    clearVisibleHistoryCache,
+    chartSeriesKey
+  };
+}
+
+function bindChartMinimapEvents(deps = appEventDependencies()) {
+  const {
+    root = document,
+    state: appState = state,
+    drawSingleMinimap: drawMinimap = drawSingleMinimap,
+    drawChartInto: drawInto = drawChartInto,
+    chartZoomFor: zoomFor = chartZoomFor,
+    clearVisibleHistoryCache: clearVisible = clearVisibleHistoryCache
+  } = deps;
+  root.querySelectorAll("[data-minimap]").forEach(canvas => {
+    let dragging = false;
+    const getMetric = () => canvas.dataset.minimap;
+    const panTo = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const metric = getMetric();
+      const zoom = zoomFor(metric);
+      const span = zoom.end - zoom.start;
+      const newStart = Math.max(0, Math.min(1 - span, frac - span / 2));
+      if (!appState.chartZoomByMetric) appState.chartZoomByMetric = {};
+      appState.chartZoomByMetric[metric] = { start: newStart, end: newStart + span };
+      clearVisible();
+      drawMinimap(canvas, metric, deps);
+      const svg = canvas.parentElement?.querySelector(`[data-mini-chart="${metric}"]`);
+      if (svg) drawInto(svg, metric, appState.prefs.graphStyle === "xy" ? "points" : appState.prefs.graphStyle, true, deps);
+    };
+    canvas.addEventListener("mousedown", e => { dragging = true; panTo(e); e.preventDefault(); });
+    canvas.addEventListener("mousemove", e => { if (dragging) panTo(e); });
+    canvas.addEventListener("mouseup", () => { dragging = false; });
+    canvas.addEventListener("mouseleave", () => { dragging = false; });
+  });
+}
+
+function bindChartChromeEvents(deps = appEventDependencies()) {
+  const {
+    root = document,
+    state: appState = state,
+    render: renderView = render,
+    renderKeepingWorkspacePosition: renderStable = renderKeepingWorkspacePosition,
+    drawBdpWindowCharts: drawBdp = drawBdpWindowCharts,
+    drawJvmCharts: drawJvm = drawJvmCharts,
+    drawFixCharts: drawFix = drawFixCharts,
+    redrawChartCardMetric: redrawMetric = redrawChartCardMetric,
+    applyChartZoomAction: applyZoom = applyChartZoomAction
+  } = deps;
+  root.querySelectorAll("[data-charts-tab]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      const tab = event.currentTarget.dataset.chartsTab;
+      if (appState.chartsTab === tab) return;
+      appState.chartsTab = tab;
+      renderView();
+      if (tab === "fix") setTimeout(() => drawFix(deps), 100);
+      if (tab === "jvm") setTimeout(() => drawJvm(deps), 100);
+    });
+  });
+  root.querySelectorAll("[data-style-toggle]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
+      appState.openStyleMenu = !appState.openStyleMenu;
+      const menu = btn.closest(".style-picker")?.querySelector(".style-picker-menu");
+      if (menu) menu.classList.toggle("open", appState.openStyleMenu);
+    });
+  });
+  root.querySelectorAll("[data-style-choice]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
+      appState.prefs.graphStyle = event.currentTarget.dataset.styleChoice;
+      appState.openStyleMenu = false;
+      renderStable();
+    });
+  });
+  root.querySelectorAll("[data-chart-zoom]").forEach(btn => {
+    btn.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const action = event.currentTarget.dataset.chartZoom;
+      const metric = event.currentTarget.dataset.chartZoomMetric;
+      applyZoom(action, metric);
+      if (event.currentTarget.hasAttribute("data-bdp-zoom")) {
+        appState._bdpCache = null;
+        drawBdp(deps);
+      } else if (event.currentTarget.hasAttribute("data-jvm-zoom")) {
+        appState.jvmGc.selectedEpoch = null;
+        drawJvm(deps);
+      } else if (event.currentTarget.hasAttribute("data-fix-zoom")) {
+        drawFix(deps);
+      } else if (!redrawMetric(metric, action, deps)) renderStable();
+    });
+  });
+}
+
+function bindChartSeriesEvents(deps = appEventDependencies()) {
+  const {
+    root = document,
+    state: appState = state,
+    redrawChartCardMetric: redrawMetric = redrawChartCardMetric,
+    drawJvmCharts: drawJvm = drawJvmCharts,
+    chartSeriesKey: seriesKey = chartSeriesKey
+  } = deps;
+  root.querySelectorAll("[data-chart-series-toggle]").forEach(button => button.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const metric = event.currentTarget.dataset.chartSeriesToggle;
+    const key = event.currentTarget.dataset.chartSeriesKey;
+    const fullKey = seriesKey(metric, key);
+    if (!appState.hiddenChartSeries) appState.hiddenChartSeries = new Set();
+    appState.hiddenChartSeries.has(fullKey) ? appState.hiddenChartSeries.delete(fullKey) : appState.hiddenChartSeries.add(fullKey);
+    root.querySelectorAll("[data-chart-series-toggle]").forEach(item => {
+      if (item.dataset.chartSeriesToggle !== metric || item.dataset.chartSeriesKey !== key) return;
+      const hidden = appState.hiddenChartSeries.has(fullKey);
+      item.classList.toggle("is-muted", hidden);
+      item.setAttribute("aria-pressed", hidden ? "false" : "true");
+    });
+    redrawMetric(metric, `series:${key}`, deps);
+  }));
+  root.querySelectorAll("[data-jvm-series-key]").forEach(item => item.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = event.currentTarget.dataset.jvmSeriesKey;
+    if (!appState.hiddenJvmSeries) appState.hiddenJvmSeries = new Set();
+    appState.hiddenJvmSeries.has(key) ? appState.hiddenJvmSeries.delete(key) : appState.hiddenJvmSeries.add(key);
+    root.querySelectorAll(`[data-jvm-series-key="${key}"]`).forEach(span => {
+      span.style.opacity = appState.hiddenJvmSeries.has(key) ? ".4" : "";
+      span.style.textDecoration = appState.hiddenJvmSeries.has(key) ? "line-through" : "";
+    });
+    drawJvm(deps);
+  }));
+}
+
+function bindEvents(deps = appEventDependencies()) {
   document.onkeydown = handleGlobalKeydown;
   bindSmartChartTooltips();
   bindColumnHelpTooltips();
@@ -9065,40 +9285,8 @@ function bindEvents() {
     else { state.statsTableSort = key; state.statsTableDir = key === "metric" ? "asc" : "desc"; }
     render();
   }));
-  document.querySelectorAll("[data-minimap]").forEach(canvas => {
-    let dragging = false;
-    const getMetric = () => canvas.dataset.minimap;
-    const panTo = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const metric = getMetric();
-      const zoom = chartZoomFor(metric);
-      const span = zoom.end - zoom.start;
-      const newStart = Math.max(0, Math.min(1 - span, frac - span / 2));
-      if (!state.chartZoomByMetric) state.chartZoomByMetric = {};
-      state.chartZoomByMetric[metric] = { start: newStart, end: newStart + span };
-      clearVisibleHistoryCache();
-      // Instant minimap redraw (no wait)
-      drawSingleMinimap(canvas, metric);
-      // Redraw only the affected chart
-      const svg = canvas.parentElement?.querySelector(`[data-mini-chart="${metric}"]`);
-      if (svg) drawChartInto(svg, metric, state.prefs.graphStyle === "xy" ? "points" : state.prefs.graphStyle, true);
-    };
-    canvas.addEventListener("mousedown", e => { dragging = true; panTo(e); e.preventDefault(); });
-    canvas.addEventListener("mousemove", e => { if (dragging) panTo(e); });
-    canvas.addEventListener("mouseup", () => { dragging = false; });
-    canvas.addEventListener("mouseleave", () => { dragging = false; });
-  });
-  document.querySelectorAll("[data-charts-tab]").forEach(btn => {
-    btn.addEventListener("click", event => {
-      const tab = event.currentTarget.dataset.chartsTab;
-      if (state.chartsTab === tab) return;
-      state.chartsTab = tab;
-      render();
-      if (tab === "fix") setTimeout(drawFixCharts, 100);
-      if (tab === "jvm") setTimeout(drawJvmCharts, 100);
-    });
-  });
+  bindChartMinimapEvents(deps);
+  bindChartChromeEvents(deps);
   document.querySelectorAll("[data-cm-search]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (!cmInstance) return;
@@ -9108,40 +9296,6 @@ function bindEvents() {
         const input = document.querySelector(".cm-container .CodeMirror-dialog input");
         if (input) { input.value = query; input.dispatchEvent(new Event("input")); input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13 })); }
       }, 50);
-    });
-  });
-  document.querySelectorAll("[data-style-toggle]").forEach(btn => {
-    btn.addEventListener("click", event => {
-      event.stopPropagation();
-      state.openStyleMenu = !state.openStyleMenu;
-      const menu = btn.closest(".style-picker")?.querySelector(".style-picker-menu");
-      if (menu) menu.classList.toggle("open", state.openStyleMenu);
-    });
-  });
-  document.querySelectorAll("[data-style-choice]").forEach(btn => {
-    btn.addEventListener("click", event => {
-      event.stopPropagation();
-      state.prefs.graphStyle = event.currentTarget.dataset.styleChoice;
-      state.openStyleMenu = false;
-      renderKeepingWorkspacePosition();
-    });
-  });
-  document.querySelectorAll("[data-chart-zoom]").forEach(btn => {
-    btn.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      const action = event.currentTarget.dataset.chartZoom;
-      const metric = event.currentTarget.dataset.chartZoomMetric;
-      applyChartZoomAction(action, metric);
-      if (event.currentTarget.hasAttribute("data-bdp-zoom")) {
-        state._bdpCache = null;
-        drawBdpWindowCharts();
-      } else if (event.currentTarget.hasAttribute("data-jvm-zoom")) {
-        state.jvmGc.selectedEpoch = null;
-        drawJvmCharts();
-      } else if (event.currentTarget.hasAttribute("data-fix-zoom")) {
-        drawFixCharts();
-      } else if (!redrawChartCardMetric(metric, action)) renderKeepingWorkspacePosition();
     });
   });
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
@@ -10972,34 +11126,7 @@ function bindEvents() {
     }
     renderKeepingWorkspacePosition();
   }));
-  document.querySelectorAll("[data-chart-series-toggle]").forEach(button => button.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    const metric = event.currentTarget.dataset.chartSeriesToggle;
-    const key = event.currentTarget.dataset.chartSeriesKey;
-    const fullKey = chartSeriesKey(metric, key);
-    if (!state.hiddenChartSeries) state.hiddenChartSeries = new Set();
-    state.hiddenChartSeries.has(fullKey) ? state.hiddenChartSeries.delete(fullKey) : state.hiddenChartSeries.add(fullKey);
-    document.querySelectorAll("[data-chart-series-toggle]").forEach(item => {
-      if (item.dataset.chartSeriesToggle !== metric || item.dataset.chartSeriesKey !== key) return;
-      const hidden = state.hiddenChartSeries.has(fullKey);
-      item.classList.toggle("is-muted", hidden);
-      item.setAttribute("aria-pressed", hidden ? "false" : "true");
-    });
-    redrawChartCardMetric(metric, `series:${key}`);
-  }));
-  document.querySelectorAll("[data-jvm-series-key]").forEach(item => item.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    const key = event.currentTarget.dataset.jvmSeriesKey;
-    if (!state.hiddenJvmSeries) state.hiddenJvmSeries = new Set();
-    state.hiddenJvmSeries.has(key) ? state.hiddenJvmSeries.delete(key) : state.hiddenJvmSeries.add(key);
-    document.querySelectorAll(`[data-jvm-series-key="${key}"]`).forEach(span => {
-      span.style.opacity = state.hiddenJvmSeries.has(key) ? ".4" : "";
-      span.style.textDecoration = state.hiddenJvmSeries.has(key) ? "line-through" : "";
-    });
-    drawJvmCharts();
-  }));
+  bindChartSeriesEvents(deps);
   document.querySelectorAll("[data-chart-stats]").forEach(btn => btn.addEventListener("click", event => {
     event.stopPropagation();
     state.statsMetric = event.currentTarget.dataset.chartStats;
