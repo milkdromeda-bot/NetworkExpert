@@ -3,14 +3,26 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const stylesCss = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
+const importPageCss = readFileSync(new URL("../../src/import-page.css", import.meta.url), "utf8");
 const captureQualityCss = readFileSync(new URL("../../src/capture-quality.css", import.meta.url), "utf8");
 const analysisGuideCss = readFileSync(new URL("../../src/analysis-guide.css", import.meta.url), "utf8");
+const analysisWorkbenchCss = readFileSync(new URL("../../src/analysis-workbench.css", import.meta.url), "utf8");
+const analysisTableCss = readFileSync(new URL("../../src/analysis-table.css", import.meta.url), "utf8");
+const metricIntelligenceCss = readFileSync(new URL("../../src/metric-intelligence.css", import.meta.url), "utf8");
+const socketIndicatorsCss = readFileSync(new URL("../../src/socket-indicators.css", import.meta.url), "utf8");
+const advisorDiagnosisCss = readFileSync(new URL("../../src/advisor-diagnosis.css", import.meta.url), "utf8");
+const serviceMapCss = readFileSync(new URL("../../src/service-map.css", import.meta.url), "utf8");
+const alertsTemplatesCompareCss = readFileSync(new URL("../../src/alerts-templates-compare.css", import.meta.url), "utf8");
+const chartsCoreCss = readFileSync(new URL("../../src/charts-core.css", import.meta.url), "utf8");
 const chartsAdvancedCss = readFileSync(new URL("../../src/charts-advanced.css", import.meta.url), "utf8");
+const designSystemCss = readFileSync(new URL("../../src/design-system.css", import.meta.url), "utf8");
 const guideCss = readFileSync(new URL("../../src/guide.css", import.meta.url), "utf8");
+const lightModeCss = readFileSync(new URL("../../src/light-mode.css", import.meta.url), "utf8");
 const uiEnhancementsCss = readFileSync(new URL("../../src/ui-enhancements.css", import.meta.url), "utf8");
-const css = [stylesCss, captureQualityCss, analysisGuideCss, chartsAdvancedCss, guideCss, uiEnhancementsCss].join("\n");
+const css = [stylesCss, importPageCss, captureQualityCss, analysisGuideCss, analysisWorkbenchCss, analysisTableCss, metricIntelligenceCss, socketIndicatorsCss, advisorDiagnosisCss, serviceMapCss, alertsTemplatesCompareCss, chartsCoreCss, chartsAdvancedCss, designSystemCss, guideCss, lightModeCss, uiEnhancementsCss].join("\n");
 const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
+const ingestView = readFileSync(new URL("../../src/ingest-view.js", import.meta.url), "utf8");
 const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
 const ssCommandView = readFileSync(new URL("../../src/ss-command-view.js", import.meta.url), "utf8");
 const captureQualityView = readFileSync(new URL("../../src/capture-quality-view.js", import.meta.url), "utf8");
@@ -23,6 +35,15 @@ const constants = readFileSync(new URL("../../src/constants.js", import.meta.url
 const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
 const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
 const tableColumns = readFileSync(new URL("../../src/table-columns.js", import.meta.url), "utf8");
+
+test("import page and ss command builder styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/import-page\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.ss-command-warning\s*\{/);
+  assert.doesNotMatch(stylesCss, /\.ingest-source-panel\.ss-editor-theme-ocean\s*\{/);
+  assert.match(importPageCss, /\.ingest-hero\s*\{/);
+  assert.match(importPageCss, /\.ss-command-builder\s*\{/);
+  assert.match(importPageCss, /\.ss-option-detail-card\s*\{/);
+});
 
 test("capture quality report keeps its stylesheet out of the global sheet", () => {
   assert.match(indexHtml, /href="\.\/src\/capture-quality\.css\?v=20260525-1"/);
@@ -57,6 +78,84 @@ test("late UI enhancements keep their end-of-cascade stylesheet", () => {
   assert.doesNotMatch(stylesCss, /Neon theme - fluorescent on dark/);
   assert.match(uiEnhancementsCss, /Late UI enhancements and interaction polish/);
   assert.match(uiEnhancementsCss, /Reduced motion/);
+});
+
+test("design system and light mode layers are explicit stylesheets", () => {
+  assert.match(indexHtml, /href="\.\/src\/design-system\.css\?v=20260525-1"[\s\S]*href="\.\/src\/guide\.css\?v=20260525-1"[\s\S]*href="\.\/src\/light-mode\.css\?v=20260525-1"[\s\S]*href="\.\/src\/ui-enhancements\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /SmartTrade design-system inspired skin/);
+  assert.doesNotMatch(stylesCss, /LIGHT MODE/);
+  assert.match(designSystemCss, /SmartTrade design-system inspired skin/);
+  assert.match(lightModeCss, /Force white text on active blue tabs/);
+});
+
+test("analysis workbench components are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/analysis-workbench\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /Root Cause Matrix/);
+  assert.match(analysisWorkbenchCss, /Root Cause Matrix/);
+  assert.match(analysisWorkbenchCss, /\.timeline-stories\s*\{/);
+  assert.match(analysisWorkbenchCss, /\.rate-alert\s*\{/);
+});
+
+test("analysis table shell styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/analysis-table\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.table-settings-head\s*,/);
+  assert.doesNotMatch(stylesCss, /\.column-tooltip\s*\{/);
+  assert.match(analysisTableCss, /\.analysis-layout\s*\{/);
+  assert.match(analysisTableCss, /\.table-settings-head\s*,/);
+  assert.match(analysisTableCss, /\.column-tooltip\s*\{/);
+});
+
+test("metric intelligence styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/metric-intelligence\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.metric-help-detail\s*\{/);
+  assert.match(metricIntelligenceCss, /\.metric-help-detail\s*\{/);
+  assert.match(metricIntelligenceCss, /\.metric-help-thresholds\s*,/);
+  assert.match(metricIntelligenceCss, /\.metric-help-checks \.metric-help-list\s*\{/);
+});
+
+test("socket indicators and anomaly list styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/socket-indicators\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.app-service-chip\s*\{/);
+  assert.doesNotMatch(stylesCss, /\.anomaly-workbench\s*\{/);
+  assert.match(socketIndicatorsCss, /\.risk\.critical\s*\{/);
+  assert.match(socketIndicatorsCss, /\.app-service-tooltip\s*\{/);
+  assert.match(socketIndicatorsCss, /\.metric-chip\s*\{/);
+});
+
+test("diagnosis advisor card styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/advisor-diagnosis\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.advisor-shell\s*\{/);
+  assert.doesNotMatch(stylesCss, /\.diagnosis-learn-more\s*\{/);
+  assert.match(advisorDiagnosisCss, /\.advisor-shell\s*\{/);
+  assert.match(advisorDiagnosisCss, /\.diagnosis-grid\s*\{/);
+  assert.match(advisorDiagnosisCss, /\.diagnosis-learn-more\s*\{/);
+});
+
+test("service map and related modals are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/service-map\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.service-map-workbench\s*\{/);
+  assert.doesNotMatch(stylesCss, /\.topology-modal\s*\{/);
+  assert.match(serviceMapCss, /\.service-map-workbench\s*\{/);
+  assert.match(serviceMapCss, /\.service-alias-modal\s*\{/);
+  assert.match(serviceMapCss, /\.topology-modal\s*\{/);
+});
+
+test("alerts templates and compare views are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/alerts-templates-compare\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.alert-workbench\s*\{/);
+  assert.doesNotMatch(stylesCss, /\.compare-workbench\s*\{/);
+  assert.match(alertsTemplatesCompareCss, /\.alert-workbench\s*\{/);
+  assert.match(alertsTemplatesCompareCss, /\.template-workbench\s*\{/);
+  assert.match(alertsTemplatesCompareCss, /\.baseline-narrative\s*\{/);
+});
+
+test("core chart shell styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/charts-core\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.metric-token\s*\{/);
+  assert.doesNotMatch(stylesCss, /\.metric-picks\s*\{/);
+  assert.match(chartsCoreCss, /\.chart-toolbar\s*\{/);
+  assert.match(chartsCoreCss, /\.metric-token\s*\{/);
+  assert.match(chartsCoreCss, /\.chart-stats-layout\s*\{/);
 });
 
 test("table settings header stays above nearby column hover tooltips", () => {
@@ -100,17 +199,17 @@ test("application service chip tooltip stays viewport-safe and truncates labels"
 });
 
 test("import progress is shown in the ss stats header while loading", () => {
-  assert.match(main, /function renderImportStatus\(\)/);
-  assert.match(main, /<div class="panel-head[^"]*">[\s\S]*?<div class="panel-title">ss stats to parse<\/div>[\s\S]*?\$\{renderImportStatus\(\)\}/);
+  assert.match(ingestView, /function renderImportStatus\(/);
+  assert.match(ingestView, /<div class="panel-head[^"]*">[\s\S]*?<div class="panel-title">ss stats to parse<\/div>[\s\S]*?\$\{renderImportStatus\(deps\)\}/);
   assert.match(css, /\.import-status\s*\{[^}]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\);/s);
   assert.match(css, /\.import-status span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
 });
 
 test("file import flow has one clear filter entry point", () => {
-  assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open ss file<\/button>/);
-  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open ss file<\/button>[\s\S]*<button data-action="pickAutoDir"[\s\S]*Auto-detect dir<\/button>[\s\S]*<button data-action="showEditor"[\s\S]*Editor<\/button>[\s\S]*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>[\s\S]*data-action="sampleIncidentDemo"[\s\S]*See it in action/);
-  assert.doesNotMatch(main, /<button data-action="toggleSsOptions"[^>]*>[\s\S]*Capture<\/button>/);
-  assert.match(main, /data-action="copySsCommand"[\s\S]*Copy<\/button>/);
+  assert.match(ingestView, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open ss file<\/button>/);
+  assert.match(ingestView, /<button data-action="pickFile" class="primary">[\s\S]*Open ss file<\/button>[\s\S]*<button data-action="pickAutoDir"[\s\S]*Auto-detect dir<\/button>[\s\S]*<button data-action="showEditor"[\s\S]*Editor<\/button>[\s\S]*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>[\s\S]*data-action="sampleIncidentDemo"[\s\S]*See it in action/);
+  assert.doesNotMatch(ingestView, /<button data-action="toggleSsOptions"[^>]*>[\s\S]*Capture<\/button>/);
+  assert.match(ingestView, /data-action="copySsCommand"[\s\S]*Copy<\/button>/);
   assert.match(main, /toast\("ss command copied", "Paste it on the target server to collect the ss evidence\."\);/);
   assert.doesNotMatch(main, /data-action="applyCommand"/);
   assert.doesNotMatch(main, /ss command updated/);
@@ -136,7 +235,7 @@ test("file import flow has one clear filter entry point", () => {
 });
 
 test("capture helper card aligns title and explanation cleanly", () => {
-  assert.match(main, /<div class="capture-flow-card">\s*<i class="ri-route-line" aria-hidden="true"><\/i>\s*<div class="capture-flow-copy">/s);
+  assert.match(ingestView, /<div class="capture-flow-card">\s*<i class="ri-route-line" aria-hidden="true"><\/i>\s*<div class="capture-flow-copy">/s);
   assert.match(css, /\.capture-flow-card\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
   assert.match(css, /\.capture-flow-copy\s*\{[^}]*display:\s*grid;[^}]*gap:\s*3px;[^}]*min-width:\s*0;/s);
   assert.match(css, /\.capture-flow-card strong\s*\{[^}]*display:\s*block;[^}]*line-height:\s*1\.25;/s);
@@ -157,7 +256,7 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /function updateSsCommandValidation\(validation\)/);
   assert.match(main, /input\?\.setCustomValidity\(result\.valid === false \? result\.message : ""\);/);
   assert.doesNotMatch(main, /placeholder="192\.168\.145\.205"/);
-  assert.match(main, /data-action="loadSsCommandEndpointExample"/);
+  assert.match(ingestView, /data-action="loadSsCommandEndpointExample"/);
   assert.doesNotMatch(main, /market-data example/);
   assert.doesNotMatch(main, /lfxbench_tcp-laloRcvMarketSimu/);
   assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"1"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
@@ -181,10 +280,10 @@ test("ss command panel exposes aligned collection parameters", () => {
 });
 
 test("ss command panel is isolated from the raw editor view", () => {
-  assert.match(main, /<div class="ingest-ss-command-panel">[\s\S]*\$\{renderSsCommandBuilder\(\)\}[\s\S]*data-action="copySsCommand"/);
-  assert.match(main, /data-action="showEditor"[\s\S]*Editor/);
-  assert.match(main, /function renderIngestEditor\(\)/);
-  assert.match(main, /activePanel === "capture" \? `<div class="ingest-ss-command-panel">[\s\S]*` : renderIngestEditor\(\)/);
+  assert.match(ingestView, /<div class="ingest-ss-command-panel">[\s\S]*\$\{renderSsCommandBuilder\(\)\}[\s\S]*data-action="copySsCommand"/);
+  assert.match(ingestView, /data-action="showEditor"[\s\S]*Editor/);
+  assert.match(ingestView, /function renderIngestEditor\(/);
+  assert.match(ingestView, /activePanel === "capture" \? `<div class="ingest-ss-command-panel">[\s\S]*` : renderIngestEditor\(deps\)/);
 });
 
 test("topbar anomaly pill uses a compact warning icon", () => {
@@ -196,7 +295,7 @@ test("topbar anomaly pill uses a compact warning icon", () => {
 });
 
 test("clear input and reset workspace actions are visually distinct", () => {
-  assert.match(main, /data-action="clear" class="clear-input-button"[^>]*>[\s\S]*Clear/);
+  assert.match(ingestView, /data-action="clear" class="clear-input-button"[^>]*>[\s\S]*Clear/);
   assert.match(main, /data-action="requestResetWorkspace"[^>]*aria-label="Reset workspace"/);
   assert.match(main, /action === "requestResetWorkspace"[\s\S]*state\.modal = "resetWorkspace"/);
   assert.match(main, /action === "confirmResetWorkspace"[\s\S]*resetAllState\(\)/);
@@ -235,14 +334,14 @@ test("ss editor offers calm themes and defaults to pastel", () => {
   assert.match(constants, /\{ id: "contrast", label: "Contrast"/);
   assert.match(main, /function normalizeSsEditorTheme\(value\)/);
   assert.match(main, /prefs\.ssEditorTheme = normalizeSsEditorTheme\(prefs\.ssEditorTheme\)/);
-  assert.match(main, /data-action="toggleSsEditorThemeMenu"/);
-  assert.match(main, /data-ss-editor-theme-preview/);
+  assert.match(ingestView, /data-action="toggleSsEditorThemeMenu"/);
+  assert.match(ingestView, /data-ss-editor-theme-preview/);
   assert.match(main, /function applySsEditorThemePreview\(value\)/);
   assert.match(main, /const preview = event => \{[\s\S]*applySsEditorThemePreview\(event\.currentTarget\.dataset\.ssEditorThemePreview\);/);
   assert.match(main, /button\.addEventListener\("pointerenter", preview\);/);
   assert.match(main, /data-ss-editor-theme-preview[\s\S]*syncFromCodeMirror\(\);[\s\S]*savePrefs\(\);[\s\S]*renderKeepingWorkspacePosition\(\);/);
   assert.doesNotMatch(main, /<select id="ssEditorThemeSelect"/);
-  assert.match(main, /class="panel ingest-source-panel ss-editor-theme-\$\{escapeHtml\(editorTheme\)\}"/);
+  assert.match(ingestView, /class="panel ingest-source-panel ss-editor-theme-\$\{escapeHtml\(editorTheme\)\}"/);
   assert.match(css, /\.ingest-source-panel\s*\{[^}]*--ss-editor-keyword:\s*#a7c7b5;[^}]*--ss-editor-string:\s*#c8b28a;/s);
   assert.match(css, /\.ingest-source-panel\.ss-editor-theme-ocean\s*\{/);
   assert.match(css, /\.ingest-source-panel\.ss-editor-theme-mono\s*\{/);

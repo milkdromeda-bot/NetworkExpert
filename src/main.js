@@ -47,6 +47,9 @@ import { createGuideView } from "./guide-view.js";
 import { createModalView } from "./modal-view.js";
 import { downloadBlob, drawPdfSection, drawPdfTextBlock, reportChartDataUrl, svgToPngBlob } from "./report-utils.js";
 import { buildAdvisorFindings as buildAdvisorFindingsModel } from "./advisor-findings.js";
+import { buildPrintableIncidentReportHtml } from "./printable-incident-report.js";
+import { buildJiraReport as buildJiraReportModel } from "./jira-report.js";
+import { renderIngestPage as renderIngestPageView } from "./ingest-view.js";
 
 const TABLE_COLUMNS = createTableColumns({
   riskRank,
@@ -2578,152 +2581,27 @@ function renderKeepingModalPosition() {
   }
 }
 
-function renderIngestEditor() {
-  const editorThemePicker = renderSsEditorThemePicker();
-  if (!state.raw && !state.showEditor) {
-    return `<div class="drop-zone" id="fileDropZone">
-        <p style="margin:0 0 16px;color:var(--soft)">Upload ss capture in .txt, .log, .gz, or .zip format</p>
-        <i class="ri-upload-cloud-2-fill drop-icon"></i>
-        <span class="drop-label">Drag & Drop</span>
-        <span class="drop-or">or</span>
-        <button class="drop-btn" data-action="pickFile"><i class="ri-lock-line"></i> Select a file</button>
-        <button data-action="showRawEditor" style="margin-top:18px;background:none!important;border:none!important;box-shadow:none!important;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer">or paste raw text</button>
-      </div>`;
-  }
-  return `<div class="cm-search-hints">
-        <span>Quick find:</span>
-        <button data-cm-search="ESTAB">ESTAB</button>
-        <button data-cm-search="CLOSE-WAIT">CLOSE-WAIT</button>
-        <button data-cm-search="TIME-WAIT">TIME-WAIT</button>
-        <button data-cm-search="backoff">backoff</button>
-        <button data-cm-search="retrans">retrans</button>
-        <button data-cm-search="skmem">skmem</button>
-        <button data-cm-search="rtt:">rtt:</button>
-        <button data-cm-search="rto:">rto:</button>
-        <button data-cm-search="cwnd:">cwnd:</button>
-        <button data-cm-search="drops">d[1-9]</button>
-        <span style="margin-left:auto">${editorThemePicker}</span>
-      </div>
-      <div id="cmContainer" class="cm-container"></div>`;
-}
-
-function renderImportStatus() {
-  if (!state.importStatus) return "";
-  return `<div class="import-status" role="status" aria-live="polite">
-    <strong>${escapeHtml(state.importStatus.title)}</strong>
-    <span>${escapeHtml(state.importStatus.detail)}</span>
-    <progress value="${escapeHtml(state.importStatus.progress ?? 0)}" max="100"></progress>
-  </div>`;
-}
-
-function renderSsEditorThemePicker() {
-  const currentTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
-  const currentLabel = SS_EDITOR_THEMES.find(theme => theme.id === currentTheme)?.label || "Pastel";
-  return `<div class="ss-theme-picker ${state.openSsEditorThemeMenu ? "open" : ""}" data-ss-theme-picker>
-    <span>Theme</span>
-    <button type="button" class="ss-theme-toggle" data-action="toggleSsEditorThemeMenu" aria-haspopup="listbox" aria-expanded="${state.openSsEditorThemeMenu ? "true" : "false"}" title="Preview ss editor themes">
-      <strong>${escapeHtml(currentLabel)}</strong>
-      <i class="ri-arrow-down-s-line"></i>
-    </button>
-    <div class="ss-theme-menu" role="listbox" aria-label="SS editor color theme">
-      ${SS_EDITOR_THEMES.map(theme => `<button type="button" role="option" data-ss-editor-theme-preview="${escapeHtml(theme.id)}" aria-selected="${currentTheme === theme.id ? "true" : "false"}" class="${currentTheme === theme.id ? "active" : ""}" title="${escapeHtml(theme.title)}">${escapeHtml(theme.label)}</button>`).join("")}
-    </div>
-  </div>`;
+function ingestViewDependencies() {
+  return {
+    state,
+    html,
+    icons,
+    escapeHtml,
+    formatNumber,
+    commandCoverage,
+    ssOptions: SS_OPTIONS,
+    ssEditorThemes: SS_EDITOR_THEMES,
+    selectedSsOption,
+    normalizeSsEditorTheme,
+    renderSsCommandBuilder,
+    renderSsOptionChip,
+    renderSsOptionControl,
+    renderSsOptionDetail
+  };
 }
 
 function renderIngestPage() {
-  const coverage = commandCoverage(state.command, SS_OPTIONS);
-  const active = coverage.filter(o => o.active);
-  const best = ["-H", "-O", "-n", "-t", "-e", "-p", "-m", "-i", "--tos", "--cgroup", "--inet-sockopt", "-a", "-A"];
-  const featuredOptions = SS_OPTIONS.filter(o => best.includes(o[0]) || best.includes(o[1]));
-  const selectedOption = selectedSsOption(featuredOptions, active);
-  const activePanel = state.showSsOptions ? "capture" : null;
-  const editorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
-  return html`
-    <section class="ingest-hero">
-      <div style="display:flex;align-items:center;gap:12px">
-        <h2 style="margin:0">Import</h2>
-        <span style="font-size:11px;color:var(--muted)">Supported: <strong>ss</strong> · <strong>GC log</strong> · <strong>vmstat</strong> · <strong>nstat</strong> · <strong>FIX logs</strong> — use Auto-detect dir to load all at once</span>
-      </div>
-    </section>
-    <section class="panel ingest-source-panel ss-editor-theme-${escapeHtml(editorTheme)}">
-      <div class="panel-head ingest-source-head">
-        <div class="panel-title">ss stats to parse</div>
-        ${renderImportStatus()}
-        <span class="status-pill">${escapeHtml(state.sourceName)}</span>
-      </div>
-      <div class="panel-body">
-        <div class="ingest-toolbar">
-          <input id="fileInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip,text/plain,application/gzip,application/zip" hidden />
-          <input id="ingestGcFileInput" type="file" accept=".log,.txt" style="display:none"/>
-          <input id="ingestVmstatFileInput" type="file" accept=".log,.txt,.out" style="display:none"/>
-          <input id="ingestNstatFileInput" type="file" accept=".log,.txt,.out" style="display:none"/>
-          <input id="ingestFixFileInput" type="file" accept=".log,.txt,.gz,.zip" multiple style="display:none"/>
-          <input id="ingestFixDirInput" type="file" webkitdirectory style="display:none"/>
-          <input id="ingestAutoDir" type="file" webkitdirectory style="display:none"/>
-          <input id="ingestPeerSsInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip" style="display:none"/>
-          <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open ss file</button>
-          <button data-action="pickAutoDir" title="Load a directory — auto-detects ss, FIX, GC, vmstat, nstat files"><i class="ri-folder-search-line"></i> Auto-detect dir</button>
-          <span class="ingest-extra-sources">
-            <button data-action="pickJvmGcFile" class="${state.jvmGc.pauses.length ? "chip-loaded" : ""}" title="Load GC log for JVM stall correlation"><i class="ri-recycle-line"></i> GC${state.jvmGc.pauses.length ? ` ${state.jvmGc.pauses.length}` : ""}</button>
-            <button data-action="pickFixVmstatFile" class="${state.fixLatency.vmstat?.length ? "chip-loaded" : ""}" title="Load vmstat for CPU correlation"><i class="ri-cpu-line"></i> vmstat${state.fixLatency.vmstat?.length ? ` ${state.fixLatency.vmstat.length}s` : ""}</button>
-            <button data-action="pickFixNstatFile" class="${state.fixLatency.nstat?.length ? "chip-loaded" : ""}" title="Load nstat for kernel TCP counter correlation"><i class="ri-bar-chart-line"></i> nstat${state.fixLatency.nstat?.length ? ` ${state.fixLatency.nstat.length}s` : ""}</button>
-            <button data-action="pickFixFile" class="${state.fixLatency.records.length ? "chip-loaded" : ""}" title="Load FIX log files or directory"><i class="ri-exchange-line"></i> FIX${state.fixLatency.records.length ? ` ${formatNumber(state.fixLatency.records.length)}` : ""}</button>
-            <button data-action="pickPeerSs" class="${state.peerCapture.sockets.length ? "chip-loaded" : ""}" title="Load ss from the peer/remote side for multi-host correlation"><i class="ri-links-line"></i> Peer ss${state.peerCapture.sockets.length ? " ✓" : ""}</button>
-          </span>
-          <span class="ingest-toolbar-divider"></span>
-          <div class="pill-toggle" data-active="${activePanel === "capture" ? "1" : "0"}">
-            <div class="pill-slider"></div>
-            <button data-action="showEditor" class="${activePanel !== "capture" ? "active" : ""}"><i class="ri-edit-line"></i> Editor</button>
-            <button data-action="toggleSsOptions" class="${activePanel === "capture" ? "active" : ""}"><i class="ri-command-line"></i> ss command</button>
-          </div>
-          <span class="demo-btn-wrap">
-            <button data-action="sampleIncidentDemo" class="demo-btn"><i class="ri-fire-line"></i> See it in action</button>
-            <div class="demo-tooltip">
-              <strong>Multi-Source Correlation Demo</strong>
-              <ul>
-                <li><i class="ri-exchange-line"></i> FIX price feed with latency spikes (5-50ms)</li>
-                <li><i class="ri-recycle-line"></i> GC pauses causing message backlog</li>
-                <li><i class="ri-cpu-line"></i> vmstat: CPU runqueue spikes during GC</li>
-                <li><i class="ri-bar-chart-line"></i> nstat: retransmissions correlating with lag</li>
-                <li><i class="ri-wifi-line"></i> ss: Recv-Q rise + RTT spike on FIX socket</li>
-                <li><i class="ri-pie-chart-line"></i> Root cause: GC + Network + CPU breakdown</li>
-              </ul>
-              <small>Loads ss + GC + vmstat + nstat + FIX data. All tabs activate.</small>
-            </div>
-          </span>
-          <span class="ingest-toolbar-spacer"></span>
-          <button data-action="toggleWordWrap" class="${state.editorWordWrap ? "primary" : ""}" title="Toggle word wrap"><i class="ri-text-wrap"></i> Wrap</button>
-          <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
-          <button data-action="parse" title="Re-analyze current text"><i class="ri-play-line"></i> Analyze</button>
-        </div>
-        ${activePanel === "capture" ? `<div class="ingest-ss-command-panel">
-            <div class="capture-flow-card">
-              <i class="ri-route-line" aria-hidden="true"></i>
-              <div class="capture-flow-copy">
-                <strong>Collection first, parsing second</strong>
-                <span>Build the <code>ss</code> command before import. <b>Analyze</b> parses the text already in the box.</span>
-              </div>
-              <button type="button" class="ss-command-example" data-action="loadSsCommandEndpointExample" style="margin-left:auto;white-space:nowrap"><i class="ri-magic-line"></i> Fill endpoint example</button>
-            </div>
-            ${renderSsCommandBuilder()}
-            <div class="command-row">
-              <input id="commandInput" value="${escapeHtml(state.command)}" spellcheck="false" />
-              <button class="primary" data-action="copySsCommand" title="Copy command">${icons.copy} Copy</button>
-            </div>
-            <div class="chips">${active.map(renderSsOptionChip).join("") || `<span class="chip">no option detected</span>`}</div>
-            <div class="ss-option-card-layout">
-              <div class="option-grid" aria-label="ss option toggles">
-                ${featuredOptions.map(option => renderSsOptionControl(option, coverage, selectedOption?.key)).join("")}
-              </div>
-              ${selectedOption ? renderSsOptionDetail(selectedOption) : ""}
-            </div>
-            </div>
-          </div>` : renderIngestEditor()}
-      </div>
-    </section>
-
-  `;
+  return renderIngestPageView(ingestViewDependencies());
 }
 
 function renderAnalysisPage() {
@@ -7844,69 +7722,19 @@ function buildReportChartSvg(metric, width = 760, height = 280) {
   return svg;
 }
 
+function jiraReportDependencies() {
+  return {
+    state,
+    reportVisibleSockets,
+    reportRelevantAnomalies,
+    diagnosticHypotheses,
+    reportTopSockets,
+    appVersion: APP_VERSION
+  };
+}
+
 function buildJiraReport() {
-  const sockets = reportVisibleSockets();
-  const anomalies = reportRelevantAnomalies(sockets);
-  const hypotheses = diagnosticHypotheses();
-  const now = new Date().toISOString();
-  const lines = [];
-  lines.push(`h1. Network Incident Report`);
-  lines.push(`*Source:* ${state.sourceName}`);
-  lines.push(`*Generated:* ${now}`);
-  lines.push(`*Sockets:* ${sockets.length} | *Anomalies:* ${anomalies.length} | *Critical:* ${sockets.filter(s => s.risk === "critical").length}`);
-  lines.push("");
-  // Hypotheses
-  if (hypotheses.length) {
-    lines.push(`h2. Diagnostic Hypotheses`);
-    for (const h of hypotheses) {
-      lines.push(`h3. ${h.severity.toUpperCase()} - ${h.title} (${Math.round((h.confidenceScore || 0) * 100)}% confidence)`);
-      lines.push(h.summary);
-      if (h.evidence.length) {
-        lines.push(`*Evidence:*`);
-        h.evidence.forEach(e => lines.push(`* ${e}`));
-      }
-      if (h.counterEvidence.length) {
-        lines.push(`*Counter-evidence:*`);
-        h.counterEvidence.forEach(e => lines.push(`* ${e}`));
-      }
-      if (h.actionableCommands?.length) {
-        lines.push(`*Actionable commands:*`);
-        lines.push(`{code}`);
-        h.actionableCommands.forEach(c => lines.push(c));
-        lines.push(`{code}`);
-      }
-      lines.push("");
-    }
-  }
-  // Top anomalies
-  if (anomalies.length) {
-    lines.push(`h2. Top Anomalies`);
-    lines.push(`||Severity||Socket||Title||`);
-    anomalies.slice(0, 15).forEach(a => {
-      lines.push(`|${a.severity}|${a.socketId}|${a.title}|`);
-    });
-    lines.push("");
-  }
-  // Top sockets
-  const topSockets = reportTopSockets(sockets, 5);
-  if (topSockets.length) {
-    lines.push(`h2. Top Affected Sockets`);
-    lines.push(`||Local||Peer||State||Send-Q||Recv-Q||RTT||`);
-    topSockets.forEach(s => {
-      lines.push(`|${s.local}|${s.peer}|${s.state}|${s.sendQ}|${s.recvQ}|${s.details?.rtt || 0}ms|`);
-    });
-    lines.push("");
-  }
-  // Validation commands
-  lines.push(`h2. Validation Commands`);
-  lines.push(`{code}`);
-  lines.push(`ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all`);
-  if (hypotheses[0]?.commands?.length) hypotheses[0].commands.slice(0, 3).forEach(c => lines.push(c));
-  lines.push(`{code}`);
-  lines.push("");
-  lines.push(`----`);
-  lines.push(`_Generated by Ultimate Network Expert v${APP_VERSION}_`);
-  return lines.join("\n");
+  return buildJiraReportModel(jiraReportDependencies());
 }
 
 function captureIncidentReportCharts(limit = 5) {
@@ -8043,330 +7871,47 @@ function reportAnnotations(socket = selectedSocket()) {
   return currentSourceAnnotations(null, socket?.id || annotationSocketId(), visibleHistory());
 }
 
+function printableIncidentReportDependencies() {
+  return {
+    state,
+    reportVisibleSockets,
+    selectedSocket,
+    microburstSummary,
+    reportRelevantAnomalies,
+    reportTopSockets,
+    reportPercentileTable,
+    reportFindings,
+    reportAnnotations,
+    reportFilterTokens,
+    buildComparison,
+    anomaliesBySocketId,
+    metricLabel,
+    socketsById,
+    formatNumber,
+    resolvedNumberLocale,
+    resolvedTimeZone,
+    linuxProfileLabel,
+    accessRoleLabel,
+    escapeHtml,
+    buildAiSummary,
+    buildRootCauseMatrix,
+    cachedStories,
+    cachedMultiSocket,
+    cachedRateAlerts,
+    captureQualityReport,
+    diagnosticHypotheses,
+    buildBaselineNarrative,
+    formatMetricValue,
+    metricValue,
+    socketBandwidth,
+    annotationTypeLabel,
+    timeLabel,
+    formatMicroburstWindow
+  };
+}
+
 function buildIncidentReportHtml(chartCaptures = []) {
-  const sockets = reportVisibleSockets();
-  const selected = selectedSocket();
-  const microburst = microburstSummary();
-  const anomalies = reportRelevantAnomalies(sockets);
-  const topSockets = reportTopSockets(sockets, 10);
-  const percentiles = reportPercentileTable(sockets);
-  const findings = reportFindings(5);
-  const annotations = reportAnnotations(selected);
-  const filters = reportFilterTokens();
-  const comparison = state.baseline ? buildComparison() : null;
-  const now = new Date();
-  const selectedAnomalies = selected ? anomaliesBySocketId().get(selected.id) || [] : [];
-  const topMetric = selectedAnomalies[0]?.metric ? metricLabel(selectedAnomalies[0].metric) : "none";
-  const socketLookup = socketsById();
-  const summaryCards = [
-    ["Source", state.sourceName],
-    ["Visible sockets", formatNumber(sockets.length)],
-    ["Relevant anomalies", formatNumber(anomalies.length)],
-    ["Critical sockets", formatNumber(sockets.filter(socket => socket.risk === "critical").length)],
-    ["Generated", now.toLocaleString(resolvedNumberLocale(), { timeZone: resolvedTimeZone() })],
-    ["Profile", `${linuxProfileLabel()} / ${accessRoleLabel()}`]
-  ];
-  if (microburst) summaryCards.splice(4, 0, ["Microburst", microburst.severity]);
-  const reportCss = `
-    :root { color-scheme: light; --ink:#142033; --muted:#536273; --line:#d7e0ea; --panel:#f6f9fc; --accent:#0d6d9f; --danger:#b42338; --warn:#b26a00; --good:#147a52; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:Segoe UI, Arial, sans-serif; color:var(--ink); background:#eef3f8; }
-    .report-shell { max-width:1180px; margin:0 auto; padding:24px; }
-    .report-actions { display:flex; gap:10px; justify-content:flex-end; margin-bottom:18px; }
-    .report-actions button { border:1px solid #b8c7d8; background:white; color:var(--ink); border-radius:8px; min-height:38px; padding:0 14px; cursor:pointer; font-weight:700; }
-    .report-card, .report-table-wrap { background:white; border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 24px rgba(9, 30, 66, .06); }
-    .report-header { padding:22px; display:grid; gap:14px; }
-    .report-kicker { color:var(--accent); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
-    .report-header h1 { margin:0; font-size:30px; }
-    .report-header p { margin:0; color:var(--muted); line-height:1.5; }
-    .report-meta { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
-    .report-meta article { padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--panel); display:grid; gap:6px; }
-    .report-meta span { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
-    .report-meta strong { font-size:20px; }
-    .report-grid { display:grid; gap:16px; margin-top:16px; }
-    .report-section { padding:18px 20px; display:grid; gap:14px; }
-    .report-section h2 { margin:0; font-size:21px; }
-    .report-section h3 { margin:0; font-size:16px; }
-    .report-summary-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
-    .report-summary-grid article { padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--panel); display:grid; gap:5px; }
-    .report-summary-grid span { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
-    .report-summary-grid strong { font-size:20px; }
-    .report-code { margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font-family:Consolas, monospace; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
-    .token-row { display:flex; flex-wrap:wrap; gap:8px; }
-    .token { display:inline-flex; align-items:center; min-height:28px; padding:4px 10px; border:1px solid var(--line); border-radius:999px; background:var(--panel); color:var(--ink); font-size:12px; }
-    .report-columns { display:grid; grid-template-columns:1.1fr .9fr; gap:14px; }
-    .report-list { display:grid; gap:10px; }
-    .report-list article { padding:12px 14px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:10px; background:var(--panel); }
-    .report-list article.critical { border-left-color:var(--danger); }
-    .report-list article.high { border-left-color:#d97706; }
-    .report-list article.medium { border-left-color:var(--warn); }
-    .report-list article.low { border-left-color:var(--good); }
-    .report-list header { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
-    .report-list p { margin:6px 0 0; color:var(--muted); line-height:1.45; }
-    .report-chart-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
-    .report-chart-card { padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--panel); display:grid; gap:10px; break-inside:avoid; }
-    .report-chart-card.hero { grid-column:1 / -1; }
-    .report-chart-card header { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
-    .report-chart-card figure { margin:0; display:grid; gap:8px; }
-    .report-chart-card img { width:100%; border:1px solid var(--line); border-radius:10px; background:#050910; }
-    .report-chart-card figcaption { color:var(--muted); font-size:12px; line-height:1.45; }
-    table { width:100%; border-collapse:collapse; }
-    th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; font-size:13px; }
-    th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
-    tr:last-child td, tr:last-child th { border-bottom:0; }
-    .severity { font-weight:800; text-transform:uppercase; }
-    .severity.critical { color:var(--danger); }
-    .severity.high { color:#d97706; }
-    .severity.medium { color:var(--warn); }
-    .severity.low { color:var(--good); }
-    .flow { font-family:Consolas, monospace; font-size:12px; }
-    .small { color:var(--muted); font-size:12px; }
-    .report-footer { padding:18px 20px; color:var(--muted); font-size:12px; line-height:1.5; }
-    @media print {
-      body { background:white; }
-      .report-shell { max-width:none; padding:0; }
-      .report-actions { display:none; }
-      .report-card, .report-table-wrap { box-shadow:none; break-inside:avoid; }
-      .report-grid { gap:12px; }
-      @page { size:A4 portrait; margin:12mm; }
-    }
-    @media (max-width: 980px) {
-      .report-meta,
-      .report-summary-grid,
-      .report-columns,
-      .report-chart-grid { grid-template-columns:1fr; }
-      .report-chart-card.hero { grid-column:auto; }
-    }
-  `;
-  const html = `
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8"/>
-        <title>NetworkExpert Incident Report - ${escapeHtml(state.sourceName)}</title>
-        <style>${reportCss}</style>
-      </head>
-      <body>
-        <div class="report-shell">
-          <div class="report-actions">
-            <button onclick="window.print()">Print / Save as PDF</button>
-            <button onclick="window.close()">Close</button>
-          </div>
-          <section class="report-card report-header">
-            <span class="report-kicker">Network incident report</span>
-            <div>
-              <h1>${escapeHtml(state.sourceName)}</h1>
-              <p>Prepared from the current NetworkExpert workspace. This report reflects the current parsed sockets, active filters, anomaly set, visible chart evidence, and optional baseline comparison.</p>
-            </div>
-            <div class="report-meta">
-              ${summaryCards.map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`).join("")}
-            </div>
-          </section>
-
-          <section class="report-card report-section" style="border-left:4px solid var(--accent)">
-            <h2>Summary</h2>
-            <p style="font-size:14px;line-height:1.7">${escapeHtml(buildAiSummary({ matrix: buildRootCauseMatrix(state.sockets), stories: cachedStories(), multiSocket: cachedMultiSocket(), rateAlerts: cachedRateAlerts(), captureQuality: captureQualityReport(), hypotheses: diagnosticHypotheses(), comparison: state.baseline ? buildBaselineNarrative(buildComparison(), state.baseline.anomalies || [], state.anomalies) : null }))}</p>
-          </section>
-
-          <div class="report-grid">
-            <section class="report-card report-section">
-              <h2>Scope and Context</h2>
-              <div class="report-summary-grid">
-                <article><span>Active tab</span><strong>${escapeHtml(state.activeTab || "sockets")}</strong></article>
-                <article><span>Timezone</span><strong>${escapeHtml(resolvedTimeZone())}</strong></article>
-                <article><span>Filtered sockets in report</span><strong>${escapeHtml(formatNumber(sockets.length))}</strong></article>
-              </div>
-              <div>
-                <h3>ss command</h3>
-                <pre class="report-code">${escapeHtml(state.command || "n/a")}</pre>
-              </div>
-              <div>
-                <h3>Applied filters</h3>
-                ${filters.length ? `<div class="token-row">${filters.map(token => `<span class="token">${escapeHtml(token)}</span>`).join("")}</div>` : `<p class="small">No table filter is currently applied.</p>`}
-              </div>
-              ${selected ? `<div>
-                <h3>Active investigation</h3>
-                <p><strong>${escapeHtml(selected.local)} -> ${escapeHtml(selected.peer)}</strong></p>
-                <p class="small">${escapeHtml(state.activeContextReason || "Selected context")} / ${escapeHtml(selected.family)} / ${escapeHtml(selected.state)} / ${escapeHtml(selected.details.process ? `${selected.details.process.name}:${selected.details.process.pid}` : "unknown process")}</p>
-                <div class="token-row">
-                  <span class="token">risk ${escapeHtml(selected.risk)}</span>
-                  <span class="token">RTT ${escapeHtml(formatMetricValue("rtt", metricValue(selected, "rtt")))}</span>
-                  <span class="token">RTO ${escapeHtml(formatMetricValue("rto", metricValue(selected, "rto")))}</span>
-                  <span class="token">Send-Q ${escapeHtml(formatMetricValue("sendQ", selected.sendQ))}</span>
-                  <span class="token">Recv-Q ${escapeHtml(formatMetricValue("recvQ", selected.recvQ))}</span>
-                  <span class="token">Top anomaly metric ${escapeHtml(topMetric)}</span>
-                </div>
-              </div>` : ""}
-            </section>
-
-            <section class="report-card report-section">
-              <h2>Priority Findings</h2>
-              <div class="report-columns">
-                <div>
-                  <h3>Top anomalies in current scope</h3>
-                  ${anomalies.length ? `<div class="report-list">
-                    ${anomalies.slice(0, 8).map(item => {
-                      const socket = socketLookup.get(item.socketId);
-                      return `<article class="${escapeHtml(item.severity)}">
-                        <header>
-                          <strong>${escapeHtml(item.title)}</strong>
-                          <span class="severity ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
-                        </header>
-                        <div class="small">${escapeHtml(metricLabel(item.metric || "socket"))}</div>
-                        ${socket ? `<div class="flow">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</div>` : ""}
-                        <p>${escapeHtml(item.detail)}</p>
-                      </article>`;
-                    }).join("")}
-                  </div>` : `<p class="small">No anomaly is currently in scope.</p>`}
-                </div>
-                <div>
-                  <h3>Advisor recommendations</h3>
-                  ${findings.length ? `<div class="report-list">
-                    ${findings.map(item => `<article class="${escapeHtml(item.severity)}">
-                      <header>
-                        <strong>${escapeHtml(item.title)}</strong>
-                        <span class="severity ${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
-                      </header>
-                      <p>${escapeHtml(item.summary)}</p>
-                    </article>`).join("")}
-                  </div>` : `<p class="small">No prioritized advisor finding is available yet.</p>`}
-                </div>
-              </div>
-            </section>
-
-            ${annotations.length ? `<section class="report-card report-section">
-              <h2>Annotations</h2>
-              <div class="report-list">
-                ${annotations.map(item => `<article class="${escapeHtml(item.kind === "failover" ? "high" : item.kind === "rtt-peak" ? "medium" : "low")}">
-                  <header>
-                    <strong>${escapeHtml(item.label)}</strong>
-                    <span class="token">${escapeHtml(annotationTypeLabel(item.kind))}</span>
-                  </header>
-                  <div class="small">${escapeHtml(item.metric === "*" ? "Socket-wide" : metricLabel(item.metric))} * ${escapeHtml(timeLabel(0, item.resolvedEpochMs))}</div>
-                  ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
-                </article>`).join("")}
-              </div>
-            </section>` : ""}
-
-            ${microburst ? `<section class="report-card report-section">
-              <h2>Microburst Detection</h2>
-              <div class="report-summary-grid">
-                <article><span>Window</span><strong>${escapeHtml(formatMicroburstWindow(microburst))}</strong></article>
-                <article><span>Peak RX</span><strong>${escapeHtml(formatMetricValue("rx_bps", microburst.peakRxBps))}</strong></article>
-                <article><span>Peak Recv-Q</span><strong>${escapeHtml(formatMetricValue("recvQ", microburst.peakRecvQ))}</strong></article>
-                <article><span>Peak skmem.r</span><strong>${escapeHtml(formatMetricValue("skmem.r", microburst.peakSkmemR))}</strong></article>
-                <article><span>New drops</span><strong>${escapeHtml(formatMetricValue("skmem.d", microburst.dropDeltaTotal))}</strong></article>
-                <article><span>Peak drop cadence</span><strong>${escapeHtml(formatMetricValue("skmem.d_rate", microburst.peakDropRate))}</strong></article>
-              </div>
-              <p class="small">A short receive-side pressure window was detected on the selected flow. The charts in this report include the same highlighted microburst band to keep the visual evidence aligned with the written summary.</p>
-            </section>` : ""}
-
-            ${chartCaptures.length ? `<section class="report-card report-section">
-              <h2>Chart Evidence</h2>
-              <div class="report-chart-grid">
-                ${chartCaptures.map(item => `<article class="report-chart-card ${item.hero ? "hero" : ""}">
-                  <header>
-                    <h3>${escapeHtml(item.title)}</h3>
-                    <span class="token">${escapeHtml(metricLabel(item.metric))}</span>
-                  </header>
-                  <figure>
-                    <img src="${item.image}" alt="${escapeHtml(item.title)}"/>
-                    <figcaption>${escapeHtml(item.context)}</figcaption>
-                  </figure>
-                </article>`).join("")}
-              </div>
-            </section>` : ""}
-
-            <section class="report-card report-section">
-              <h2>Top Flows</h2>
-              <div class="report-table-wrap">
-                <table>
-                  <thead>
-                    <tr><th>Risk</th><th>Flow</th><th>Process</th><th>RTT</th><th>RTO</th><th>Send-Q</th><th>Recv-Q</th><th>Drops</th><th>TX</th><th>RX</th></tr>
-                  </thead>
-                  <tbody>
-                    ${topSockets.map(socket => `<tr>
-                      <td><span class="severity ${escapeHtml(socket.risk)}">${escapeHtml(socket.risk)}</span></td>
-                      <td class="flow">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</td>
-                      <td>${escapeHtml(socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "-")}</td>
-                      <td>${escapeHtml(formatMetricValue("rtt", metricValue(socket, "rtt")))}</td>
-                      <td>${escapeHtml(formatMetricValue("rto", metricValue(socket, "rto")))}</td>
-                      <td>${escapeHtml(formatMetricValue("sendQ", socket.sendQ))}</td>
-                      <td>${escapeHtml(formatMetricValue("recvQ", socket.recvQ))}</td>
-                      <td>${escapeHtml(formatMetricValue("skmem.d", metricValue(socket, "skmem.d")))}</td>
-                      <td>${escapeHtml(formatMetricValue("tx_bps", socketBandwidth(socket, "tx_bps")))}</td>
-                      <td>${escapeHtml(formatMetricValue("rx_bps", socketBandwidth(socket, "rx_bps")))}</td>
-                    </tr>`).join("")}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section class="report-card report-section">
-              <h2>Distribution Summary</h2>
-              <div class="report-table-wrap">
-                <table>
-                  <thead>
-                    <tr><th>Metric</th><th>Samples</th><th>P50</th><th>P90</th><th>P99</th><th>Max</th></tr>
-                  </thead>
-                  <tbody>
-                    ${percentiles.map(row => `<tr>
-                      <td>${escapeHtml(metricLabel(row.metric))}</td>
-                      <td>${escapeHtml(formatNumber(row.stats.count))}</td>
-                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.p50))}</td>
-                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.p90))}</td>
-                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.p99))}</td>
-                      <td>${escapeHtml(formatMetricValue(row.metric, row.stats.max))}</td>
-                    </tr>`).join("")}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            ${comparison ? `<section class="report-card report-section">
-              <h2>Baseline Comparison</h2>
-              <div class="report-summary-grid">
-                <article><span>Before</span><strong>${escapeHtml(formatNumber(comparison.summary.before))}</strong></article>
-                <article><span>After</span><strong>${escapeHtml(formatNumber(comparison.summary.after))}</strong></article>
-                <article><span>New / Gone</span><strong>${escapeHtml(`${formatNumber(comparison.summary.added)} / ${formatNumber(comparison.summary.removed)}`)}</strong></article>
-                <article><span>Worse</span><strong>${escapeHtml(formatNumber(comparison.summary.worsened))}</strong></article>
-                <article><span>Improved</span><strong>${escapeHtml(formatNumber(comparison.summary.improved))}</strong></article>
-                <article><span>Baseline source</span><strong>${escapeHtml(state.baseline.sourceName)}</strong></article>
-              </div>
-              <div class="report-table-wrap">
-                <table>
-                  <thead>
-                    <tr><th>Status</th><th>Flow</th><th>Risk</th><th>Send-Q delta</th><th>Recv-Q delta</th><th>RTT delta</th><th>RTO delta</th><th>Drops delta</th></tr>
-                  </thead>
-                  <tbody>
-                    ${comparison.rows.slice(0, 10).map(row => {
-                      const current = row.after || row.before;
-                      return `<tr>
-                        <td><span class="severity ${escapeHtml(row.status === "worse" ? "critical" : row.status === "better" ? "low" : "medium")}">${escapeHtml(row.status)}</span></td>
-                        <td class="flow">${escapeHtml(current.local)} -> ${escapeHtml(current.peer)}</td>
-                        <td>${escapeHtml(row.before?.risk || "-")} -> ${escapeHtml(row.after?.risk || "-")}</td>
-                        <td>${escapeHtml(formatMetricValue("sendQ", row.deltas.sendQ))}</td>
-                        <td>${escapeHtml(formatMetricValue("recvQ", row.deltas.recvQ))}</td>
-                        <td>${escapeHtml(formatMetricValue("rtt", row.deltas.rtt))}</td>
-                        <td>${escapeHtml(formatMetricValue("rto", row.deltas.rto))}</td>
-                        <td>${escapeHtml(formatMetricValue("skmem.d", row.deltas.drops))}</td>
-                      </tr>`;
-                    }).join("")}
-                  </tbody>
-                </table>
-              </div>
-            </section>` : ""}
-          </div>
-
-          <section class="report-card report-footer">
-            <strong>Analyst notes</strong>
-            <p>This report is generated from the current browser workspace. For strict incident evidence, keep the raw capture file, the exact ss collection command, timestamps, and any before/after capture used as baseline. Pay special attention to RTT/RTO tails, Send-Q/Recv-Q growth, socket drops, and whether one peer or one process dominates the anomaly set.</p>
-          </section>
-        </div>
-      </body>
-    </html>
-  `;
-  return html;
+  return buildPrintableIncidentReportHtml(printableIncidentReportDependencies(), chartCaptures);
 }
 
 
