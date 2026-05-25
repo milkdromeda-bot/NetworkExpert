@@ -48,7 +48,8 @@ export function renderAnalysisPageView(ctx = {}) {
     formatMetricValue = (metric, value) => `${value} ${metric}`,
     renderExportMenu = () => "",
     renderAnalysisTabs = () => "",
-    renderActiveTab = () => ""
+    renderActiveTab = () => "",
+    healthScore = null
   } = ctx;
   const sockets = state.sockets || [];
   const anomalies = state.anomalies || [];
@@ -60,9 +61,11 @@ export function renderAnalysisPageView(ctx = {}) {
   const criticalCount = anomalies.filter(a => a.severity === "critical").length;
   const totalSendQ = sockets.reduce((sum, socket) => sum + (socket.sendQ || 0), 0);
   const totalDrops = sockets.reduce((sum, socket) => sum + (socket.details?.skmem?.d || 0), 0);
+  const hs = healthScore;
 
   return html`
     <section class="kpis compact">
+      ${hs ? `<span class="kpi-inline health-score-kpi grade-${hs.grade}" title="Health: ${hs.breakdown.critical} critical, ${hs.breakdown.high} high, ${hs.breakdown.medium} medium, ${hs.breakdown.low} low, ${hs.breakdown.healthy} healthy"><label>Health</label><strong>${hs.score}<small>/100</small></strong><span class="health-grade">${hs.grade}</span></span>` : ""}
       <span class="kpi-inline"><label>Sockets</label><strong data-countup="${sockets.length}">${formatNumber(sockets.length)}</strong></span>
       <span class="kpi-inline"><label>Critical</label><strong data-countup="${criticalCount}">${formatNumber(criticalCount)}</strong></span>
       <span class="kpi-inline"><label>Send-Q</label><strong>${formatMetricValue("sendQ", totalSendQ)}</strong></span>

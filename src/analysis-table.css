@@ -17,6 +17,7 @@
   border: var(--border);
   border-radius: var(--radius-default);
 }
+.kpis.compact .kpi-inline + .kpi-inline { padding-left: var(--space-4); border-left: 1px solid rgba(255,255,255,.12); }
 .kpi-inline { display: flex; align-items: baseline; gap: 6px;
   display: flex;
   align-items: center;
@@ -1150,3 +1151,14 @@ tr.selected { background: #101a27; }
 .modal.metricHelp .body {
   padding: var(--space-3) 16px 14px;
 }
+
+
+/* Health Score KPI */
+.health-score-kpi { position: relative; }
+.health-score-kpi strong small { font-size: 0.65em; opacity: 0.6; }
+.health-score-kpi .health-grade { font-weight: 700; font-size: var(--font-size-sm); border-radius: var(--radius-sm); padding: 1px 6px; margin-left: 4px; }
+.health-score-kpi.grade-A .health-grade { background: var(--green); color: #000; }
+.health-score-kpi.grade-B .health-grade { background: #5db7ff; color: #000; }
+.health-score-kpi.grade-C .health-grade { background: var(--yellow); color: #000; }
+.health-score-kpi.grade-D .health-grade { background: var(--orange); color: #000; }
+.health-score-kpi.grade-F .health-grade { background: var(--red); color: #fff; }

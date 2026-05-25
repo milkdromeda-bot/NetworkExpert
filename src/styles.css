@@ -178,6 +178,7 @@ svg.chart:focus-visible { outline: 2px solid var(--blue); outline-offset: 0; bor
 [data-theme="light"] .tab.active, [data-theme="light"] .analysis-tab.active { background: #1a73e8 !important; color: #fff !important; }
 [data-theme="light"] .pill-toggle button.active { background: #1a73e8 !important; color: #fff !important; }
 [data-theme="light"] .kpis.compact { background: #e8eef5 !important; border: 1px solid #c8d4e0 !important; }
+[data-theme="light"] .kpis.compact .kpi-inline + .kpi-inline { border-left-color: rgba(0,0,0,.12) !important; }
 [data-theme="light"] .kpi-inline strong { color: #0f2b4a !important; }
 [data-theme="light"] .kpi-inline label { color: #1a5fb4 !important; }
 [data-theme="light"] .expert-strip article { background: #eaf0f7 !important; }

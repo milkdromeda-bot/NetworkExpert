@@ -50,6 +50,7 @@ import { buildAdvisorFindings as buildAdvisorFindingsModel } from "./advisor-fin
 import { buildPrintableIncidentReportHtml } from "./printable-incident-report.js";
 import { buildJiraReport as buildJiraReportModel } from "./jira-report.js";
 import { renderIngestPage as renderIngestPageView } from "./ingest-view.js";
+import { computeHealthScore } from "./health-score.js";
 
 const TABLE_COLUMNS = createTableColumns({
   riskRank,
@@ -2614,7 +2615,8 @@ function renderAnalysisPage() {
     formatMetricValue,
     renderExportMenu,
     renderAnalysisTabs,
-    renderActiveTab
+    renderActiveTab,
+    healthScore: computeHealthScore(state.sockets)
   });
 }
 
