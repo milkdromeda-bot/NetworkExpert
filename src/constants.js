@@ -41,3 +41,40 @@ export const EXPERT_CORRELATIONS = [
   { id: "bytes-progress", x: "bytes_acked", y: "bytes_received", label: "11. Bytes acked vs received", reason: "Checks bidirectional progress and whether one side stalls while the other still advances." },
   { id: "segments-bytes", x: "segs_out", y: "bytes_acked", label: "12. Segments out vs bytes acked", reason: "Finds inefficient tiny-segment patterns or poor payload efficiency." }
 ];
+
+
+export const SS_EDITOR_THEMES = [
+  { id: "pastel", label: "Pastel", title: "Soft readable colors for long ss captures" },
+  { id: "ocean", label: "Ocean", title: "Cool muted blues with amber highlights" },
+  { id: "mono", label: "Mono", title: "Mostly neutral syntax with minimal color" },
+  { id: "graphite", label: "Graphite", title: "Deep neutral grey with soft steel accents" },
+  { id: "slate", label: "Slate", title: "Balanced slate tones with low saturation" },
+  { id: "sand", label: "Sand", title: "Warm muted amber highlights without glare" },
+  { id: "paper", label: "Paper", title: "Soft light editor for bright rooms" },
+  { id: "contrast", label: "Contrast", title: "Readable contrast without neon colors" },
+  { id: "neon", label: "Neon", title: "High-visibility fluorescent on dark background" }
+];
+
+export const DEFAULT_SS_EDITOR_THEME = "pastel";
+
+export const SS_OPTION_INTEL = {
+  "-H": { role: "Output hygiene", adds: "Removes table headers so repeated captures stay clean.", use: "Recommended for timestamped logs and scripted captures.", missing: "Headers can be parsed, but they add noise in large files." },
+  "-O": { role: "Parser stability", adds: "Keeps each socket on one physical line.", use: "Recommended when exporting to this tool or any log processor.", missing: "Wrapped records are slower to scan and easier to misread." },
+  "-n": { role: "Performance and identity", adds: "Keeps numeric IPs and ports without DNS or service-name lookups.", use: "Essential for large captures and repeatable topology labels.", missing: "Name resolution can slow the command and hide exact endpoints." },
+  "-t": { role: "Protocol scope", adds: "Restricts the collection to TCP sockets.", use: "Use for latency, RTT, RTO, congestion, retransmission, and queue analysis.", missing: "Other protocol families may add volume without useful TCP metrics." },
+  "-a": { role: "Inventory scope", adds: "Includes listening and non-listening sockets.", use: "Useful when you want both active flows and exposed services.", missing: "Some listener or inactive context may be absent." },
+  "-A": { role: "Socket table selection", adds: "Selects one or more kernel socket tables, for example all, tcp, udp, unix.", use: "Use with all when you need a broad inventory before filtering.", missing: "The default table selection may be narrower than expected." },
+  "-e": { role: "Kernel identity", adds: "Adds uid, inode, socket cookie, cgroup hints, and other extended fields.", use: "Useful for correlating rows to processes, containers, and repeated snapshots.", missing: "Ownership and stable socket identity become weaker." },
+  "-m": { role: "Memory pressure", adds: "Adds skmem receive/transmit buffers, backlog, queued bytes, and drops.", use: "Essential for socket drops, buffer pressure, and queue diagnostics.", missing: "Drop and memory charts cannot be trusted or may be unavailable." },
+  "-p": { role: "Process ownership", adds: "Adds process name, PID, and file descriptor when permitted.", use: "Use whenever you need to map sockets to applications.", missing: "Processes may appear as unknown, weakening conversation diagnosis." },
+  "-i": { role: "TCP intelligence", adds: "Adds RTT, RTT variance, RTO, cwnd, pacing, delivery rate, retransmission, and TCP internals.", use: "Essential for most expert charts and latency/root-cause analysis.", missing: "The tool can still count sockets, but many expert metrics disappear." },
+  "--tos": { role: "QoS classification", adds: "Adds ToS, traffic class, class_id, and priority when available.", use: "Useful when routes or packet treatment differ by QoS class.", missing: "QoS mismatches are harder to see." },
+  "--cgroup": { role: "Container and service context", adds: "Adds cgroup v2 paths for service, container, or slice attribution.", use: "Useful in Kubernetes, systemd, containers, and multi-service hosts.", missing: "Topology and process grouping rely more on manual labels." },
+  "--inet-sockopt": { role: "Socket option detail", adds: "Adds inet-level socket options that can explain unusual behavior.", use: "Useful when comparing hosts or investigating policy/config differences.", missing: "Low-level option mismatches may stay invisible." }
+};
+
+export const CONVERSATION_SORT_LABELS = {
+  risk: "Risk", flow: "Flow", proto: "Proto/state", process: "Process",
+  sockets: "Sockets", anomalies: "Anomalies", tx: "TX", rx: "RX",
+  sendQ: "Send-Q", recvQ: "Recv-Q", rtt: "RTT", rto: "RTO", drops: "Drops"
+};
