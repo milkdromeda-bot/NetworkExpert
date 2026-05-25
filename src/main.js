@@ -51,6 +51,7 @@ import { buildPrintableIncidentReportHtml } from "./printable-incident-report.js
 import { buildJiraReport as buildJiraReportModel } from "./jira-report.js";
 import { renderIngestPage as renderIngestPageView } from "./ingest-view.js";
 import { computeHealthScore } from "./health-score.js";
+import { compressSnapshots, decompressSnapshot, iterateCompressed } from "./snapshot-compression.js";
 
 const TABLE_COLUMNS = createTableColumns({
   riskRank,
@@ -866,10 +867,21 @@ function timestampBlocks() {
 }
 
 function parsedTimestampSnapshots() {
-  if (state.cache.snapshotRawVersion === state.rawVersion) return state.cache.timestampSnapshots;
+  if (state.cache.snapshotRawVersion === state.rawVersion) {
+    if (state.cache.compressedSnapshots) {
+      return [...iterateCompressed(state.cache.compressedSnapshots)];
+    }
+    return state.cache.timestampSnapshots;
+  }
   const snapshots = parseTimestampedSnapshots(state.raw);
   state.cache.snapshotRawVersion = state.rawVersion;
-  state.cache.timestampSnapshots = snapshots;
+  if (snapshots.length > 20) {
+    state.cache.compressedSnapshots = compressSnapshots(snapshots);
+    state.cache.timestampSnapshots = null;
+  } else {
+    state.cache.compressedSnapshots = null;
+    state.cache.timestampSnapshots = snapshots;
+  }
   return snapshots;
 }
 
@@ -2141,6 +2153,10 @@ let _cachedDataVersion = -1;
 let _cachedStories = [];
 let _cachedMultiSocket = [];
 let _cachedRateAlerts = [];
+let _cachedDiagVersion = -1;
+let _cachedDiagHypotheses = [];
+let _cachedMatrixVersion = -1;
+let _cachedMatrix = null;
 
 function cachedStories() {
   if (_cachedDataVersion !== state.dataVersion) {
@@ -4646,6 +4662,7 @@ function renderCaptureQualityReport() {
 }
 
 function diagnosticHypotheses() {
+  if (_cachedDiagVersion === state.dataVersion) return _cachedDiagHypotheses;
   const rows = sortedFilteredSockets();
   const hypotheses = buildDiagnosticHypotheses({
     sockets: rows.length ? rows : state.sockets,
@@ -4669,13 +4686,22 @@ function diagnosticHypotheses() {
       }
     }
   }
+  _cachedDiagVersion = state.dataVersion;
+  _cachedDiagHypotheses = hypotheses;
   return hypotheses;
+}
+
+function cachedRootCauseMatrix() {
+  if (_cachedMatrixVersion === state.dataVersion && _cachedMatrix) return _cachedMatrix;
+  _cachedMatrixVersion = state.dataVersion;
+  _cachedMatrix = buildRootCauseMatrix(state.sockets);
+  return _cachedMatrix;
 }
 
 function renderDiagnosis() {
   const hypotheses = diagnosticHypotheses();
   const top = hypotheses[0];
-  const matrix = buildRootCauseMatrix(state.sockets);
+  const matrix = cachedRootCauseMatrix();
   const qualityCap = (captureQualityReport().score || 0) < 55;
   if (qualityCap) {
     const cap = (captureQualityReport().score || 0) < 35 ? 0.3 : 0.5;
@@ -8156,7 +8182,7 @@ async function exportEvidencePack() {
 function exportIncidentReportHtml() {
   const quality = captureQualityReport();
   const hyps = diagnosticHypotheses();
-  const matrixData = buildRootCauseMatrix(state.sockets);
+  const matrixData = cachedRootCauseMatrix();
   const storiesData = cachedStories();
   const multiData = cachedMultiSocket();
   const rateData = cachedRateAlerts();
