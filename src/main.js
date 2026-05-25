@@ -304,6 +304,7 @@ import { ANALYSIS_TAB_GUIDE, PRE_IMPORT_PRESETS, EXPERT_CORRELATIONS, SS_EDITOR_
 import { html, escapeHtml, truncateMiddle } from "./utils.js";
 import { createAppContext } from "./app-context.js";
 import { renderTimelineHeatmap as renderHeatmapView } from "./heatmap-view.js";
+import { metricLabel as _metricLabel, METRIC_LABELS } from "./formatters.js";
 
 function dashboardPresetIdOrDefault(value) {
   const fallback = DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]
@@ -7498,34 +7499,7 @@ function parseFormattedNumber(value) {
 }
 
 function metricLabel(metric) {
-  return {
-    rtt: "RTT",
-    rto: "RTO",
-    rcv_rtt: "Receive RTT",
-    rcv_space: "Receive space",
-    rcv_ssthresh: "Receive ssthresh",
-    sendQ: "Send-Q",
-    recvQ: "Recv-Q",
-    cwnd: "Congestion window",
-    ato: "ACK timeout",
-    "skmem.r": "Socket memory receive",
-    "skmem.rb": "Receive buffer limit",
-    "skmem.t": "Socket memory transmit",
-    "skmem.d": "Socket drops",
-    "skmem.d_rate": "Socket drop rate",
-    pacing_rate: "Pacing rate",
-    delivery_rate: "Delivery rate",
-    tx_bps: "TX bandwidth",
-    rx_bps: "RX bandwidth",
-    bytes_sent: "Bytes sent",
-    bytes_acked: "Bytes acked",
-    bytes_received: "Bytes received",
-    rttvar: "RTT variance",
-    segs_out: "Segments out",
-    segs_in: "Segments in",
-    backoff: "TCP backoff",
-    retrans: "Retrans timer"
-  }[metric] || metric;
+  return _metricLabel(metric);
 }
 
 function metricColor(metric) {
