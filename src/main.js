@@ -8234,7 +8234,6 @@ async function importFile(file) {
   });
 
   state.raw = result.raw;
-  state.sockets = result.sockets;
   state.ingestRawExpanded = result.raw.length <= INGEST_RAW_EAGER_LIMIT;
   setSourceName(result.sourceName);
   rememberFilterHistory(state.preImportFilters);
@@ -8250,6 +8249,7 @@ async function importFile(file) {
   if (hasTimestampedRawData()) {
     recompute();
   } else {
+    state.sockets = result.sockets;
     recomputeFromSockets();
   }
   toast("Analysis complete", `${state.sockets.length} sockets in ${((performance.now() - t0) / 1000).toFixed(1)}s.`);
@@ -8616,13 +8616,8 @@ function bindEvents(deps = appEventDependencies()) {
         worker.onmessage = msg => {
           if (msg.data.type === "parseSs:done") {
             worker.terminate();
-            state.sockets = applyRisks(msg.data.payload.sockets.map(s => ({ ...s, id: s.id || `${s.local}|${s.peer}|${s.state}` })));
-            state.bandwidthIndex = buildSocketBandwidthIndex();
-            state.anomalies = analyzeAll(state.sockets);
-            state.selectedId = state.sockets[0]?.id || null;
-            buildHistory(); addCollectionAnomalies(); runAdvisorAnalysis(); evaluateAlertRules();
-            state.analysisDirty = false; resetDerivedCaches();
             _hideBusy();
+            recompute();
             const elapsed = ((performance.now() - parseStart) / 1000).toFixed(1);
             toast("Analysis complete", `${state.sockets.length} sockets parsed in ${elapsed}s (background worker).`);
             state.view = "analysis"; state.activeTab = "advisor"; render();
