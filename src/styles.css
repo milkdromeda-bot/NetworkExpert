@@ -10887,3 +10887,18 @@ button .ripple {
 
 .heatmap-note { margin: 8px 0 0 200px; font-size: var(--font-size-sm); color: var(--muted); line-height: 1.5; max-width: 700px; }
 .heatmap-note b { color: var(--soft); }
+
+/* === Typography utility classes === */
+.text-xs { font-size: var(--font-size-xs) !important; }
+.text-sm { font-size: var(--font-size-sm) !important; }
+.text-base { font-size: var(--font-size-base) !important; }
+.text-md { font-size: var(--font-size-md) !important; }
+.text-lg { font-size: var(--font-size-lg) !important; }
+.text-xl { font-size: var(--font-size-xl) !important; }
+.text-2xl { font-size: var(--font-size-2xl) !important; }
+.text-3xl { font-size: var(--font-size-3xl) !important; }
+.text-mono { font-family: var(--font-mono) !important; }
+.text-muted { color: var(--muted) !important; }
+.text-soft { color: var(--soft) !important; }
+.font-bold { font-weight: 700 !important; }
+.font-black { font-weight: 900 !important; }
