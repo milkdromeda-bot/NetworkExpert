@@ -5,6 +5,11 @@ import { test } from "node:test";
 const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
 const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
+const ssCommandView = readFileSync(new URL("../../src/ss-command-view.js", import.meta.url), "utf8");
+const captureQualityView = readFileSync(new URL("../../src/capture-quality-view.js", import.meta.url), "utf8");
+const chartsToolbarView = readFileSync(new URL("../../src/charts-toolbar-view.js", import.meta.url), "utf8");
+const dashboardView = readFileSync(new URL("../../src/dashboard-view.js", import.meta.url), "utf8");
+const constants = readFileSync(new URL("../../src/constants.js", import.meta.url), "utf8");
 const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
 const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
 const tableColumns = readFileSync(new URL("../../src/table-columns.js", import.meta.url), "utf8");
@@ -57,8 +62,8 @@ test("import progress is shown in the ss stats header while loading", () => {
 });
 
 test("file import flow has one clear filter entry point", () => {
-  assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open file<\/button>/);
-  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open file<\/button>\s*<button data-action="showEditor"[\s\S]*Editor<\/button>\s*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>\s*<button data-action="sample10m"[\s\S]*Sample<\/button>/);
+  assert.match(main, /<button data-action="pickFile" class="primary"><i class="ri-folder-open-line"><\/i> Open ss file<\/button>/);
+  assert.match(main, /<button data-action="pickFile" class="primary">[\s\S]*Open ss file<\/button>[\s\S]*<button data-action="pickAutoDir"[\s\S]*Auto-detect dir<\/button>[\s\S]*<button data-action="showEditor"[\s\S]*Editor<\/button>[\s\S]*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>[\s\S]*data-action="sampleIncidentDemo"[\s\S]*See it in action/);
   assert.doesNotMatch(main, /<button data-action="toggleSsOptions"[^>]*>[\s\S]*Capture<\/button>/);
   assert.match(main, /data-action="copySsCommand"[\s\S]*Copy<\/button>/);
   assert.match(main, /toast\("ss command copied", "Paste it on the target server to collect the ss evidence\."\);/);
@@ -98,12 +103,12 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /ssCommandConfig:\s*defaultSsCommandConfig\(\)/);
   assert.match(main, /function defaultSsLogPath\(date = new Date\(\)\)[\s\S]*\/tmp\/networkexpert_ss_\$\{ssCommandTimestamp\(date\)\}\.log/);
   assert.match(main, /function renderSsCommandBuilder\(\)/);
-  assert.match(main, /id="ssCmdTimestamp"[\s\S]*Timestamp each run/);
-  assert.match(main, /id="ssCmdLoop"[\s\S]*Repeat command/);
-  assert.match(main, /Interval \(s\)<\/span><input id="ssCmdInterval" type="text" inputmode="decimal"/);
-  assert.match(main, /id="ssCmdSrcIp"[\s\S]*id="ssCmdSrcPort"[\s\S]*id="ssCmdDstIp"[\s\S]*id="ssCmdDstPort"/);
-  assert.match(main, /placeholder="source address"/);
-  assert.match(main, /data-ss-field-msg="srcIp"/);
+  assert.match(ssCommandView, /id="ssCmdTimestamp"[\s\S]*Timestamp each run/);
+  assert.match(ssCommandView, /id="ssCmdLoop"[\s\S]*Repeat command/);
+  assert.match(ssCommandView, /Interval \(s\)<\/span><input id="ssCmdInterval" type="text" inputmode="decimal"/);
+  assert.match(ssCommandView, /id="ssCmdSrcIp"[\s\S]*id="ssCmdSrcPort"[\s\S]*id="ssCmdDstIp"[\s\S]*id="ssCmdDstPort"/);
+  assert.match(ssCommandView, /placeholder="source address"/);
+  assert.match(ssCommandView, /data-ss-field-msg="srcIp"/);
   assert.match(main, /function updateSsCommandValidation\(validation\)/);
   assert.match(main, /input\?\.setCustomValidity\(result\.valid === false \? result\.message : ""\);/);
   assert.doesNotMatch(main, /placeholder="192\.168\.145\.205"/);
@@ -111,9 +116,9 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.doesNotMatch(main, /market-data example/);
   assert.doesNotMatch(main, /lfxbench_tcp-laloRcvMarketSimu/);
   assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"1"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
-  assert.match(main, /const teeRisk = Boolean\(c\.outputPath && c\.appendOutput !== false && c\.loop && interval <= 0\.05\);/);
-  assert.match(main, /terminal output plus <code>tee<\/code> can become the bottleneck/);
-  assert.match(main, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
+  assert.match(ssCommandView, /const teeRisk = Boolean\(c\.outputPath && c\.appendOutput !== false && c\.loop && interval <= 0\.05\);/);
+  assert.match(ssCommandView, /terminal output plus <code>tee<\/code> can become the bottleneck/);
+  assert.match(ssCommandView, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
   assert.match(main, /function syncSsCommandFromBuilder\(\{ updateWarning = true \} = \{\}\)/);
   assert.match(main, /if \(validation\.valid\) \{[\s\S]*state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
   assert.match(main, /toast\("Invalid ss command fields", first\?\.message \|\| "Fix the highlighted fields before copying\.", "danger"\);/);
@@ -147,12 +152,12 @@ test("topbar anomaly pill uses a compact warning icon", () => {
 
 test("clear input and reset workspace actions are visually distinct", () => {
   assert.match(main, /data-action="clear" class="clear-input-button"[^>]*>[\s\S]*Clear/);
-  assert.match(main, /data-action="requestResetWorkspace"[^>]*>[\s\S]*Reset workspace/);
+  assert.match(main, /data-action="requestResetWorkspace"[^>]*aria-label="Reset workspace"/);
   assert.match(main, /action === "requestResetWorkspace"[\s\S]*state\.modal = "resetWorkspace"/);
   assert.match(main, /action === "confirmResetWorkspace"[\s\S]*resetAllState\(\)/);
   assert.doesNotMatch(main, /data-action="resetAll"/);
   assert.match(css, /\.clear-input-button\s*\{[^}]*background:/s);
-  assert.match(css, /\.reset-workspace-button\s*\{[^}]*max-width:\s*190px;/s);
+  assert.match(css, /\.reset-workspace-btn\s*\{/s);
   assert.match(css, /\.reset-workspace-modal\s*\{/);
   assert.match(css, /\.reset-workspace-actions\s*\{[^}]*justify-content:\s*flex-end;/s);
 });
@@ -174,15 +179,15 @@ test("product splash is opened from the version badge and stays bounded", () => 
 
 test("ss editor offers calm themes and defaults to pastel", () => {
   assert.match(data, /ssEditorTheme:\s*"pastel"/);
-  assert.match(main, /const SS_EDITOR_THEMES = \[/);
-  assert.match(main, /\{ id: "pastel", label: "Pastel"/);
-  assert.match(main, /\{ id: "ocean", label: "Ocean"/);
-  assert.match(main, /\{ id: "mono", label: "Mono"/);
-  assert.match(main, /\{ id: "graphite", label: "Graphite"/);
-  assert.match(main, /\{ id: "slate", label: "Slate"/);
-  assert.match(main, /\{ id: "sand", label: "Sand"/);
-  assert.match(main, /\{ id: "paper", label: "Paper"/);
-  assert.match(main, /\{ id: "contrast", label: "Contrast"/);
+  assert.match(constants, /export const SS_EDITOR_THEMES = \[/);
+  assert.match(constants, /\{ id: "pastel", label: "Pastel"/);
+  assert.match(constants, /\{ id: "ocean", label: "Ocean"/);
+  assert.match(constants, /\{ id: "mono", label: "Mono"/);
+  assert.match(constants, /\{ id: "graphite", label: "Graphite"/);
+  assert.match(constants, /\{ id: "slate", label: "Slate"/);
+  assert.match(constants, /\{ id: "sand", label: "Sand"/);
+  assert.match(constants, /\{ id: "paper", label: "Paper"/);
+  assert.match(constants, /\{ id: "contrast", label: "Contrast"/);
   assert.match(main, /function normalizeSsEditorTheme\(value\)/);
   assert.match(main, /prefs\.ssEditorTheme = normalizeSsEditorTheme\(prefs\.ssEditorTheme\)/);
   assert.match(main, /data-action="toggleSsEditorThemeMenu"/);
@@ -250,24 +255,25 @@ test("modal headers stay visible while long preference dialogs scroll", () => {
 });
 
 test("preferences active tab matches the primary blue selected state", () => {
-  assert.match(main, /<div class="tabs pref-tabs">/);
-  assert.match(css, /\.pref-tabs\s*\{[^}]*display:\s*inline-flex;[^}]*margin:\s*4px 0 8px;[^}]*border:\s*1px solid rgba\(255,255,255,\.08\);[^}]*border-radius:\s*10px;/s);
-  assert.match(css, /\.pref-tabs \.tab\s*\{[^}]*min-height:\s*30px;[^}]*border-radius:\s*7px;/s);
-  assert.match(css, /\.pref-tabs \.tab\.active\s*\{[^}]*border-color:\s*#2f6f9f;[^}]*background:\s*#1476bd;[^}]*color:\s*#ffffff;/s);
-  assert.match(css, /\.pref-tabs \.tab\.active\s*\{[^}]*border-color:\s*#2f6f9f !important;[^}]*background:\s*#1476bd !important;[^}]*color:\s*#ffffff !important;/s);
-  assert.match(css, /\.pref-tabs \.tab\.active:hover,\s*\.pref-tabs \.tab\.active:focus\s*\{[^}]*background:\s*#176fae !important;/s);
+  assert.match(main, /<div class="app-tabs" style="margin-bottom:12px">/);
+  assert.match(main, /<button class="app-tab \$\{tab === key \? "active" : ""\}" data-pref-tab="\$\{key\}">/);
+  assert.match(css, /\.app-tabs\s*\{[^}]*display:\s*inline-flex;[^}]*padding:\s*3px;[^}]*border:\s*1px solid rgba\(255,255,255,\.08\);/s);
+  assert.match(css, /\.app-tab\s*\{[^}]*min-height:\s*36px;[^}]*border-radius:\s*9px;/s);
+  assert.match(css, /\.app-tab\.active\s*\{[^}]*background:\s*linear-gradient\(135deg,\s*#0f3a5c,\s*#0d5f8a\) !important;[^}]*color:\s*#fff !important;/s);
+  assert.match(css, /button\.primary,\s*button\.mega\.primary,\s*\.app-tab\.active\s*\{[^}]*border-color:\s*#2f6f9f;[^}]*background:\s*#1476bd;/s);
+  assert.match(css, /button\.primary:hover,\s*button\.mega\.primary:hover,\s*\.app-tab\.active:hover\s*\{[^}]*background:\s*#176fae;/s);
 });
 
 test("analysis conversation stack keeps vertical gaps compact", () => {
   assert.match(css, /\.analysis-layout \.panel-body\s*\{[^}]*padding-block:\s*10px;/s);
   assert.match(css, /\.analysis-layout \.grid-controls-shell\s*\{[^}]*padding-bottom:\s*8px;/s);
-  assert.match(css, /\.analysis-layout \.grid-controls\s*\{[^}]*row-gap:\s*8px;/s);
+  assert.match(css, /\.analysis-layout \.grid-controls\s*\{[^}]*row-gap:\s*var\(--space-2\);/s);
   assert.match(css, /\.grid-controls input,\s*\.grid-controls select\s*\{[^}]*min-height:\s*34px;[^}]*padding:\s*7px 9px;/s);
-  assert.match(css, /\.filter-cluster\s*\{[^}]*gap:\s*8px;[^}]*padding:\s*6px 8px;/s);
+  assert.match(css, /\.filter-cluster\s*\{[^}]*gap:\s*var\(--space-2\);[^}]*padding:\s*6px 8px;/s);
   assert.match(css, /\.filter-side-actions\s*\{[^}]*align-items:\s*center;[^}]*padding:\s*6px 0;/s);
   assert.match(css, /\.filter-cluster-grid\s*\{[^}]*gap:\s*6px;/s);
-  assert.match(css, /\.expert-strip\s*\{[^}]*column-gap:\s*8px;[^}]*row-gap:\s*6px;[^}]*margin-bottom:\s*8px;/s);
-  assert.match(css, /\.conversation-workbench,\s*\.expert-workbench,\s*\.timeline-workbench\s*\{[^}]*gap:\s*8px;/s);
+  assert.match(css, /\.expert-strip\s*\{[^}]*column-gap:\s*var\(--space-2\);[^}]*row-gap:\s*6px;[^}]*margin-bottom:\s*8px;/s);
+  assert.match(css, /\.conversation-workbench,\s*\.expert-workbench,\s*\.timeline-workbench\s*\{[^}]*gap:\s*var\(--space-2\);/s);
 });
 
 test("timeline shows millisecond precision when timestamp data contains it", () => {
@@ -299,20 +305,19 @@ test("filtered row count is pagination context only", () => {
 test("chart-only toolbar is hidden from the charts advisor tab", () => {
   assert.match(main, /state\.chartsTab === "charts" \? renderDashboardStudioInline\(\) : ""/);
   assert.match(main, /state\.chartsTab === "charts" \? renderChartsGlobalToolbar\(\) : ""/);
-  assert.match(main, /function renderChartsGlobalToolbar\(\)[\s\S]*data-action="thresholds"[\s\S]*id="chartTimeZoneSelect"[\s\S]*data-action="layoutPrefs"/);
+  assert.match(main, /function renderChartsGlobalToolbar\(\) \{ return _renderChartsGlobalToolbar\(ctx\); \}/);
+  assert.match(chartsToolbarView, /function renderChartsGlobalToolbar\(ctx\)[\s\S]*data-action="thresholds"[\s\S]*id="chartTimeZoneSelect"[\s\S]*data-action="layoutPrefs"/);
   assert.match(main, /state\.chartsTab === "advisor" \? `\$\{renderInvestigationContext\(\)/);
   assert.match(main, /renderTailLatencyLensPanel\(\)/);
   assert.doesNotMatch(main, /\$\{renderChartsGlobalToolbar\(\)\}\s*\n\s*\$\{renderChartsPage\(\)\}/);
 });
 
 test("analysis tabs expose short guidance and a single detailed view guide", () => {
-  assert.match(main, /const ANALYSIS_TAB_GUIDE = \[/);
+  assert.match(constants, /export const ANALYSIS_TAB_GUIDE = \[/);
   assert.match(main, /function renderAnalysisTabs\(\)/);
-  assert.match(main, /data-action="showAnalysisViewGuide"/);
   assert.match(main, /aria-label="\$\{escapeHtml\(`\$\{tab\.label\}: \$\{tab\.short\}`\)\}"/);
   assert.match(main, /title="\$\{escapeHtml\(tab\.short\)\}"/);
   assert.doesNotMatch(main, /class="analysis-tab-tooltip"/);
-  assert.match(main, /state\.modal = "analysisViewGuide"/);
   assert.match(main, /analysisTabDocs:\s*ANALYSIS_TAB_GUIDE/);
   assert.match(modalView, /state\.modal === "analysisViewGuide" \? "Analysis view guide"/);
   assert.match(modalView, /function renderAnalysisViewGuideModal\(\)/);
@@ -479,8 +484,8 @@ test("dashboard preset selection keeps the picker responsive", () => {
   assert.match(main, /function commitDashboardPresetChoice\(presetId\)/);
   assert.match(main, /updateDashboardPresetPickerChrome\(presetId\);[\s\S]*scheduleDashboardPresetRender\(\);/);
   assert.match(main, /data-dashboard-preset-choice[\s\S]*commitDashboardPresetChoice\(event\.currentTarget\.dataset\.dashboardPresetChoice\);/);
-  assert.match(main, /data-dashboard-preset-choice="\$\{escapeHtml\(id\)\}"[^>]*aria-label="\$\{escapeHtml\(`\$\{preset\.name\}: \$\{preset\.description\}`\)\}"/);
-  assert.doesNotMatch(main, /data-dashboard-preset-choice="\$\{escapeHtml\(id\)\}"[^>]*title=/);
+  assert.match(dashboardView, /data-dashboard-preset-choice="\$\{escapeHtml\(id\)\}"[^>]*aria-label="\$\{escapeHtml\(`\$\{preset\.name\}: \$\{preset\.description\}`\)\}"/);
+  assert.doesNotMatch(dashboardView, /data-dashboard-preset-choice="\$\{escapeHtml\(id\)\}"[^>]*title=/);
   assert.match(css, /Dashboard preset picker performance refinement/);
   assert.match(css, /\.dashboard-preset-menu,\s*\.dashboard-preset-menu\.open\s*\{[^}]*backdrop-filter:\s*none;[^}]*contain:\s*paint;/s);
   assert.match(css, /\.dashboard-preset-option:hover:not\(\.selected\),\s*\.dashboard-preset-option:focus-visible:not\(\.selected\)/);
@@ -491,11 +496,11 @@ test("analysis exposes a dedicated capture quality report tab", () => {
   const captureQuality = readFileSync(new URL("../../src/capture-quality.js", import.meta.url), "utf8");
 
   assert.match(main, /import \{ analyzeCaptureQuality \} from "\.\/capture-quality\.js";/);
-  assert.match(main, /id:\s*"quality"[\s\S]*label:\s*"quality"[\s\S]*Capture Quality Report/);
+  assert.match(constants, /id:\s*"quality"[\s\S]*label:\s*"quality"[\s\S]*Capture Quality Report/);
   assert.match(main, /if \(state\.activeTab === "quality"\) return renderCaptureQualityReport\(\);/);
   assert.match(main, /function captureQualityReport\(\)/);
   assert.match(main, /function renderCaptureQualityReport\(\)/);
-  assert.match(main, /data-action="copyQualityCommand"/);
+  assert.match(captureQualityView, /data-action="copyQualityCommand"/);
   assert.match(main, /toast\("Capture command copied", "Paste it on the target server to collect stronger ss evidence\."\);/);
   assert.match(captureQuality, /export function analyzeCaptureQuality/);
   assert.match(captureQuality, /Timestamped snapshots/);

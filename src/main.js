@@ -310,6 +310,8 @@ import { renderAdvisorGlobalSummary as _renderAdvisorGlobalSummary } from "./adv
 import { renderMetricsStatsTable as _renderMetricsStatsTable } from "./stats-table-view.js";
 import { renderChartsGlobalToolbar as _renderChartsGlobalToolbar } from "./charts-toolbar-view.js";
 import { dashboardPresetIcon, renderDashboardPresetPicker as _renderDashboardPresetPicker, renderDashboardStudioInline as _renderDashboardStudioInline, renderDashboardStudio as _renderDashboardStudio } from "./dashboard-view.js";
+import { renderCaptureQualityReportView } from "./capture-quality-view.js";
+import { renderSsCommandBuilder as renderSsCommandBuilderView, renderSsOptionChip as renderSsOptionChipView, renderSsOptionControl as renderSsOptionControlView, renderSsOptionDetail as renderSsOptionDetailView, selectedSsOption as selectedSsOptionView, ssOptionIntel as ssOptionIntelView } from "./ss-command-view.js";
 
 function dashboardPresetIdOrDefault(value) {
   const fallback = DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]
@@ -575,73 +577,20 @@ function saveAlertAcks() {
   persistAlertAcks(state.alertAcks);
 }
 
-function tokenizeCommand(command) {
-  const tokens = command.match(/(?:[^\s'"]+|'[^']*'|"[^"]*")+/g) || [];
-  const parsed = [];
-  for (const token of tokens.slice(tokens[0] === "ss" ? 1 : 0)) {
-    const clean = token.replace(/^['"]|['"]$/g, "");
-    if (/^-[A-Za-z0-9]{2,}$/.test(clean) && !clean.startsWith("--")) {
-      for (const flag of clean.slice(1)) parsed.push(`-${flag}`);
-    } else {
-      parsed.push(clean);
-    }
-  }
-  return parsed;
-}
-
-function ssOptionKey(short, long) {
-  return short || long;
-}
-
 function ssOptionIntel(short, long, desc, group) {
-  const key = ssOptionKey(short, long);
-  return SS_OPTION_INTEL[key] || SS_OPTION_INTEL[long] || SS_OPTION_INTEL[short] || {
-    role: `${group || "ss"} option`,
-    adds: desc,
-    use: "Enable when this field is needed for the current investigation.",
-    missing: "The related context may be unavailable in analysis."
-  };
-}
-
-function ssOptionObject(option) {
-  const [short, long, desc, group] = option;
-  return { short, long, desc, group, key: ssOptionKey(short, long) };
+  return ssOptionIntelView(SS_OPTION_INTEL, short, long, desc, group);
 }
 
 function selectedSsOption(options, active) {
-  const objects = options.map(ssOptionObject);
-  return objects.find(option => option.key === state.ssOptionHelpKey)
-    || objects.find(option => active.some(item => ssOptionKey(item.short, item.long) === option.key))
-    || objects.find(option => option.key === "-i")
-    || objects[0];
+  return selectedSsOptionView(options, active, state.ssOptionHelpKey);
 }
 
-function renderSsOptionDetail({ short = "", long = "", desc = "", group = "", key = "" }) {
-  const detailKey = key || ssOptionKey(short, long);
-  const intel = ssOptionIntel(short, long, desc, group);
-  return `
-    <article class="ss-option-detail-card">
-      <span class="ss-option-kicker">ss option intelligence</span>
-      <strong>${escapeHtml(detailKey)}${long && long !== detailKey ? ` <small>${escapeHtml(long)}</small>` : ""}</strong>
-      <span class="ss-option-role">${escapeHtml(intel.role)}</span>
-      <span>${escapeHtml(desc)}</span>
-      <dl>
-        <dt>What it adds</dt><dd>${escapeHtml(intel.adds)}</dd>
-        <dt>Use it when</dt><dd>${escapeHtml(intel.use)}</dd>
-        <dt>If missing</dt><dd>${escapeHtml(intel.missing)}</dd>
-      </dl>
-    </article>
-  `;
+function renderSsOptionDetail(option) {
+  return renderSsOptionDetailView(option, { escapeHtml, ssOptionIntel });
 }
 
 function renderSsOptionChip(option) {
-  const key = ssOptionKey(option.short, option.long);
-  const intel = ssOptionIntel(option.short, option.long, option.desc, option.group);
-  return `
-    <span class="ss-option-chip-wrap" title="${escapeHtml(`${key}: ${intel.role}. ${option.desc}`)}">
-      <span class="chip hot">${escapeHtml(key)}</span>
-    </span>
-  `;
+  return renderSsOptionChipView(option, { escapeHtml, ssOptionIntel });
 }
 
 function renderExportMenu(scope = "analysis") {
@@ -661,49 +610,17 @@ function renderExportMenu(scope = "analysis") {
   </span>`;
 }
 function renderSsOptionControl(option, coverage, selectedKey) {
-  const [short, long, desc, group] = option;
-  const key = ssOptionKey(short, long);
-  const intel = ssOptionIntel(short, long, desc, group);
-  const active = coverage.find(c => c.short === short && c.long === long)?.active;
-  return `
-    <div class="check ss-option-row ${key === selectedKey ? "selected" : ""}" data-ss-option-help="${escapeHtml(key)}" role="button" tabindex="0" title="${escapeHtml(`Show ${key} details`)}">
-      <label class="ss-option-check">
-        <input type="checkbox" data-opt="${escapeHtml(key)}" ${active ? "checked" : ""}/>
-        <span class="ss-option-code"><b>${escapeHtml(key)}</b><small>${escapeHtml(intel.role)}</small></span>
-      </label>
-    </div>
-  `;
+  return renderSsOptionControlView(option, coverage, selectedKey, { escapeHtml, ssOptionIntel });
 }
 
 function renderSsCommandBuilder() {
-  const c = state.ssCommandConfig || {};
-  const interval = parseUiIntervalSeconds(c.intervalSeconds);
-  const teeRisk = Boolean(c.outputPath && c.appendOutput !== false && c.loop && interval <= 0.05);
-  const validation = validateSsCommandConfig(c);
-  const fieldClass = key => validation.fields[key]?.valid === false ? "ss-field invalid" : validation.fields[key]?.level === "warning" ? "ss-field warning" : "ss-field";
-  const fieldInvalid = key => validation.fields[key]?.valid === false ? ` aria-invalid="true"` : "";
-  const fieldMessage = key => escapeHtml(validation.fields[key]?.message || "");
-  return `<div class="ss-command-builder">
-    <section class="ss-command-group ss-command-group--mode">
-      <strong>Collection mode</strong>
-      <label class="check inline"><input id="ssCmdTimestamp" type="checkbox" ${c.timestamp !== false ? "checked" : ""}/> Timestamp each run</label>
-      <label class="check inline"><input id="ssCmdLoop" type="checkbox" ${c.loop ? "checked" : ""}/> Repeat command</label>
-      <label class="ss-interval-field ${fieldClass("intervalSeconds")}"><span>Interval (s)</span><input id="ssCmdInterval" type="text" inputmode="decimal" value="${escapeHtml(c.intervalSeconds || "1")}"${fieldInvalid("intervalSeconds")} /><small data-ss-field-msg="intervalSeconds">${fieldMessage("intervalSeconds") || "e.g. 0.01"}</small></label>
-    </section>
-    <section class="ss-command-group ss-command-group--filter">
-      <strong>Socket filter</strong>
-      <label class="${fieldClass("srcIp")} ss-field--ip"><span>Source IP</span><input id="ssCmdSrcIp" spellcheck="false" placeholder="source address" value="${escapeHtml(c.srcIp || "")}"${fieldInvalid("srcIp")} /><small data-ss-field-msg="srcIp">${fieldMessage("srcIp")}</small></label>
-      <label class="${fieldClass("srcPort")} ss-field--port"><span>Source port</span><input id="ssCmdSrcPort" inputmode="numeric" placeholder="port" value="${escapeHtml(c.srcPort || "")}"${fieldInvalid("srcPort")} /><small data-ss-field-msg="srcPort">${fieldMessage("srcPort")}</small></label>
-      <label class="${fieldClass("dstIp")} ss-field--ip"><span>Destination IP</span><input id="ssCmdDstIp" spellcheck="false" placeholder="destination address" value="${escapeHtml(c.dstIp || "")}"${fieldInvalid("dstIp")} /><small data-ss-field-msg="dstIp">${fieldMessage("dstIp")}</small></label>
-      <label class="${fieldClass("dstPort")} ss-field--port"><span>Destination port</span><input id="ssCmdDstPort" inputmode="numeric" placeholder="port" value="${escapeHtml(c.dstPort || "")}"${fieldInvalid("dstPort")} /><small data-ss-field-msg="dstPort">${fieldMessage("dstPort")}</small></label>
-    </section>
-    <section class="ss-command-group ss-command-group--output">
-      <strong>Output</strong>
-      <label><span>Log file</span><input id="ssCmdOutputPath" placeholder="${escapeHtml(defaultSsLogPath())}" value="${escapeHtml(c.outputPath || "")}" /></label>
-      <label class="check inline"><input id="ssCmdAppend" type="checkbox" ${c.appendOutput !== false ? "checked" : ""}/> Append with tee -a</label>
-      <div class="ss-command-warning ${teeRisk ? "" : "hidden"}" data-ss-command-warning><i class="ri-error-warning-line"></i><span>At <b data-ss-warning-interval>${escapeHtml(String(c.intervalSeconds || "1"))}</b>s, terminal output plus <code>tee</code> can become the bottleneck. The recorder may not sustain the requested frequency; prefer local disk, tmpfs, a larger interval, or redirect only if precise cadence matters.</span></div>
-    </section>
-  </div>`;
+  return renderSsCommandBuilderView({
+    state,
+    parseUiIntervalSeconds,
+    validateSsCommandConfig,
+    escapeHtml,
+    defaultSsLogPath
+  });
 }
 
 function readSsCommandConfig() {
@@ -3177,7 +3094,7 @@ function renderIngestPage() {
 }
 
 function renderAnalysisPage() {
-  const deepAnalysisOn = true;
+  const deepAnalysisOn = Boolean(state.prefs.deepAnalysis);
   const deepAnalysisTitle = deepAnalysisOn
     ? "Deep analysis is on. Click to pause the background advisor."
     : "Deep analysis is paused. Click to enable the background advisor.";
@@ -3193,6 +3110,11 @@ function renderAnalysisPage() {
         <div class="panel-head">
           <div class="panel-title">Detected sockets</div>
           <div class="toolbar">
+            <button data-action="toggleDeepAnalysis" class="deep-analysis-toggle ${deepAnalysisOn ? "is-on" : "is-off"}" role="switch" aria-checked="${deepAnalysisOn ? "true" : "false"}" title="${escapeHtml(deepAnalysisTitle)}">
+              <span class="deep-analysis-icon"><i class="ri-brain-line"></i></span>
+              <span class="deep-analysis-label"><strong>Deep analysis</strong><small>${deepAnalysisOn ? "On" : "Paused"}</small></span>
+              <span class="deep-analysis-switch" aria-hidden="true"><span></span></span>
+            </button>
             <button data-action="setBaseline" title="Use current parsed sockets as before baseline"><i class="ri-scales-3-line"></i> Set baseline</button>
             ${renderExportMenu("analysis")}
             <input id="searchInput" placeholder='Filter: state:ESTAB risk>=high port:443 process:nginx rtt>100' value="${escapeHtml(state.table.filters.text)}" />
@@ -5424,141 +5346,13 @@ function captureQualityReport() {
   });
 }
 
-function formatQualityDuration(ms) {
-  const numeric = Number(ms || 0);
-  if (!Number.isFinite(numeric) || numeric <= 0) return "n/a";
-  if (numeric < 1000) return `${formatNumber(Math.round(numeric))} ms`;
-  if (numeric < 60_000) return `${numberFormatterWith(1, 1).format(numeric / 1000)} s`;
-  return `${numberFormatterWith(1, 1).format(numeric / 60_000)} min`;
-}
-
-function renderCaptureQualityMetric(label, value, hint = "", className = "") {
-  return `<article${className ? ` class="${escapeHtml(className)}"` : ""}>
-    <span>${escapeHtml(label)}</span>
-    <strong>${escapeHtml(value)}</strong>
-    ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
-  </article>`;
-}
-
-function renderCaptureQualityFeature(card) {
-  const icon = card.status === "ok" ? "ri-checkbox-circle-line" : card.status === "partial" ? "ri-error-warning-line" : "ri-close-circle-line";
-  return `<article class="capture-quality-feature ${escapeHtml(card.status)}">
-    <i class="${icon}" aria-hidden="true"></i>
-    <div>
-      <strong>${escapeHtml(card.label)}</strong>
-      <p>${escapeHtml(card.detail)}</p>
-      <small>${escapeHtml(`${card.points}/${card.weight} pts${card.commandDetected ? " - command/evidence detected" : ""}`)}</small>
-    </div>
-  </article>`;
-}
-
-function renderCaptureQualityReadiness(item) {
-  const icon = item.status === "strong" ? "ri-shield-check-line" : item.status === "partial" ? "ri-error-warning-line" : "ri-shield-cross-line";
-  const blockers = item.blockers?.length ? `<small>Blocking gaps: ${escapeHtml(item.blockers.join(", "))}</small>` : "";
-  const helpful = item.helpfulMissing?.length ? `<small>Helpful next: ${escapeHtml(item.helpfulMissing.join(", "))}</small>` : "";
-  return `<article class="capture-quality-readiness ${escapeHtml(item.status)}">
-    <i class="${icon}" aria-hidden="true"></i>
-    <div>
-      <strong>${escapeHtml(item.label)}</strong>
-      <p>${escapeHtml(item.detail)}</p>
-      ${blockers || helpful ? `<div class="capture-quality-readiness-notes">${blockers}${helpful}</div>` : ""}
-    </div>
-  </article>`;
-}
-
-function renderCaptureQualityList(title, items, empty, className = "") {
-  return `<section class="capture-quality-list ${escapeHtml(className)}">
-    <h4>${escapeHtml(title)}</h4>
-    ${items.length ? `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p>${escapeHtml(empty)}</p>`}
-  </section>`;
-}
-
 function renderCaptureQualityReport() {
-  const report = captureQualityReport();
-  const m = report.metrics;
-  const okFeatures = report.featureCards.filter(card => card.status === "ok").length;
-  const weakFeatures = report.featureCards.filter(card => card.status === "missing").length;
-  const cadenceHintBase = m.intervalCount ? `min ${formatQualityDuration(m.minIntervalMs)}, max ${formatQualityDuration(m.maxIntervalMs)}` : "Need repeated timestamps";
-  const cadenceHint = m.requestedIntervalMs
-    ? `${cadenceHintBase} - command sleep ${formatQualityDuration(m.requestedIntervalMs)}${m.cadenceDriftRatio ? ` (${numberFormatterWith(1, 1).format(m.cadenceDriftRatio)}x)` : ""}`
-    : cadenceHintBase;
-  const continuity = m.medianSocketContinuity ? `${Math.round(m.medianSocketContinuity * 100)}% median continuity` : "no continuity signal";
-  const socketCoverageHint = `${formatNumber(m.uniqueSocketIdentities)} unique / ${formatNumber(m.oneShotSocketIdentities)} one-shot - ${continuity}`;
-  return `<div class="capture-quality-shell">
-    <section class="capture-quality-hero ${escapeHtml(report.grade)}">
-      <div>
-        <span class="tooltip-kicker">Capture Quality Report</span>
-        <h3>${escapeHtml(report.grade)} evidence readiness</h3>
-        <p>${escapeHtml(report.summary)}</p>
-        <div class="capture-quality-source">
-          <span><i class="ri-file-search-line"></i> ${escapeHtml(report.sourceName)}</span>
-          <span><i class="ri-checkbox-circle-line"></i> ${formatNumber(okFeatures)} ready</span>
-          <span><i class="ri-error-warning-line"></i> ${formatNumber(weakFeatures)} missing</span>
-        </div>
-      </div>
-      <div class="capture-quality-score" aria-label="Capture quality score ${report.score} out of 100">
-        <svg viewBox="0 0 120 120" width="90" height="90">
-          <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10" stroke-linecap="round" transform="rotate(-225 60 60)" stroke-dasharray="236 314"/>
-          <circle cx="60" cy="60" r="50" fill="none" stroke="${report.score >= 70 ? '#2cc62c' : report.score >= 40 ? '#ffd166' : '#ff5c77'}" stroke-width="10" stroke-linecap="round" transform="rotate(-225 60 60)" stroke-dasharray="${Math.round(report.score * 2.36)} 314" style="transition:stroke-dasharray 0.5s"/>
-          <text x="60" y="66" text-anchor="middle" fill="var(--text)" font-size="22" font-weight="700">${report.score}%</text>
-        </svg>
-      </div>
-    </section>
-
-    <section class="capture-quality-metrics">
-      ${renderCaptureQualityMetric("Snapshots", formatNumber(m.snapshotCount), `${formatNumber(m.timestampBlockCount)} timestamp block(s)`)}
-      ${renderCaptureQualityMetric("Duration", formatQualityDuration(m.durationMs), "timestamp window")}
-      ${renderCaptureQualityMetric("Cadence", formatQualityDuration(m.medianIntervalMs), cadenceHint)}
-      ${renderCaptureQualityMetric("Parsed sockets", formatNumber(m.parsedSocketCount), `${formatNumber(m.activeSocketRows)} row(s) across snapshots`)}
-      ${renderCaptureQualityMetric("Rows with rates", formatNumber(m.observedRateRows), "delivery/pacing/send evidence")}
-      ${renderCaptureQualityMetric("Socket coverage", formatNumber(m.uniqueSocketIdentities), socketCoverageHint, "collection-check")}
-    </section>
-
-    <section class="capture-quality-panel capture-quality-readiness-panel">
-      <header>
-        <strong>Diagnostic readiness</strong>
-        <span>what this capture can support safely</span>
-      </header>
-      <div class="capture-quality-readiness-grid">
-        ${report.diagnosticReadiness.map(renderCaptureQualityReadiness).join("")}
-      </div>
-    </section>
-
-    <section class="capture-quality-grid">
-      <div class="capture-quality-panel">
-        <header>
-          <strong>Evidence coverage</strong>
-          <span>what this capture can support</span>
-        </header>
-        <div class="capture-quality-feature-grid">
-          ${report.featureCards.map(renderCaptureQualityFeature).join("")}
-        </div>
-      </div>
-      <div class="capture-quality-side">
-        ${renderCaptureQualityList("Warnings", report.warnings, "No capture-quality warning detected.", "warnings")}
-        ${renderCaptureQualityList("Missing evidence", report.missing, "No important evidence gap detected.", "missing")}
-        ${report.dataIntegrity?.length ? `<section class="capture-quality-list data-integrity">
-          <h4><i class="ri-shield-check-line"></i> Data integrity</h4>
-          <ul>${report.dataIntegrity.map(issue => `<li class="${escapeHtml(issue.severity)}"><span class="risk ${escapeHtml(issue.severity)}">${escapeHtml(issue.severity)}</span> ${escapeHtml(issue.message)}</li>`).join("")}</ul>
-        </section>` : ""}
-      </div>
-    </section>
-
-    <section class="capture-quality-recommendations">
-      <div>
-        <h4>Recommended next collection</h4>
-        <p>Use this when the current capture is weak, too short, or missing expert fields. Keep the interval realistic for the host and storage path.</p>
-      </div>
-      <pre class="code">${escapeHtml(report.recommendedCommand)}</pre>
-      <button class="primary" type="button" data-action="copyQualityCommand">${icons.copy} Copy recommended command</button>
-    </section>
-
-    <section class="capture-quality-bottom">
-      ${renderCaptureQualityList("Strengths", report.strengths.slice(0, 6), "No strong capture signal yet.", "strengths")}
-      ${renderCaptureQualityList("Practical recommendations", report.recommendations, "The current capture pattern is already strong.", "recommendations")}
-      ${renderCaptureQualityList("Interpretation limits", report.limits, "No limits listed.", "limits")}
-    </section>
-  </div>`;
+  return renderCaptureQualityReportView(captureQualityReport(), {
+    escapeHtml,
+    formatNumber,
+    numberFormatterWith,
+    icons
+  });
 }
 
 function diagnosticHypotheses() {
