@@ -302,6 +302,7 @@ applyDefaultDashboardPreset();
 import { icons } from "./icons.js";
 import { ANALYSIS_TAB_GUIDE, PRE_IMPORT_PRESETS, EXPERT_CORRELATIONS, SS_EDITOR_THEMES, DEFAULT_SS_EDITOR_THEME, SS_OPTION_INTEL, CONVERSATION_SORT_LABELS } from "./constants.js";
 import { html, escapeHtml, truncateMiddle } from "./utils.js";
+import { createAppContext } from "./app-context.js";
 
 function dashboardPresetIdOrDefault(value) {
   const fallback = DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]
@@ -12393,6 +12394,17 @@ function toggleCommandPalette() {
   state.modal = "commandPalette"; state.commandPaletteQuery = ""; render();
   setTimeout(() => document.querySelector("#cmdPaletteInput")?.focus(), 50);
 }
+
+// App context for extracted modules
+const ctx = createAppContext(state, {
+  html, escapeHtml, truncateMiddle, icons,
+  formatNumber, formatMetricValue, formatTimelineTime, formatTimelineOffset,
+  thresholdFor, thresholdSeverity, metricLabel,
+  selectedSocket, socketsById, parsedTimestampSnapshots,
+  metricValue, render, renderKeepingWorkspacePosition, toast,
+  focusSocket, sortedFilteredSockets, visibleHistory
+});
+window._ctx = ctx;
 
 window._debug = { get state() { return state; }, snapshots: () => parsedTimestampSnapshots() };
 
