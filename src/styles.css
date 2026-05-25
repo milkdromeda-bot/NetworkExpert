@@ -10902,3 +10902,43 @@ button .ripple {
 .text-soft { color: var(--soft) !important; }
 .font-bold { font-weight: 700 !important; }
 .font-black { font-weight: 900 !important; }
+
+
+/* === Undo timeline panel === */
+.undo-timeline-panel {
+  position: fixed;
+  top: 56px;
+  right: 180px;
+  z-index: 10000;
+  background: rgba(11, 16, 24, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 4px;
+  animation: viewEnter 0.2s var(--ease-out);
+}
+.undo-timeline-panel strong { font-size: var(--font-size-sm); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.undo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  justify-content: flex-start;
+}
+.undo-item i { font-size: 14px; color: var(--muted); flex-shrink: 0; }
+.undo-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo-item small { color: var(--muted); font-size: var(--font-size-xs); flex-shrink: 0; }
+.undo-item.redo { opacity: 0.5; }
+.undo-item:hover { background: rgba(93,183,255,0.08); }
+.undo-current { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: var(--font-size-sm); color: var(--green); font-weight: 700; }
+.undo-current i { font-size: 14px; }
