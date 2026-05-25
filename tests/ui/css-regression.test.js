@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
+const stylesCss = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
+const captureQualityCss = readFileSync(new URL("../../src/capture-quality.css", import.meta.url), "utf8");
+const analysisGuideCss = readFileSync(new URL("../../src/analysis-guide.css", import.meta.url), "utf8");
+const css = [stylesCss, captureQualityCss, analysisGuideCss].join("\n");
+const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
 const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
 const ssCommandView = readFileSync(new URL("../../src/ss-command-view.js", import.meta.url), "utf8");
@@ -16,6 +20,20 @@ const constants = readFileSync(new URL("../../src/constants.js", import.meta.url
 const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
 const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
 const tableColumns = readFileSync(new URL("../../src/table-columns.js", import.meta.url), "utf8");
+
+test("capture quality report keeps its stylesheet out of the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/capture-quality\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.capture-quality-shell\s*\{/);
+  assert.match(captureQualityCss, /\.capture-quality-shell\s*\{/);
+  assert.match(captureQualityCss, /Quality metrics Grafana-style colors/);
+});
+
+test("analysis guide keeps modal documentation styles out of the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/analysis-guide\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.analysis-view-guide-modal\s*\{/);
+  assert.match(analysisGuideCss, /\.analysis-view-guide-modal\s*\{/);
+  assert.match(analysisGuideCss, /\.analysis-view-guide-button\s*\{/);
+});
 
 test("table settings header stays above nearby column hover tooltips", () => {
   assert.match(css, /th:not\(\.table-settings-head\):hover/);
