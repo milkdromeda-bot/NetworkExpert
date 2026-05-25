@@ -99,7 +99,6 @@ export function renderPrefsView(ctx = {}) {
       </article>` : ""}
       ${tab === "alerts" ? `<article class="field-card">
         <strong>Alert behavior</strong>
-        <label class="check"><input id="prefDeepAnalysis" type="checkbox" ${prefs.deepAnalysis ? "checked" : ""}/> Run advanced advisor in the background</label>
         <label>Anomaly visibility floor<select id="prefSeverity">${["low", "medium", "high", "critical"].map(s => `<option ${prefs.severityFloor === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
         <label class="check"><input id="prefToast" type="checkbox" ${prefs.autoToast ? "checked" : ""}/> Automatic toasts for important anomalies</label>
       </article>` : ""}

@@ -1137,7 +1137,7 @@ function addCollectionAnomalies() {
 }
 
 function runAdvisorAnalysis() {
-  state.advisorFindings = state.prefs.deepAnalysis ? buildAdvisorFindings() : [];
+  state.advisorFindings = buildAdvisorFindings();
 }
 
 function socketsWhere(predicate) {
@@ -4825,14 +4825,6 @@ function renderDiagnosticPlaybook(item) {
 }
 
 function renderAdvisor() {
-  if (!state.prefs.deepAnalysis) {
-    return `<div class="advisor-empty">
-      <i class="ri-brain-line"></i>
-      <strong>Deep analysis is paused</strong>
-      <p>Enable it to let Ultimate Network Expert turn raw ss counters into prioritized hypotheses, next commands, and mitigation paths.</p>
-      <button class="primary" data-action="toggleDeepAnalysis">Enable deep analysis</button>
-    </div>`;
-  }
   const findings = state.advisorFindings;
   const top = findings[0];
   const hidden = Math.max(0, state.anomalies.length - findings.reduce((sum, finding) => sum + finding.count, 0));
@@ -8922,12 +8914,6 @@ function bindEvents(deps = appEventDependencies()) {
       state.fixTable = { page: 1, pageSize: 20, sortKey: "lag", sortDir: "desc" };
       render();
     }
-    if (action === "toggleDeepAnalysis") {
-      state.prefs.deepAnalysis = !state.prefs.deepAnalysis;
-      savePrefs();
-      toast(state.prefs.deepAnalysis ? "Deep analysis enabled" : "Deep analysis paused", state.prefs.deepAnalysis ? "The advisor will prioritize findings in the background." : "Raw tables and anomalies remain available.");
-      render();
-    }
     if (action === "setBaseline") {
       state.baseline = createBaseline();
       state.baseline.role = "healthy";
@@ -9356,7 +9342,7 @@ function bindEvents(deps = appEventDependencies()) {
     if (action === "savePrefs") {
       state.prefs.severityFloor = document.querySelector("#prefSeverity")?.value || state.prefs.severityFloor;
       state.prefs.autoToast = document.querySelector("#prefToast")?.checked ?? state.prefs.autoToast;
-      state.prefs.deepAnalysis = document.querySelector("#prefDeepAnalysis")?.checked ?? state.prefs.deepAnalysis;
+      state.prefs.deepAnalysis = true;
       state.prefs.compactRows = document.querySelector("#prefCompact")?.checked ?? state.prefs.compactRows;
       state.prefs.tableUnits = document.querySelector("#prefTableUnits")?.checked ?? state.prefs.tableUnits;
       state.prefs.colorBlind = document.querySelector("#prefColorBlind")?.checked ?? state.prefs.colorBlind;

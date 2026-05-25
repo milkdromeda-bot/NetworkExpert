@@ -54,10 +54,6 @@ export function renderAnalysisPageView(ctx = {}) {
   const sockets = state.sockets || [];
   const anomalies = state.anomalies || [];
   const table = state.table || { filters: { text: "" } };
-  const deepAnalysisOn = Boolean(state.prefs?.deepAnalysis);
-  const deepAnalysisTitle = deepAnalysisOn
-    ? "Deep analysis is on. Click to pause the background advisor."
-    : "Deep analysis is paused. Click to enable the background advisor.";
   const criticalCount = anomalies.filter(a => a.severity === "critical").length;
   const totalSendQ = sockets.reduce((sum, socket) => sum + (socket.sendQ || 0), 0);
   const totalDrops = sockets.reduce((sum, socket) => sum + (socket.details?.skmem?.d || 0), 0);
@@ -76,11 +72,6 @@ export function renderAnalysisPageView(ctx = {}) {
         <div class="panel-head">
           <div class="panel-title">Detected sockets</div>
           <div class="toolbar">
-            <button data-action="toggleDeepAnalysis" class="deep-analysis-toggle ${deepAnalysisOn ? "is-on" : "is-off"}" role="switch" aria-checked="${deepAnalysisOn ? "true" : "false"}" title="${escapeHtml(deepAnalysisTitle)}">
-              <span class="deep-analysis-icon"><i class="ri-brain-line"></i></span>
-              <span class="deep-analysis-label"><strong>Deep analysis</strong><small>${deepAnalysisOn ? "On" : "Paused"}</small></span>
-              <span class="deep-analysis-switch" aria-hidden="true"><span></span></span>
-            </button>
             <button data-action="setBaseline" title="Use current parsed sockets as before baseline"><i class="ri-scales-3-line"></i> Set baseline</button>
             ${renderExportMenu("analysis")}
             <input id="searchInput" placeholder='Filter: state:ESTAB risk>=high port:443 process:nginx rtt>100' value="${escapeHtml(table.filters?.text || "")}" />

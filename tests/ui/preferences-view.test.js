@@ -119,8 +119,6 @@ test("preferences system tab renders Linux profile, role, Ubuntu baseline, and e
 test("preferences alerts tab renders analysis and anomaly behavior controls", () => {
   const output = render("alerts");
   assert.match(output, /Alert behavior/);
-  assert.match(output, /id="prefDeepAnalysis" type="checkbox" checked/);
-  assert.match(output, /Run advanced advisor in the background/);
   assert.match(output, /id="prefSeverity"/);
   assert.match(output, /<option selected>high<\/option>/);
   assert.match(output, /id="prefToast" type="checkbox" checked/);

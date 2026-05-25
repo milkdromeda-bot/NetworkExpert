@@ -378,19 +378,10 @@ test("diagnostic cards expose optional deep explanations", () => {
   assert.match(css, /\.diagnosis-learn-more li\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
 });
 
-test("deep analysis control is rendered as an explicit on off switch", () => {
-  assert.match(main, /function renderAnalysisPage\(\)[\s\S]*renderAnalysisPageView/);
-  assert.match(analysisShellView, /const deepAnalysisOn = Boolean\(state\.prefs\?\.deepAnalysis\);/);
-  assert.match(analysisShellView, /data-action="toggleDeepAnalysis"[\s\S]*class="deep-analysis-toggle \$\{deepAnalysisOn \? "is-on" : "is-off"\}"/);
-  assert.match(analysisShellView, /role="switch"/);
-  assert.match(analysisShellView, /aria-checked="\$\{deepAnalysisOn \? "true" : "false"\}"/);
-  assert.match(analysisShellView, /<span class="deep-analysis-label"><strong>Deep analysis<\/strong><small>\$\{deepAnalysisOn \? "On" : "Paused"\}<\/small><\/span>/);
-  assert.match(analysisShellView, /<span class="deep-analysis-switch" aria-hidden="true"><span><\/span><\/span>/);
-  assert.doesNotMatch(main, /data-action="toggleDeepAnalysis" class="\$\{state\.prefs\.deepAnalysis \? "primary" : ""\}"/);
-  assert.match(css, /\.deep-analysis-toggle\s*\{[^}]*max-width:\s*196px;/s);
-  assert.match(css, /\.deep-analysis-label strong,\s*\.deep-analysis-label small\s*\{[^}]*text-overflow:\s*ellipsis;/s);
-  assert.match(css, /\.deep-analysis-toggle\.is-on \.deep-analysis-switch span\s*\{[^}]*transform:\s*translateX\(16px\);/s);
-  assert.match(css, /@media \(max-width:\s*1180px\)[\s\S]*\.analysis-layout \.toolbar\s*\{[^}]*flex-wrap:\s*wrap;/s);
+test("deep analysis toggle is removed (analysis always runs)", () => {
+  assert.doesNotMatch(analysisShellView, /toggleDeepAnalysis/);
+  assert.doesNotMatch(analysisShellView, /deep-analysis-toggle/);
+  assert.doesNotMatch(css, /\.deep-analysis-toggle\s*\{/);
 });
 
 test("modal headers stay visible while long preference dialogs scroll", () => {

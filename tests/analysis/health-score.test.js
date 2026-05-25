@@ -28,10 +28,11 @@ test("all healthy sockets return score 100 grade A", () => {
   assert.equal(result.breakdown.healthy, 1);
 });
 
-test("critical sockets heavily penalize the score", () => {
+test("critical sockets penalize the score significantly", () => {
   const sockets = socketsFrom("ESTAB 0 2000000 10.0.0.1:1000 10.0.0.2:443 cubic skmem:(r0,rb100000,t0,tb100000,f0,w0,o0,bl0,d50)");
   const result = computeHealthScore(sockets);
-  assert.ok(result.score < 50, `Expected score < 50, got ${result.score}`);
+  assert.ok(result.score <= 50, `Expected score <= 50, got ${result.score}`);
+  assert.ok(result.score >= 25, `Expected score >= 25 (system still runs), got ${result.score}`);
   assert.equal(result.breakdown.critical, 1);
 });
 

@@ -36,10 +36,10 @@ test("analysis tabs render active state, collapse toggle, key hints, icons, and 
   assert.match(output, /Custom &lt;unsafe&gt; view/);
 });
 
-test("analysis page shell renders KPIs, deep-analysis switch, toolbar, tabs, and active content", () => {
+test("analysis page shell renders KPIs, toolbar, tabs, and active content", () => {
   const output = renderAnalysisPageView({
     state: {
-      prefs: { deepAnalysis: true },
+      prefs: {},
       sockets: [
         { sendQ: 100, details: { skmem: { d: 2 } } },
         { sendQ: 50, details: { skmem: { d: 3 } } }
@@ -62,20 +62,16 @@ test("analysis page shell renders KPIs, deep-analysis switch, toolbar, tabs, and
   assert.match(output, /n:1/);
   assert.match(output, /sendQ:150/);
   assert.match(output, /skmem\.d:5/);
-  assert.match(output, /deep-analysis-toggle is-on/);
-  assert.match(output, /role="switch"/);
-  assert.match(output, /aria-checked="true"/);
-  assert.match(output, /Deep analysis<\/strong><small>On/);
   assert.match(output, /data-export-menu="analysis"/);
   assert.match(output, /state:&lt;ESTAB&gt;/);
   assert.match(output, /<nav>tabs<\/nav>/);
   assert.match(output, /<section>active body<\/section>/);
 });
 
-test("analysis page shell renders paused switch when deep analysis is off", () => {
+test("analysis page shell renders health score when provided", () => {
   const output = renderAnalysisPageView({
     state: {
-      prefs: { deepAnalysis: false },
+      prefs: {},
       sockets: [],
       anomalies: [],
       table: { filters: { text: "" } }
@@ -83,10 +79,9 @@ test("analysis page shell renders paused switch when deep analysis is off", () =
     html,
     escapeHtml,
     renderAnalysisTabs: () => "",
-    renderActiveTab: () => ""
+    renderActiveTab: () => "",
+    healthScore: { score: 85, grade: "B", breakdown: { critical: 0, high: 1, medium: 2, low: 0, healthy: 5 } }
   });
-  assert.match(output, /deep-analysis-toggle is-off/);
-  assert.match(output, /aria-checked="false"/);
-  assert.match(output, /Deep analysis<\/strong><small>Paused/);
-  assert.match(output, /Deep analysis is paused/);
+  assert.match(output, /health-score-kpi grade-B/);
+  assert.match(output, /85<small>\/100<\/small>/);
 });

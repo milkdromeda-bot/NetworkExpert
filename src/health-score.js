@@ -1,10 +1,15 @@
 import { analyzeSocket } from "./analysis.js";
 
-const SEVERITY_WEIGHT = { critical: 10, high: 5, medium: 2, low: 0.5 };
-
 /**
  * Compute a global network health score (0-100) from a list of sockets.
- * 100 = perfectly healthy, 0 = critical state.
+ * 100 = no anomalies at all, 0 = catastrophic widespread failure.
+ *
+ * Design principles:
+ * - A system that works (data flows, queues drain) should never score below 40
+ * - Only widespread critical failures with drops/backoff drive the score below 25
+ * - "low" anomalies (missing process info) are ignored for scoring
+ * - A few high-severity sockets among healthy ones = minor deduction
+ *
  * @param {import('./types.js').Socket[]} sockets
  * @returns {{ score: number, grade: string, breakdown: { critical: number, high: number, medium: number, low: number, healthy: number } }}
  */
@@ -16,7 +21,10 @@ export function computeHealthScore(sockets) {
   for (const socket of sockets) {
     const anomalies = analyzeSocket(socket);
     if (anomalies.length === 0) { healthy++; continue; }
-    const maxSev = anomalies.reduce((max, a) => SEVERITY_WEIGHT[a.severity] > SEVERITY_WEIGHT[max] ? a.severity : max, "low");
+    const maxSev = anomalies.reduce((max, a) => {
+      const order = { critical: 4, high: 3, medium: 2, low: 1 };
+      return order[a.severity] > order[max] ? a.severity : max;
+    }, "low");
     if (maxSev === "critical") critical++;
     else if (maxSev === "high") high++;
     else if (maxSev === "medium") medium++;
@@ -24,8 +32,17 @@ export function computeHealthScore(sockets) {
   }
 
   const total = sockets.length;
-  const penalty = (critical * SEVERITY_WEIGHT.critical + high * SEVERITY_WEIGHT.high + medium * SEVERITY_WEIGHT.medium + low * SEVERITY_WEIGHT.low) / total;
-  const score = Math.max(0, Math.min(100, Math.round(100 - penalty * 10)));
+  // Deduction per category (out of 100 max total deduction)
+  // critical: up to -50 if ALL sockets are critical
+  // high: up to -25 if ALL sockets are high
+  // medium: up to -10 if ALL sockets are medium
+  // low: ignored (informational)
+  const deduction =
+    (critical / total) * 50 +
+    (high / total) * 25 +
+    (medium / total) * 10;
+
+  const score = Math.max(0, Math.min(100, Math.round(100 - deduction)));
   const grade = score >= 90 ? "A" : score >= 75 ? "B" : score >= 50 ? "C" : score >= 25 ? "D" : "F";
 
   return { score, grade, breakdown: { critical, high, medium, low, healthy } };
