@@ -5,7 +5,10 @@ import { test } from "node:test";
 const stylesCss = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
 const captureQualityCss = readFileSync(new URL("../../src/capture-quality.css", import.meta.url), "utf8");
 const analysisGuideCss = readFileSync(new URL("../../src/analysis-guide.css", import.meta.url), "utf8");
-const css = [stylesCss, captureQualityCss, analysisGuideCss].join("\n");
+const chartsAdvancedCss = readFileSync(new URL("../../src/charts-advanced.css", import.meta.url), "utf8");
+const guideCss = readFileSync(new URL("../../src/guide.css", import.meta.url), "utf8");
+const uiEnhancementsCss = readFileSync(new URL("../../src/ui-enhancements.css", import.meta.url), "utf8");
+const css = [stylesCss, captureQualityCss, analysisGuideCss, chartsAdvancedCss, guideCss, uiEnhancementsCss].join("\n");
 const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
 const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
@@ -33,6 +36,27 @@ test("analysis guide keeps modal documentation styles out of the global sheet", 
   assert.doesNotMatch(stylesCss, /\.analysis-view-guide-modal\s*\{/);
   assert.match(analysisGuideCss, /\.analysis-view-guide-modal\s*\{/);
   assert.match(analysisGuideCss, /\.analysis-view-guide-button\s*\{/);
+});
+
+test("advanced chart styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/charts-advanced\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.bdp-window-panel\s*\{/);
+  assert.match(chartsAdvancedCss, /\.bdp-window-panel\s*\{/);
+  assert.match(chartsAdvancedCss, /\.jvm-chart-section\s*\{/);
+});
+
+test("guide view styles are isolated from the global sheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/guide\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /\.guide-v2\s*\{/);
+  assert.match(guideCss, /\.guide-v2\s*\{/);
+  assert.match(guideCss, /\.guide-monitoring-shell\s*\{/);
+});
+
+test("late UI enhancements keep their end-of-cascade stylesheet", () => {
+  assert.match(indexHtml, /href="\.\/src\/ui-enhancements\.css\?v=20260525-1"/);
+  assert.doesNotMatch(stylesCss, /Neon theme - fluorescent on dark/);
+  assert.match(uiEnhancementsCss, /Late UI enhancements and interaction polish/);
+  assert.match(uiEnhancementsCss, /Reduced motion/);
 });
 
 test("table settings header stays above nearby column hover tooltips", () => {
