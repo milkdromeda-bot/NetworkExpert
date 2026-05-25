@@ -730,6 +730,7 @@ function recompute() {
   state.sockets = applyRisks(parseAnalysisSockets());
   state.bandwidthIndex = buildSocketBandwidthIndex();
   state.anomalies = analyzeAll(state.sockets);
+  state.healthScore = computeHealthScore(state.sockets);
   const socketIds = new Set(state.sockets.map(socket => socket.id));
   state.selectedId = socketIds.has(state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
   if (!socketIds.has(state.activeContextId)) setActiveInvestigation(state, null);
@@ -751,6 +752,7 @@ function recomputeFromSockets() {
   state.sockets = withStableSocketIds(state.sockets);
   state.bandwidthIndex = buildSocketBandwidthIndex();
   state.anomalies = analyzeAll(state.sockets);
+  state.healthScore = computeHealthScore(state.sockets);
   state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
   if (!state.sockets.some(socket => socket.id === state.activeContextId)) setActiveInvestigation(state, null);
   setZoom(0, 1);
@@ -2616,7 +2618,7 @@ function renderAnalysisPage() {
     renderExportMenu,
     renderAnalysisTabs,
     renderActiveTab,
-    healthScore: computeHealthScore(state.sockets)
+    healthScore: state.healthScore || null
   });
 }
 
@@ -6684,6 +6686,7 @@ function resetAllState() {
   state.ssCommandConfig = defaultSsCommandConfig();
   setSourceName("empty workspace");
   state.sockets = [];
+  state.healthScore = null;
   state.selectedId = null;
   setActiveInvestigation(state, null);
   state.anomalies = [];
@@ -8197,6 +8200,7 @@ async function importFile(file) {
   state.ingestRawExpanded = false;
   state.sockets = [];
   state.anomalies = [];
+  state.healthScore = null;
   state.selectedId = null;
   setActiveInvestigation(state, null);
   setSourceName(file.name);
@@ -8237,6 +8241,7 @@ async function importFile(file) {
   state.importStatus = null;
   state.view = "analysis";
   state.activeTab = "advisor";
+  state.healthScore = null;
   resetDerivedCaches({ raw: true });
   // Yield to UI before heavy computation
   render();
