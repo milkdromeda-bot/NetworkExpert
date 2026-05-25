@@ -306,6 +306,10 @@ import { createAppContext } from "./app-context.js";
 import { renderTimelineHeatmap as renderHeatmapView } from "./heatmap-view.js";
 import { metricLabel as _metricLabel, METRIC_LABELS } from "./formatters.js";
 import { renderBaselineNarrative as _renderBaselineNarrative, renderDelta as _renderDelta } from "./comparison-view.js";
+import { renderAdvisorGlobalSummary as _renderAdvisorGlobalSummary } from "./advisor-summary-view.js";
+import { renderMetricsStatsTable as _renderMetricsStatsTable } from "./stats-table-view.js";
+import { renderChartsGlobalToolbar as _renderChartsGlobalToolbar } from "./charts-toolbar-view.js";
+import { dashboardPresetIcon, renderDashboardPresetPicker as _renderDashboardPresetPicker, renderDashboardStudioInline as _renderDashboardStudioInline, renderDashboardStudio as _renderDashboardStudio } from "./dashboard-view.js";
 
 function dashboardPresetIdOrDefault(value) {
   const fallback = DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]
@@ -3202,154 +3206,11 @@ function renderAnalysisPage() {
   `;
 }
 
-function renderChartsGlobalToolbar() {
-  const styles = [
-    { id: "line", icon: "ri-line-chart-line", label: "Line" },
-    { id: "area", icon: "ri-bar-chart-grouped-line", label: "Area" },
-    { id: "bars", icon: "ri-bar-chart-line", label: "Bars" },
-    { id: "points", icon: "ri-drag-move-2-fill", label: "Points" }
-  ];
-  const activeStyle = styles.find(s => s.id === state.prefs.graphStyle) || styles[0];
-  const open = state.openStyleMenu;
-  return `<div class="charts-global-toolbar">
-    <div class="chart-tool-group">
-      <div class="style-picker">
-        <button class="style-picker-trigger" data-style-toggle title="Chart style: ${activeStyle.label}">
-          <i class="${activeStyle.icon}"></i>
-          <span>${activeStyle.label}</span>
-          <i class="ri-arrow-down-s-line"></i>
-        </button>
-        <div class="style-picker-menu ${open ? "open" : ""}" role="listbox">
-          ${styles.map(s => `<button class="style-picker-option ${s.id === state.prefs.graphStyle ? "selected" : ""}" data-style-choice="${s.id}" role="option">
-            <i class="${s.icon}"></i><span>${s.label}</span>
-          </button>`).join("")}
-        </div>
-      </div>
-    </div>
-    <div class="chart-tool-group">
-      <button data-action="thresholds">${icons.threshold} Thresholds</button>
-      ${renderExportMenu("charts")}
-      <div class="app-tabs" role="radiogroup" aria-label="Metrics view mode" style="padding:3px;gap:2px;margin-left:6px">
-        <button class="app-tab ${state.metricsView !== "table" ? "active" : ""}" data-action="setMetricsView" data-metrics-view="charts" title="Charts view"><i class="ri-bar-chart-box-line"></i></button>
-        <button class="app-tab ${state.metricsView === "table" ? "active" : ""}" data-action="setMetricsView" data-metrics-view="table" title="Stats table"><i class="ri-table-line"></i></button>
-      </div>
-    </div>
-    <div class="chart-tool-group chart-time-group">
-      <label class="chart-time-field">TZ <select id="chartTimeZoneSelect" title="Chart timezone">${renderTimeZoneOptions()}</select></label>
-      <span class="chart-tool-separator" aria-hidden="true"></span>
-      <label class="chart-time-field">Start <input id="startTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("start")}"/></label>
-      <label class="chart-time-field">End <input id="endTimeInput" type="datetime-local" step="1" value="${zoomDateTimeValue("end")}"/></label>
-    </div>
-    <div class="chart-tool-group">
-      <button data-action="layoutPrefs">${icons.layout} Layout</button>
-      <button class="icon" data-action="details" title="Details">${icons.activity}</button>
-    </div>
-  </div>`;
-}
+function renderChartsGlobalToolbar() { return _renderChartsGlobalToolbar(ctx); }
 
-function renderAdvisorGlobalSummary() {
-  const sockets = state.sockets;
-  const anomalies = state.anomalies;
-  const history = visibleHistory();
-  const drops = dropRateSummary(history);
-  const critical = anomalies.filter(a => a.severity === "critical" || a.severity === "high");
-  const hasTimeline = history.length > 1;
+function renderAdvisorGlobalSummary() { return _renderAdvisorGlobalSummary(ctx); }
 
-  // Health score
-  const score = Math.max(0, 100 - critical.length * 15 - anomalies.length * 3 - (drops?.totalDropDelta || 0 > 0 ? 20 : 0));
-  const scoreColor = score >= 80 ? "#4cde8a" : score >= 50 ? "#ffd166" : "#ff5c77";
-
-  // Top issues
-  const issues = critical.slice(0, 5).map(a => `<li style="margin:4px 0"><span style="color:${a.severity === "critical" ? "#ff5c77" : "#ff9f43"};font-weight:700">${escapeHtml(a.severity)}</span> — ${escapeHtml(a.title)}${a.detail ? `: <span style="color:var(--muted)">${escapeHtml(a.detail.slice(0, 100))}</span>` : ""}</li>`);
-
-  // Quick stats
-  const retransSockets = sockets.filter(s => (metricValue(s, "retrans") || 0) > 0).length;
-  const backoffSockets = sockets.filter(s => (metricValue(s, "backoff") || 0) > 0).length;
-  const highRtt = sockets.filter(s => (metricValue(s, "rtt") || 0) > 100).length;
-  const queuedSockets = sockets.filter(s => (metricValue(s, "recvQ") || 0) > 0 || (metricValue(s, "sendQ") || 0) > 0).length;
-
-  return `<div class="advisor-global-summary" style="padding:16px">
-    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
-      <div style="width:64px;height:64px;border-radius:50%;border:3px solid ${scoreColor};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:${scoreColor}">${score}</div>
-      <div>
-        <h3 style="margin:0;color:var(--text)">Network Health Score</h3>
-        <p style="margin:2px 0 0;color:var(--muted);font-size:12px">${sockets.length} sockets · ${anomalies.length} anomalies · ${hasTimeline ? history.length + " snapshots" : "no timeline"}</p>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
-      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${retransSockets ? "#ff5c77" : "#4cde8a"}">${retransSockets}</div><div style="font-size:10px;color:var(--muted)">Retransmitting</div></div>
-      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${backoffSockets ? "#ff9f43" : "#4cde8a"}">${backoffSockets}</div><div style="font-size:10px;color:var(--muted)">Backoff active</div></div>
-      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${highRtt ? "#ff9f43" : "#4cde8a"}">${highRtt}</div><div style="font-size:10px;color:var(--muted)">RTT > 100ms</div></div>
-      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${queuedSockets ? "#ffd166" : "#4cde8a"}">${queuedSockets}</div><div style="font-size:10px;color:var(--muted)">Queued (Recv/Send)</div></div>
-      <div class="panel" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${drops?.totalDropDelta ? "#ff5c77" : "#4cde8a"}">${drops?.totalDropDelta || 0}</div><div style="font-size:10px;color:var(--muted)">Socket drops</div></div>
-    </div>
-    ${issues.length ? `<div style="margin-bottom:12px"><strong style="color:var(--text)"><i class="ri-alarm-warning-line" style="color:#ff5c77"></i> Top issues</strong><ul style="margin:6px 0 0 16px;padding:0;font-size:12px;color:var(--soft)">${issues.join("")}</ul></div>` : `<div style="padding:12px;border-radius:8px;background:rgba(77,222,138,0.08);border:1px solid rgba(77,222,138,0.2);color:#4cde8a;font-weight:600"><i class="ri-shield-check-line"></i> No critical issues detected. All sockets appear healthy.</div>`}
-    ${renderWhatIfSimulation()}
-    <div style="margin-top:12px;font-size:11px;color:var(--muted)"><i class="ri-lightbulb-line"></i> Tip: Select a socket in Analysis to see per-connection investigation context and tail-latency lens here.</div>
-  </div>`;
-}
-
-
-function renderMetricsStatsTable(metrics) {
-  const rows = visibleHistory();
-  if (!rows.length) return `<div class="empty">No timestamped data for stats.</div>`;
-  const sortKey = state.statsTableSort || "metric";
-  const sortDir = state.statsTableDir || "asc";
-  const cols = ["Min", "Median", "P75", "P95", "P99", "P99.9", "Max", "Avg", "StdDev", "Samples"];
-  const colKeys = ["min", "median", "p75", "p95", "p99", "p999", "max", "avg", "stddev", "samples"];
-
-  const data = metrics.map(m => {
-    const vals = rows.map(r => Number(r[m]) || 0).filter(v => Number.isFinite(v)).sort((a, b) => a - b);
-    if (!vals.length) return null;
-    const p = f => vals[Math.min(vals.length - 1, Math.floor(f * vals.length))];
-    const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
-    const variance = vals.reduce((s, v) => s + (v - avg) ** 2, 0) / vals.length;
-    const stddev = Math.sqrt(variance);
-    const t = thresholdFor(m);
-    return { metric: m, label: metricLabel(m), min: vals[0], median: p(0.5), p75: p(0.75), p95: p(0.95), p99: p(0.99), p999: p(0.999), max: vals[vals.length - 1], avg, stddev, samples: vals.length, threshold: t };
-  }).filter(Boolean);
-
-  // Sort
-  if (sortKey !== "metric") {
-    data.sort((a, b) => sortDir === "asc" ? (a[sortKey] || 0) - (b[sortKey] || 0) : (b[sortKey] || 0) - (a[sortKey] || 0));
-  } else {
-    data.sort((a, b) => sortDir === "asc" ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label));
-  }
-
-  function cellColor(m, val) {
-    const sev = thresholdSeverity(m, val);
-    if (sev === "danger") return "color:#ff9eb0;font-weight:700";
-    if (sev === "warn") return "color:#ffcb80;font-weight:600";
-    return "";
-  }
-
-  const arrow = k => sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : "";
-
-  return `<div class="panel" style="overflow-x:auto"><table class="stats-table" style="width:100%;font-size:12px;border-collapse:collapse">
-    <thead><tr>
-      <th style="text-align:left;padding:6px 10px;cursor:pointer" data-stats-sort="metric">METRIC${arrow("metric")}</th>
-      ${cols.map((c, i) => `<th style="cursor:pointer${colKeys[i] === "max" ? ";color:#ff5c77" : ""}" data-stats-sort="${colKeys[i]}">${c}${arrow(colKeys[i])}</th>`).join("")}
-    </tr></thead>
-    <tbody>${data.map(d => {
-      const maxStyle = cellColor(d.metric, d.max);
-      const p99Style = cellColor(d.metric, d.p99);
-      const p95Style = cellColor(d.metric, d.p95);
-      return `<tr>
-        <td style="text-align:left;padding:6px 10px;font-weight:600;color:var(--text);background:rgba(255,255,255,0.03)"><button class="mini" data-chart-stats="${d.metric}" title="Detailed statistics" style="margin-right:6px;vertical-align:middle"><i class="ri-bar-chart-grouped-line"></i></button>${escapeHtml(d.label)}</td>
-        <td>${formatMetricValue(d.metric, d.min)}</td>
-        <td>${formatMetricValue(d.metric, d.median)}</td>
-        <td>${formatMetricValue(d.metric, d.p75)}</td>
-        <td style="${p95Style}">${formatMetricValue(d.metric, d.p95)}</td>
-        <td style="${p99Style}">${formatMetricValue(d.metric, d.p99)}</td>
-        <td style="${p99Style}">${formatMetricValue(d.metric, d.p999)}</td>
-        <td style="background:rgba(255,92,119,0.06);${maxStyle}">${formatMetricValue(d.metric, d.max)}</td>
-        <td>${formatMetricValue(d.metric, d.avg)}</td>
-        <td style="color:var(--muted)">${d.stddev < 0.01 ? "0" : formatMetricValue(d.metric, d.stddev)}</td>
-        <td style="color:var(--muted)">${formatNumber(d.samples)}</td>
-      </tr>`;
-    }).join("")}</tbody>
-  </table></div>`;
-}
+function renderMetricsStatsTable(metrics) { return _renderMetricsStatsTable(ctx, metrics); }
 
 function renderChartsPage() {
   const metrics = chartMetricList();
@@ -3429,101 +3290,9 @@ function renderChartsPage() {
   `;
 }
 
-function dashboardPresetIcon(presetId) {
-  return {
-    noc: "ri-dashboard-3-line",
-    latency: "ri-pulse-line",
-    tail: "ri-line-chart-line",
-    drops: "ri-error-warning-line",
-    microburst: "ri-flashlight-line",
-    throughput: "ri-route-line",
-    bdp: "ri-speed-up-line",
-    warroom: "ri-team-line"
-  }[presetId] || "ri-dashboard-3-line";
-}
-
-function renderDashboardPresetPicker(activePresetId, presetEntries) {
-  const activePreset = DASHBOARD_PRESETS[activePresetId] || presetEntries[0]?.[1];
-  const activeIcon = dashboardPresetIcon(activePresetId);
-  const open = state.openDashboardPresetMenu;
-  return `<div class="dashboard-preset-picker" id="dashboardPresetPicker">
-    <button class="dashboard-preset-trigger" data-dashboard-preset-toggle aria-expanded="${open ? "true" : "false"}" title="${escapeHtml(activePreset?.description || "Choose an expert dashboard preset.")}">
-      <span class="dashboard-preset-icon"><i class="${escapeHtml(activeIcon)}"></i></span>
-      <span class="dashboard-preset-current">${escapeHtml(activePreset?.name || "Choose preset")}</span>
-      <i class="ri-arrow-down-s-line dashboard-preset-chevron"></i>
-    </button>
-    <div class="dashboard-preset-menu ${open ? "open" : ""}" role="listbox" aria-label="Expert dashboard presets">
-      ${presetEntries.map(([id, preset]) => `<button class="dashboard-preset-option ${id === activePresetId ? "selected" : ""}" data-dashboard-preset-choice="${escapeHtml(id)}" role="option" aria-selected="${id === activePresetId ? "true" : "false"}" aria-label="${escapeHtml(`${preset.name}: ${preset.description}`)}">
-        <span class="dashboard-preset-icon"><i class="${escapeHtml(dashboardPresetIcon(id))}"></i></span>
-        <span class="dashboard-preset-option-copy"><strong>${escapeHtml(preset.name)}</strong><small>${escapeHtml(preset.description)}</small></span>
-      </button>`).join("")}
-    </div>
-  </div>`;
-}
-function renderDashboardStudioInline() {
-  const presetEntries = Object.entries(DASHBOARD_PRESETS);
-  const activePresetId = DASHBOARD_PRESETS[state.activeDashboardPreset]
-    ? state.activeDashboardPreset
-    : presetEntries[0]?.[0];
-  const presetPicker = renderDashboardPresetPicker(activePresetId, presetEntries);
-  const savedOptions = state.dashboardProfiles
-    .map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`)
-    .join("");
-  return `<div class="dashboard-studio-inline">
-    <div class="dashboard-inline-control">
-      <span>Preset</span>
-      ${presetPicker}
-    </div>
-    <div class="dashboard-inline-control">
-      <select id="savedDashboardSelect" ${state.dashboardProfiles.length ? "" : "disabled"}>
-        ${state.dashboardProfiles.length ? savedOptions : `<option>No saved</option>`}
-      </select>
-      <button data-action="loadSelectedDashboard" ${state.dashboardProfiles.length ? "" : "disabled"} title="Load">${icons.load}</button>
-    </div>
-    <div class="dashboard-inline-control">
-      <input id="dashboardName" placeholder="Save as..." />
-      <button class="primary" data-action="saveDashboard" title="Save">${icons.saveDisk}</button>
-    </div>
-  </div>`;
-}
-function renderDashboardStudio() {
-  const presetEntries = Object.entries(DASHBOARD_PRESETS);
-  const activePresetId = DASHBOARD_PRESETS[state.activeDashboardPreset]
-    ? state.activeDashboardPreset
-    : presetEntries[0]?.[0];
-  const presetPicker = renderDashboardPresetPicker(activePresetId, presetEntries);
-  const savedOptions = state.dashboardProfiles
-    .map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)} - ${escapeHtml(new Date(profile.createdAt).toLocaleString(resolvedNumberLocale()))}</option>`)
-    .join("");
-  return `<section class="dashboard-studio compact">
-    <div class="dashboard-compact-bar dashboard-compact-bar--single">
-      <div class="dashboard-compact-title">
-        <span class="tooltip-kicker">Dashboard studio</span>
-        <strong>Operational dashboards</strong>
-      </div>
-      <div class="dashboard-control dashboard-preset-control">
-        <span>Expert preset</span>
-        ${presetPicker}
-      </div>
-      <div class="dashboard-divider" aria-hidden="true"></div>
-      <label class="dashboard-control dashboard-saved-select">
-        <span>Saved dashboards</span>
-        <select id="savedDashboardSelect" ${state.dashboardProfiles.length ? "" : "disabled"}>
-          ${state.dashboardProfiles.length ? savedOptions : `<option>No saved dashboard yet</option>`}
-        </select>
-      </label>
-      <div class="dashboard-saved-actions">
-        <button data-action="loadSelectedDashboard" ${state.dashboardProfiles.length ? "" : "disabled"} title="Load selected dashboard">${icons.load} Load</button>
-        <button data-action="deleteSelectedDashboard" ${state.dashboardProfiles.length ? "" : "disabled"} title="Delete selected dashboard">${icons.trash} Delete</button>
-      </div>
-      <label class="dashboard-control dashboard-save-name">
-        <span>Save current</span>
-        <input id="dashboardName" placeholder="Dashboard name" />
-      </label>
-      <button class="primary dashboard-save-button" data-action="saveDashboard" title="Save current chart layout">${icons.saveDisk} Save</button>
-    </div>
-  </section>`;
-}
+function renderDashboardPresetPicker(activePresetId, presetEntries) { return _renderDashboardPresetPicker(ctx, activePresetId, presetEntries); }
+function renderDashboardStudioInline() { return _renderDashboardStudioInline(ctx); }
+function renderDashboardStudio() { return _renderDashboardStudio(ctx); }
 function renderTailLatencyLensPanel() {
   const lens = tailLatencyLens();
   if (!hasRealTimestampHistory() || !lens) return "";
@@ -12275,7 +12044,10 @@ const ctx = createAppContext(state, {
   thresholdFor, thresholdSeverity, metricLabel,
   selectedSocket, socketsById, parsedTimestampSnapshots,
   metricValue, render, renderKeepingWorkspacePosition, toast,
-  focusSocket, sortedFilteredSockets, visibleHistory
+  focusSocket, sortedFilteredSockets, visibleHistory,
+  dropRateSummary, renderWhatIfSimulation, renderInvestigationContext, renderTailLatencyLensPanel,
+  renderExportMenu, renderTimeZoneOptions, zoomDateTimeValue,
+  DASHBOARD_PRESETS, resolvedNumberLocale
 });
 window._ctx = ctx;
 
