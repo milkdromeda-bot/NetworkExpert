@@ -32,6 +32,11 @@ import { correlateFixLatency, DEFAULT_WINDOWS as FIX_DEFAULT_WINDOWS } from "./f
 import { parseVmstat, parseNstatTimestamped, vmstatSummary } from "./vmstat-parser.js";
 import { parseSar, correlateSarWithTcp } from "./sar-parser.js";
 import { detectCwndPhases } from "./cwnd-phases.js";
+import { detectFragmentation } from "./fragmentation.js";
+import { detectReordering } from "./reordering.js";
+import { buildGeoMarkers, renderGeoMapSvg } from "./geo-map.js";
+import { renderSankeySvg } from "./sankey.js";
+import { buildSparklineIndex, renderSparkline } from "./sparkline.js";
 import { buildSsCollectionCommand, commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { validateSsCommandConfig } from "./ss-command-validation.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
@@ -65,7 +70,8 @@ const TABLE_COLUMNS = createTableColumns({
   socketBandwidth,
   renderEndpointCell,
   renderPeerCell,
-  metricValue
+  metricValue,
+  socketIdentityKey
 });
 
 const TABLE_COLUMN_BY_KEY = new Map(TABLE_COLUMNS.map(column => [column.key, column]));
@@ -734,8 +740,11 @@ function markAnalysisDirty({ raw = false } = {}) {
 function recompute() {
   state.sockets = applyRisks(parseAnalysisSockets());
   state.bandwidthIndex = buildSocketBandwidthIndex();
+  state.sparklineIndex = hasRealTimestampHistory() ? buildSparklineIndex(parsedTimestampSnapshots(), socketIdentityKey, metricValue) : null;
   state.anomalies = analyzeAll(state.sockets);
-  state.healthScore = computeHealthScore(state.sockets);
+  state.fragmentation = detectFragmentation(state.sockets);
+  state.reordering = detectReordering(state.sockets);
+  state.healthScore = computeHealthScore(state.sockets, { fragmentation: state.fragmentation, reordering: state.reordering });
   const socketIds = new Set(state.sockets.map(socket => socket.id));
   state.selectedId = socketIds.has(state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
   if (!socketIds.has(state.activeContextId)) setActiveInvestigation(state, null);
@@ -756,8 +765,11 @@ function parseAnalysisSockets() {
 function recomputeFromSockets() {
   state.sockets = withStableSocketIds(state.sockets);
   state.bandwidthIndex = buildSocketBandwidthIndex();
+  state.sparklineIndex = hasRealTimestampHistory() ? buildSparklineIndex(parsedTimestampSnapshots(), socketIdentityKey, metricValue) : null;
   state.anomalies = analyzeAll(state.sockets);
-  state.healthScore = computeHealthScore(state.sockets);
+  state.fragmentation = detectFragmentation(state.sockets);
+  state.reordering = detectReordering(state.sockets);
+  state.healthScore = computeHealthScore(state.sockets, { fragmentation: state.fragmentation, reordering: state.reordering });
   state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
   if (!state.sockets.some(socket => socket.id === state.activeContextId)) setActiveInvestigation(state, null);
   setZoom(0, 1);
@@ -5423,6 +5435,8 @@ function renderServiceMap() {
         </svg>
       </div>
       ${selectedEdge ? renderMapEdgeInsight(selectedEdge) : renderHotPaths(hotPaths)}
+      ${(() => { const markers = buildGeoMarkers(state.ipIntel, state.sockets); return markers.length || Object.keys(state.ipIntel).length ? `<div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Geographic peer distribution</div></div><div class="panel-body">${renderGeoMapSvg(markers)}</div></div>` : ""; })()}
+      <div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Flow Sankey — bandwidth proportional</div></div><div class="panel-body">${renderSankeySvg({ edges: map.edges, nodes: new Map([...map.processes, ...map.locals, ...map.peers].map(n => [n.id, n])) }, { escapeHtml })}</div></div>
     </div>
   </div>`;
 }
@@ -6272,9 +6286,11 @@ function formatTableMetricValue(metric, value) {
   return state?.prefs?.tableUnits === false ? formatMetricNumber(metric, value) : formatMetricValue(metric, value);
 }
 
-function renderTableMetricCell(metric, value) {
+function renderTableMetricCell(metric, value, socketKey) {
   const severity = thresholdSeverity(metric, Number(value || 0));
-  return `<span class="table-metric ${severity}" title="${escapeHtml(metricLabel(metric))}: ${formatMetricValue(metric, value)}">${formatTableMetricValue(metric, value)}</span>`;
+  const spark = socketKey && state.sparklineIndex?.get(socketKey)?.[metric];
+  const sparkHtml = spark?.length > 2 ? ` ${renderSparkline(spark)}` : "";
+  return `<span class="table-metric ${severity}" title="${escapeHtml(metricLabel(metric))}: ${formatMetricValue(metric, value)}">${formatTableMetricValue(metric, value)}${sparkHtml}</span>`;
 }
 
 function parseFormattedNumber(value) {

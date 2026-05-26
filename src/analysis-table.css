@@ -1062,3 +1062,6 @@ tr.selected { background: #101a27; }
 .health-score-kpi.grade-C .health-grade { background: var(--yellow); color: #000; }
 .health-score-kpi.grade-D .health-grade { background: var(--orange); color: #000; }
 .health-score-kpi.grade-F .health-grade { background: var(--red); color: #fff; }
+
+/* Sparklines in table cells */
+.sparkline { vertical-align: middle; margin-left: 4px; opacity: 0.8; }
