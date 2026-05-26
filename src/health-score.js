@@ -42,7 +42,9 @@ export function computeHealthScore(sockets) {
     (high / total) * 25 +
     (medium / total) * 10;
 
-  const score = Math.max(0, Math.min(100, Math.round(100 - deduction)));
+  // Absolute floor: significant critical presence caps the score below A
+  const absoluteFloor = critical > 3 ? Math.min(20, 10 + critical) : critical > 0 ? critical * 2 : 0;
+  const score = Math.max(0, Math.min(100, Math.round(100 - Math.max(deduction, absoluteFloor))));
   const grade = score >= 90 ? "A" : score >= 75 ? "B" : score >= 50 ? "C" : score >= 25 ? "D" : "F";
 
   return { score, grade, breakdown: { critical, high, medium, low, healthy } };
