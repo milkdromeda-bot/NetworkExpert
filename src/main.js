@@ -8656,6 +8656,11 @@ function bindEvents(deps = appEventDependencies()) {
           worker.postMessage({ type: "parseSs", payload: { raw: state.raw } });
         }
         worker.onmessage = msg => {
+          if (msg.data.type === "parseSs:progress") {
+            const { parsed, progress } = msg.data.payload;
+            const busyLabel = document.querySelector(".busy-label");
+            if (busyLabel) busyLabel.textContent = `Parsing... ${parsed} sockets (${progress}%)`;
+          }
           if (msg.data.type === "parseSs:done") {
             worker.terminate();
             _hideBusy();

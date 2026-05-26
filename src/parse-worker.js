@@ -1,12 +1,14 @@
 /**
  * Web Worker for heavy ss parsing operations.
- * Offloads parseSs + analysis + diagnostics + stories from the main thread.
+ * Supports progressive parsing with intermediate progress reports.
  */
 import { parseSs, parseTimestampLine } from "./parser.js";
 import { analyzeAll, applyRisks } from "./analysis.js";
 import { correlateFixLatency } from "./fix-correlation.js";
 import { buildDiagnosticHypotheses } from "./diagnostics.js";
 import { detectTimelineStories } from "./timeline-stories.js";
+
+const BATCH_SIZE = 2000;
 
 self.onmessage = function(e) {
   const { type, payload } = e.data;
@@ -16,8 +18,32 @@ self.onmessage = function(e) {
       const raw = payload.sharedBuffer
         ? new TextDecoder().decode(new Uint8Array(payload.sharedBuffer, 0, payload.byteLength))
         : payload.raw;
-      const sockets = parseSs(raw);
-      self.postMessage({ type: "parseSs:done", payload: { sockets } });
+
+      // Progressive parsing: split into lines, parse in batches, report progress
+      const lines = raw.split(/\r?\n/);
+      const totalLines = lines.length;
+
+      if (totalLines <= BATCH_SIZE * 2) {
+        // Small file: parse in one shot
+        const sockets = parseSs(raw);
+        self.postMessage({ type: "parseSs:done", payload: { sockets } });
+        return;
+      }
+
+      const allSockets = [];
+      let offset = 0;
+      while (offset < totalLines) {
+        const batch = lines.slice(offset, offset + BATCH_SIZE);
+        const parsed = parseSs(batch.join("\n"));
+        allSockets.push(...parsed);
+        offset += BATCH_SIZE;
+        // Report progress every batch
+        self.postMessage({
+          type: "parseSs:progress",
+          payload: { parsed: allSockets.length, progress: Math.min(99, Math.round((offset / totalLines) * 100)) }
+        });
+      }
+      self.postMessage({ type: "parseSs:done", payload: { sockets: allSockets } });
     } catch (err) {
       self.postMessage({ type: "parseSs:error", payload: { message: err.message } });
     }
