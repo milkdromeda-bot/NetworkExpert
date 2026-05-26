@@ -809,7 +809,7 @@ function pushAnomalyAlerts() {
 function scheduleIpIntelEnrichment() {
   if (state.ipIntelRunning || !state.sockets.length) return;
   const pending = publicPeerIps(state.sockets)
-    .filter(ip => !state.ipIntel[ip] || state.ipIntel[ip].status === "error")
+    .filter(ip => !state.ipIntel[ip])
     .slice(0, 12);
   if (!pending.length) return;
   state.ipIntelRunning = true;
