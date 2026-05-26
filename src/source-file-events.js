@@ -204,7 +204,7 @@ export function bindSourceFileEvents(deps) {
   });
 
   document.querySelector("#ingestAutoDir")?.addEventListener("change", async event => {
-    const files = Array.from(event.target.files || []).filter(file => /\.(log|txt|out|gz|zip|ss)$/i.test(file.name));
+    const files = Array.from(event.target.files || []).filter(file => !file.name.startsWith("."));
     if (!files.length) return;
     _showBusy();
     const classified = { ss: [], fix: [], gc: [], vmstat: [], nstat: [], sar: [] };
