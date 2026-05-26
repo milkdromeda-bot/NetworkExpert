@@ -437,7 +437,7 @@ button.mega i {
 .hint { color: var(--muted); font-size: var(--font-size-base); line-height: 1.45; }
 .import-status {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 4px 8px;
   flex: 1 1 320px;
@@ -447,11 +447,15 @@ button.mega i {
   border: var(--border);
   border-radius: 7px;
   background: linear-gradient(135deg, rgba(57, 214, 214, .08), rgba(7, 11, 17, .96));
+  overflow: hidden;
 }
 .import-status strong {
   color: var(--text);
   font-size: var(--font-size-md);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .import-status span {
   color: var(--muted);

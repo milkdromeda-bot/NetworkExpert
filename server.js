@@ -146,9 +146,7 @@ createServer(async (req, res) => {
     const body = await readFile(path);
     res.writeHead(200, {
       "content-type": types[extname(path)] || "application/octet-stream",
-      "cache-control": "no-store",
-      "cross-origin-opener-policy": "same-origin",
-      "cross-origin-embedder-policy": "require-corp"
+      "cache-control": "no-store"
     });
     res.end(body);
   } catch {

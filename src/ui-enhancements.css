@@ -138,17 +138,10 @@ main.workspace { animation: viewFadeIn 0.25s ease; }
 }
 
 /* Guided tour highlight */
-.onboarding-overlay { position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,0.45); pointer-events: none; }
+.onboarding-overlay { position: fixed; z-index: 99999; pointer-events: none; top: 0; left: 0; width: 0; height: 0; }
 .onboarding-overlay * { pointer-events: auto; }
 .onboarding-card { position: fixed; z-index: 100000; max-width: 360px; }
 .onboarding-step-count { position: absolute; top: 8px; right: 12px; font-size: 11px; color: var(--muted); }
-[data-tour-step] ~ .app-shell [data-view="analysis"],
-[data-tour-step="1"] ~ .app-shell [data-view="analysis"],
-[data-tour-step="2"] ~ .app-shell [data-view="charts"],
-[data-tour-step="3"] ~ .app-shell .export-menu-wrap,
-[data-tour-step="4"] ~ .app-shell .gear-menu-wrap {
-  position: relative; z-index: 100001; box-shadow: 0 0 0 4px rgba(57,214,214,0.6), 0 0 20px rgba(57,214,214,0.3); border-radius: var(--radius-md);
-}
 
 /* === View transitions === */
 .workspace > * {

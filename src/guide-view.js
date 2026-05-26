@@ -481,6 +481,39 @@ export function createGuideView(context) {
         next: ["Open Monitoring → Metrics and select cwnd + RTT + retrans together.", "Look for synchronized loss events across multiple sockets (Multi-socket correlation).", "Compare cwnd behavior with pacing_rate and delivery_rate to confirm throughput impact."],
         commands: [envCommand("ss -ti dst <peer-ip> | grep cwnd"), envCommand("nstat -az | egrep 'TCPLoss|TCPRetrans|TCPSack|TCPReorder'"), envCommand("tc -s qdisc show dev <iface>", { host: true }), envCommand("ethtool -S <iface> | grep -i drop", { host: true })],
         mitigation: "Do not increase buffers to compensate for cwnd collapse — fix the loss source. If cwnd is limited by receive window (rwnd_limited), the bottleneck is the receiver, not the path."
+      },
+      {
+        title: "13. IP fragmentation and MTU/MSS issues",
+        group: "investigation",
+        summary: "Detects path MTU problems, MSS clamping, and fragmentation indicators. A reduced MSS silently caps throughput (fewer bytes per segment = more overhead per byte). Common in VPN, tunnel, and multi-hop environments.",
+        signals: ["MSS ≤ 536 with PMTU ≥ 1500 → MSS clamped", "PMTU < 1500 → tunnel or VPN reducing path MTU", "advmss - MSS > 400 → PMTUD reduced segment size", "PMTU ≥ 9000 → jumbo frames active", "IpReasmFails or IpFragFails in nstat"],
+        decide: [
+          "MSS clamped to 536: check iptables/nftables TCPMSS rules, VPN MTU, and PMTUD black holes (ICMP blocked).",
+          "PMTU < 1500: identify the tunnel/VPN/overlay reducing MTU. Adjust inner MTU or use MSS clamping intentionally.",
+          "advmss ≫ MSS: path MTU discovery reduced the effective segment. Run tracepath to find the bottleneck hop.",
+          "Jumbo frames on some sockets but not others: verify end-to-end jumbo support — one non-jumbo hop fragments silently.",
+          "IpFragFails growing in nstat: DF bit is set but path MTU is too small — classic PMTUD black hole."
+        ],
+        next: ["Filter sockets by MSS < 1400 to isolate affected flows.", "Correlate with peer IP — if one peer has low MSS, the path to that peer is the issue.", "Check if throughput is proportionally reduced (max throughput ≈ cwnd × MSS / RTT)."],
+        commands: [envCommand("ss -ti | grep -E 'mss:[0-9]' | awk '{print $0}' | sort -t: -k2 -n"), envCommand("tracepath <peer-ip>"), envCommand("ip route get <peer-ip> | grep mtu"), envCommand("iptables -t mangle -L -n -v | grep -i mss", { host: true }), envCommand("nstat -az | egrep 'Frag|Reasm'", { host: true }), envCommand("ip -s link show <iface>", { host: true })],
+        mitigation: "If PMTUD is broken (ICMP blocked), apply MSS clamping at the correct value (MTU - 40). Do not disable DF bit globally — it hides the problem. Fix the ICMP filtering or adjust tunnel MTU."
+      },
+      {
+        title: "14. Packet reordering — spurious retransmissions",
+        group: "investigation",
+        summary: "Reordering causes TCP to mistake delayed packets for lost ones, triggering unnecessary retransmissions and cwnd reduction. The ss fields reord_seen and dsack_dups reveal this. High DSACK with low real loss = reordering, not congestion. Impact: throughput drops 20-60% because cwnd is halved on each false loss event; latency spikes from unnecessary RTO; wasted bandwidth from duplicate segments; application perceives intermittent slowness that disappears under low load.",
+        signals: ["reord_seen > 0 on ss -ti output", "dsack_dups > 0 (receiver reported duplicate segments)", "bytes_retrans growing but no real packet loss on the wire", "cwnd oscillating without actual congestion", "TcpExtTCPSACKReorder in nstat"],
+        decide: [
+          "WHY IT HURTS: TCP interprets 3 duplicate ACKs as loss → halves cwnd → throughput collapses. With reordering, those dupACKs are false alarms. The sender retransmits data already in flight (wasting bandwidth), then receives DSACKs proving the retransmit was unnecessary. Meanwhile cwnd was already cut.",
+          "High reord_seen + stable RTT + no real drops: path reorders packets (multipath, ECMP, bonding, or switch buffering).",
+          "High dsack_dups ≈ retrans count: most retransmissions are spurious — TCP is over-reacting to reordering.",
+          "Reordering on one peer only: the path to that peer has asymmetric routing or load-balancing.",
+          "Reordering on all peers: local NIC RSS, bonding, or virtualization layer is reordering.",
+          "Reordering + high RTT variance: jitter and reordering compound — consider increasing tcp_reordering sysctl."
+        ],
+        next: ["Filter sockets with reord_seen > 0 or dsack_dups > 0.", "Compare affected vs unaffected peers to isolate the path.", "Check if throughput is impacted (cwnd reduction from spurious loss)."],
+        commands: [envCommand("ss -ti | grep reord_seen"), envCommand("nstat -az | egrep 'Reorder|DSACK|SACK'"), envCommand("sysctl net.ipv4.tcp_reordering"), envCommand("ip route show | grep -i ecmp", { host: true }), envCommand("ethtool -S <iface> | grep -i reorder", { host: true })],
+        mitigation: "Increase net.ipv4.tcp_reordering (default 3) to tolerate more out-of-order packets before declaring loss. For ECMP/bonding paths, consider flow-based hashing instead of packet-based. Do not disable SACK — it helps recovery."
       }
     ];
     const groups = [

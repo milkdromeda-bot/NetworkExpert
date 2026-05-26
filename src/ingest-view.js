@@ -28,7 +28,7 @@ export function renderIngestEditor(deps) {
         <span class="drop-label">Drag & Drop</span>
         <small style="margin-top:6px;color:var(--muted);font-size:11px">Drop 2 files to auto-compare (1st = baseline, 2nd = incident)</small>
         <span class="drop-or">or</span>
-        <button class="drop-btn" data-action="pickFile"><i class="ri-lock-line"></i> Select a file</button>
+        <button class="drop-btn primary" data-action="pickFile"><i class="ri-folder-open-line"></i> Open ss file</button>
         <button data-action="showRawEditor" style="margin-top:18px;background:none!important;border:none!important;box-shadow:none!important;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer">or paste raw text</button>
       </div>`;
   }
@@ -84,7 +84,7 @@ export function renderIngestPage(deps) {
   const correlationCount = (state.jvmGc.pauses.length ? 1 : 0) + (state.fixLatency.vmstat?.length ? 1 : 0) + (state.fixLatency.nstat?.length ? 1 : 0) + (state.sar?.cpu?.length ? 1 : 0) + (state.fixLatency.records.length ? 1 : 0) + (state.peerCapture.sockets.length ? 1 : 0);
   return html`
     <section class="ingest-hero">
-      <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:12px">
         <h2 style="margin:0">Import</h2>
         <span style="font-size:11px;color:var(--muted)">Supported: <strong>ss</strong> / <strong>GC log</strong> / <strong>vmstat</strong> / <strong>nstat</strong> / <strong>sar</strong> / <strong>FIX logs</strong> - use Auto-detect dir to load all at once</span>
       </div>
