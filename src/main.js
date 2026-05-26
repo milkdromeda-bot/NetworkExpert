@@ -31,6 +31,7 @@ import { parseFixLog, computeFixStats, extractEndpoints } from "./fix-log-parser
 import { correlateFixLatency, DEFAULT_WINDOWS as FIX_DEFAULT_WINDOWS } from "./fix-correlation.js";
 import { parseVmstat, parseNstatTimestamped, vmstatSummary } from "./vmstat-parser.js";
 import { parseSar, correlateSarWithTcp } from "./sar-parser.js";
+import { detectCwndPhases } from "./cwnd-phases.js";
 import { buildSsCollectionCommand, commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { validateSsCommandConfig } from "./ss-command-validation.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
@@ -2160,6 +2161,8 @@ let _cachedDiagVersion = -1;
 let _cachedDiagHypotheses = [];
 let _cachedMatrixVersion = -1;
 let _cachedMatrix = null;
+let _cachedCwndPhasesVersion = -1;
+let _cachedCwndPhases = null;
 
 function cachedStories() {
   if (_cachedDataVersion !== state.dataVersion) {
@@ -4700,6 +4703,14 @@ function cachedRootCauseMatrix() {
   _cachedMatrixVersion = state.dataVersion;
   _cachedMatrix = buildRootCauseMatrix(state.sockets);
   return _cachedMatrix;
+}
+
+function cachedCwndPhases() {
+  const key = `${state.dataVersion}|${state.selectedId}`;
+  if (_cachedCwndPhasesVersion === key && _cachedCwndPhases) return _cachedCwndPhases;
+  _cachedCwndPhasesVersion = key;
+  _cachedCwndPhases = detectCwndPhases(state.history);
+  return _cachedCwndPhases;
 }
 
 function renderDiagnosis() {
