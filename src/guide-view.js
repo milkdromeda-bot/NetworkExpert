@@ -22,6 +22,7 @@ export function createGuideView(context) {
       [isAnalystRole() ? "Ops handoff: host-side evidence" : "Host-side LXD evidence", hostEvidence],
       ["Compressed long-running collection", envCommand("t=10; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done | gzip -c >> ss-timeseries.log.gz")],
       ["vmstat — CPU and scheduling (1s interval)", "vmstat -t 1 > vmstat.log"],
+      ["sar — CPU, memory, IO, network (1s interval)", "sar -u -r -b -n DEV 1 > sar.log"],
       ["nstat — per-second TCP kernel counters", "while true; do nstat -r >/dev/null; sleep 1; echo \"=== $(date --iso-8601=ns) ===\"; nstat -z | egrep 'TcpRetransSegs|TcpExtTCPSynRetrans|TcpExtTCPTimeouts|TcpExtTCPBacklogDrop|TcpExtListenOverflows|TcpExtListenDrops|TcpExtTCPRcvQDrop|TcpExtPruneCalled|TcpExtTCPAbort|TcpExtTCP.*ZeroWindow|TcpExtTCPSACKReorder|IpInDiscards|IpOutDiscards'; done | tee -a nstat-critical.log"],
       ["Complete correlation bundle (all sources)", "# Run all in parallel on the target host:\nvmstat -t 1 > vmstat.log &\nwhile true; do nstat -r >/dev/null; sleep 1; echo \"=== $(date --iso-8601=ns) ===\"; nstat -z | egrep 'Tcp|Ip'; done > nstat.log &\nt=0.1; while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep \"$t\"; done > ss.log &\n# Then load the directory with Auto-detect dir"]
     ];
@@ -464,6 +465,22 @@ export function createGuideView(context) {
         next: ["Filter LISTEN sockets by local port and process.", "Validate bind address against intended exposure model.", "Check firewall and LXD profile/device configuration."],
         commands: [envCommand("ss -Hlnptu"), envCommand("ss -HOntepmi --cgroup --inet-sockopt -a -A all"), envCommand("lsof -nP -iTCP -sTCP:LISTEN", { host: true }), envCommand("systemctl status <service>", { host: true }), envCommand("lxc config show <container> --expanded", { host: true })],
         mitigation: "Bind explicitly where possible, document intentional wildcard listeners, and keep process attribution in routine collections."
+      },
+      {
+        title: "12. Congestion window phases — slow-start, avoidance, recovery",
+        group: "intelligence",
+        summary: "The cwnd chart now classifies each snapshot into a TCP congestion control phase. This reveals whether the connection is ramping up (slow-start), cruising (congestion avoidance), recovering from loss (fast recovery), or actively losing packets.",
+        signals: ["cwnd doubles between snapshots → slow-start", "cwnd grows by ~1 segment/RTT → congestion avoidance", "cwnd drops >30% with retransmission → loss event", "cwnd climbs back toward previous peak → fast recovery", "cwnd = 0 → idle / no data in flight"],
+        decide: [
+          "Mostly slow-start: connection is short-lived or was recently idle. Normal for HTTP request/response patterns.",
+          "Mostly congestion-avoidance: connection is long-lived and stable. Throughput is bounded by cwnd × MSS / RTT.",
+          "Frequent loss → recovery cycles: path is lossy or congested. Correlate with RTT spikes and retransmission counters.",
+          "Stuck in recovery (never reaches previous peak): persistent congestion or aggressive shaping. Check qdisc, policer, or intermediate device.",
+          "Sudden transition from avoidance to loss across multiple sockets: shared event (link flap, route change, NIC error)."
+        ],
+        next: ["Open Monitoring → Metrics and select cwnd + RTT + retrans together.", "Look for synchronized loss events across multiple sockets (Multi-socket correlation).", "Compare cwnd behavior with pacing_rate and delivery_rate to confirm throughput impact."],
+        commands: [envCommand("ss -ti dst <peer-ip> | grep cwnd"), envCommand("nstat -az | egrep 'TCPLoss|TCPRetrans|TCPSack|TCPReorder'"), envCommand("tc -s qdisc show dev <iface>", { host: true }), envCommand("ethtool -S <iface> | grep -i drop", { host: true })],
+        mitigation: "Do not increase buffers to compensate for cwnd collapse — fix the loss source. If cwnd is limited by receive window (rwnd_limited), the bottleneck is the receiver, not the path."
       }
     ];
     const groups = [
