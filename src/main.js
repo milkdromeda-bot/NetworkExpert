@@ -2251,6 +2251,7 @@ function _renderSync() {
           <button class="icon" data-action="undo" title="Undo (Ctrl+Z)" aria-label="Undo" ${!state._undoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-back-line"></i></button>
           <button class="icon" data-action="redo" title="Redo (Ctrl+Y)" aria-label="Redo" ${!state._redoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-forward-line"></i></button>
           <button class="icon" data-action="toggleDensity" title="Toggle compact/comfortable mode" aria-label="Toggle density"><i class="${state.prefs.density === "compact" ? "ri-expand-diagonal-line" : "ri-contract-line"}"></i></button>
+          <button class="icon" data-action="togglePresentation" title="Presentation mode (hide controls, enlarge charts)" aria-label="Toggle presentation mode"><i class="ri-slideshow-line"></i></button>
           <button class="theme-toggle" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><span class="theme-toggle-track"><i class="ri-sun-line"></i><i class="ri-moon-line"></i><span class="theme-toggle-thumb ${state.prefs.theme === "light" ? "" : "dark"}"></span></span></button>
           <div class="gear-menu-wrap">
             <button class="icon gear-btn ${state.gearMenuOpen ? "is-open" : ""}" data-action="toggleGearMenu" title="Settings" aria-label="Settings" aria-haspopup="true"><i class="ri-settings-3-line"></i></button>
@@ -9014,6 +9015,10 @@ function bindEvents(deps = appEventDependencies()) {
       savePrefs();
       render();
     }
+    if (action === "togglePresentation") {
+      document.documentElement.classList.toggle("presentation-mode");
+      toast(document.documentElement.classList.contains("presentation-mode") ? "Presentation mode on" : "Presentation mode off", "Press Escape or click again to exit.");
+    }
     if (action === "nextOnboarding") {
       state.onboarding += 1;
       render();
@@ -10497,6 +10502,7 @@ document.addEventListener("keydown", event => {
   if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA" || event.target.isContentEditable) return;
   if (event.key === "Escape") {
     if (state.onboarding >= 0) { state.onboarding = -1; localStorage.setItem("networkExpertOnboarded", "1"); render(); return; }
+    if (document.documentElement.classList.contains("presentation-mode")) { document.documentElement.classList.remove("presentation-mode"); return; }
     if (state.modal) { state.modal = null; render(); return; }
     if (state.drawer) { state.drawer = null; render(); return; }
   }
@@ -10663,8 +10669,21 @@ document.addEventListener("dragleave", e => { if (!e.relatedTarget || !document.
 document.addEventListener("drop", e => {
   e.preventDefault();
   document.querySelector(".drop-zone")?.classList.remove("dragover");
-  const file = e.dataTransfer?.files?.[0];
-  if (file) importFile(file);
+  const files = [...(e.dataTransfer?.files || [])].filter(f => /\.(log|txt|out|ss|gz|zip)$/i.test(f.name));
+  if (!files.length) return;
+  if (files.length === 1) { importFile(files[0]); return; }
+  // Multi-file: first file = baseline, second = incident, auto-compare
+  (async () => {
+    await importFile(files[0]);
+    state.baseline = createBaseline();
+    state.baseline.role = "healthy";
+    state.baseline.label = files[0].name;
+    toast("Baseline set", `${files[0].name} loaded as baseline (${state.sockets.length} sockets).`);
+    await importFile(files[1]);
+    state.activeTab = "compare";
+    render();
+    toast("Comparison ready", `${files[0].name} vs ${files[1].name} — switch to Compare tab.`);
+  })();
 });
 
 // Topbar shrink on scroll + back to top

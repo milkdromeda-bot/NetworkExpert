@@ -760,3 +760,18 @@ button .ripple {
 .undo-item:hover { background: rgba(93,183,255,0.08); }
 .undo-current { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: var(--font-size-sm); color: var(--green); font-weight: 700; }
 .undo-current i { font-size: 14px; }
+
+/* Presentation mode */
+.presentation-mode .topbar { display: none !important; }
+.presentation-mode .kpis { display: none !important; }
+.presentation-mode .toolbar { display: none !important; }
+.presentation-mode .analysis-tabs { display: none !important; }
+.presentation-mode .table-wrap { display: none !important; }
+.presentation-mode .panel-head { padding: 4px 10px !important; }
+.presentation-mode .chart-card { min-height: 320px !important; }
+.presentation-mode .chart-card-body { min-height: 280px !important; }
+.presentation-mode svg.chart { min-height: 260px !important; }
+.presentation-mode .app-shell { padding-top: 0 !important; }
+.presentation-mode .workspace { max-height: 100vh !important; height: 100vh !important; }
+.presentation-mode .chart-grid { gap: 12px !important; }
+.presentation-mode .col-tools button:not([data-chart-png]) { display: none !important; }
