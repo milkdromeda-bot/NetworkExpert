@@ -26,6 +26,7 @@ export function renderIngestEditor(deps) {
         <p style="margin:0 0 16px;color:var(--soft)">Upload ss capture in .txt, .log, .gz, or .zip format</p>
         <i class="ri-upload-cloud-2-fill drop-icon"></i>
         <span class="drop-label">Drag & Drop</span>
+        <small style="margin-top:6px;color:var(--muted);font-size:11px">Drop 2 files to auto-compare (1st = baseline, 2nd = incident)</small>
         <span class="drop-or">or</span>
         <button class="drop-btn" data-action="pickFile"><i class="ri-lock-line"></i> Select a file</button>
         <button data-action="showRawEditor" style="margin-top:18px;background:none!important;border:none!important;box-shadow:none!important;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer">or paste raw text</button>
@@ -80,11 +81,12 @@ export function renderIngestPage(deps) {
   const selectedOption = selectedSsOption(featuredOptions, active);
   const activePanel = state.showSsOptions ? "capture" : null;
   const editorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
+  const correlationCount = (state.jvmGc.pauses.length ? 1 : 0) + (state.fixLatency.vmstat?.length ? 1 : 0) + (state.fixLatency.nstat?.length ? 1 : 0) + (state.sar?.cpu?.length ? 1 : 0) + (state.fixLatency.records.length ? 1 : 0) + (state.peerCapture.sockets.length ? 1 : 0);
   return html`
     <section class="ingest-hero">
       <div style="display:flex;align-items:center;gap:12px">
         <h2 style="margin:0">Import</h2>
-        <span style="font-size:11px;color:var(--muted)">Supported: <strong>ss</strong> / <strong>GC log</strong> / <strong>vmstat</strong> / <strong>nstat</strong> / <strong>FIX logs</strong> - use Auto-detect dir to load all at once</span>
+        <span style="font-size:11px;color:var(--muted)">Supported: <strong>ss</strong> / <strong>GC log</strong> / <strong>vmstat</strong> / <strong>nstat</strong> / <strong>sar</strong> / <strong>FIX logs</strong> - use Auto-detect dir to load all at once</span>
       </div>
     </section>
     <section class="panel ingest-source-panel ss-editor-theme-${escapeHtml(editorTheme)}">
@@ -99,19 +101,14 @@ export function renderIngestPage(deps) {
           <input id="ingestGcFileInput" type="file" accept=".log,.txt" style="display:none"/>
           <input id="ingestVmstatFileInput" type="file" accept=".log,.txt,.out" style="display:none"/>
           <input id="ingestNstatFileInput" type="file" accept=".log,.txt,.out" style="display:none"/>
+          <input id="ingestSarFileInput" type="file" accept=".log,.txt,.out,.sar" style="display:none"/>
           <input id="ingestFixFileInput" type="file" accept=".log,.txt,.gz,.zip" multiple style="display:none"/>
           <input id="ingestFixDirInput" type="file" webkitdirectory style="display:none"/>
           <input id="ingestAutoDir" type="file" webkitdirectory style="display:none"/>
           <input id="ingestPeerSsInput" type="file" accept=".txt,.log,.out,.ss,.gz,.zip" style="display:none"/>
           <button data-action="pickFile" class="primary"><i class="ri-folder-open-line"></i> Open ss file</button>
-          <button data-action="pickAutoDir" title="Load a directory - auto-detects ss, FIX, GC, vmstat, nstat files"><i class="ri-folder-search-line"></i> Auto-detect dir</button>
-          <span class="ingest-extra-sources">
-            <button data-action="pickJvmGcFile" class="${state.jvmGc.pauses.length ? "chip-loaded" : ""}" title="Load GC log for JVM stall correlation"><i class="ri-recycle-line"></i> GC${state.jvmGc.pauses.length ? ` ${state.jvmGc.pauses.length}` : ""}</button>
-            <button data-action="pickFixVmstatFile" class="${state.fixLatency.vmstat?.length ? "chip-loaded" : ""}" title="Load vmstat for CPU correlation"><i class="ri-cpu-line"></i> vmstat${state.fixLatency.vmstat?.length ? ` ${state.fixLatency.vmstat.length}s` : ""}</button>
-            <button data-action="pickFixNstatFile" class="${state.fixLatency.nstat?.length ? "chip-loaded" : ""}" title="Load nstat for kernel TCP counter correlation"><i class="ri-bar-chart-line"></i> nstat${state.fixLatency.nstat?.length ? ` ${state.fixLatency.nstat.length}s` : ""}</button>
-            <button data-action="pickFixFile" class="${state.fixLatency.records.length ? "chip-loaded" : ""}" title="Load FIX log files or directory"><i class="ri-exchange-line"></i> FIX${state.fixLatency.records.length ? ` ${formatNumber(state.fixLatency.records.length)}` : ""}</button>
-            <button data-action="pickPeerSs" class="${state.peerCapture.sockets.length ? "chip-loaded" : ""}" title="Load ss from the peer/remote side for multi-host correlation"><i class="ri-links-line"></i> Peer ss${state.peerCapture.sockets.length ? " loaded" : ""}</button>
-          </span>
+          <button data-action="pickAutoDir" title="Load a directory - auto-detects all supported file types"><i class="ri-folder-search-line"></i> Auto-detect dir</button>
+          <button data-action="toggleCorrelationSources" class="${state.showCorrelationSources ? "active" : ""}${correlationCount ? " chip-loaded" : ""}" title="Add correlation sources (GC, vmstat, sar, nstat, FIX, Peer ss)"><i class="ri-add-circle-line"></i> Sources${correlationCount ? ` (${correlationCount})` : ""}</button>
           <span class="ingest-toolbar-divider"></span>
           <div class="pill-toggle" data-active="${activePanel === "capture" ? "1" : "0"}">
             <div class="pill-slider"></div>
@@ -138,6 +135,16 @@ export function renderIngestPage(deps) {
           <button data-action="clear" class="clear-input-button">${icons.clear} Clear</button>
           <button data-action="parse" title="Re-analyze current text"><i class="ri-play-line"></i> Analyze</button>
         </div>
+        ${state.showCorrelationSources ? `<div class="correlation-sources-drawer">
+          <div class="correlation-sources-grid">
+            <button data-action="pickJvmGcFile" class="source-card ${state.jvmGc.pauses.length ? "loaded" : ""}"><i class="ri-recycle-line"></i><strong>GC log</strong><small>${state.jvmGc.pauses.length ? `${state.jvmGc.pauses.length} pauses` : "JVM stall correlation"}</small></button>
+            <button data-action="pickFixVmstatFile" class="source-card ${state.fixLatency.vmstat?.length ? "loaded" : ""}"><i class="ri-cpu-line"></i><strong>vmstat</strong><small>${state.fixLatency.vmstat?.length ? `${state.fixLatency.vmstat.length} samples` : "CPU / scheduling"}</small></button>
+            <button data-action="pickSarFile" class="source-card ${state.sar?.cpu?.length ? "loaded" : ""}"><i class="ri-dashboard-line"></i><strong>sar</strong><small>${state.sar?.cpu?.length ? `${state.sar.cpu.length} samples` : "CPU / IO / memory"}</small></button>
+            <button data-action="pickFixNstatFile" class="source-card ${state.fixLatency.nstat?.length ? "loaded" : ""}"><i class="ri-bar-chart-line"></i><strong>nstat</strong><small>${state.fixLatency.nstat?.length ? `${state.fixLatency.nstat.length} samples` : "TCP kernel counters"}</small></button>
+            <button data-action="pickFixFile" class="source-card ${state.fixLatency.records.length ? "loaded" : ""}"><i class="ri-exchange-line"></i><strong>FIX logs</strong><small>${state.fixLatency.records.length ? `${formatNumber(state.fixLatency.records.length)} records` : "Protocol latency"}</small></button>
+            <button data-action="pickPeerSs" class="source-card ${state.peerCapture.sockets.length ? "loaded" : ""}"><i class="ri-links-line"></i><strong>Peer ss</strong><small>${state.peerCapture.sockets.length ? "loaded" : "Remote-side capture"}</small></button>
+          </div>
+        </div>` : ""}
         ${activePanel === "capture" ? `<div class="ingest-ss-command-panel">
             <div class="capture-flow-card">
               <i class="ri-route-line" aria-hidden="true"></i>

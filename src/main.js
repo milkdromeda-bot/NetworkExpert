@@ -30,6 +30,7 @@ import { parsePidstat, parseNstat, correlateCpuWithStalls, extractTcpCounters } 
 import { parseFixLog, computeFixStats, extractEndpoints } from "./fix-log-parser.js";
 import { correlateFixLatency, DEFAULT_WINDOWS as FIX_DEFAULT_WINDOWS } from "./fix-correlation.js";
 import { parseVmstat, parseNstatTimestamped, vmstatSummary } from "./vmstat-parser.js";
+import { parseSar, correlateSarWithTcp } from "./sar-parser.js";
 import { buildSsCollectionCommand, commandCoverage, toggleCommandOption } from "./ss-command.js";
 import { validateSsCommandConfig } from "./ss-command-validation.js";
 import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations } from "./annotations.js";
@@ -252,6 +253,7 @@ let state = {
   helpMetric: null,
   ssOptionHelpKey: "-i",
   showSsOptions: false,
+  showCorrelationSources: false,
   annotationDraft: buildAnnotationDraft({ sourceName: "empty workspace" }),
   annotationContext: null,
   ingestRawExpanded: true,
@@ -8924,6 +8926,8 @@ function bindEvents(deps = appEventDependencies()) {
     if (action === "pickJvmGcFile") { (document.querySelector("#ingestGcFileInput") || document.querySelector("#jvmGcFileInput"))?.click(); }
     if (action === "pickPidstatFile") { document.querySelector("#pidstatFileInput")?.click(); }
     if (action === "pickNstatFile") { document.querySelector("#nstatFileInput")?.click(); }
+    if (action === "pickSarFile") { document.querySelector("#ingestSarFileInput")?.click(); }
+    if (action === "toggleCorrelationSources") { state.showCorrelationSources = !state.showCorrelationSources; render(); }
     if (action === "parseJvmGcLog") {
       const text = document.querySelector("#jvmGcLogInput")?.value || "";
       if (!text.trim()) { toast("No GC log", "Paste a GC log or load a file first.", "warn"); return; }
@@ -10283,11 +10287,12 @@ function bindEvents(deps = appEventDependencies()) {
     const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|out|gz|zip|ss)$/i.test(f.name));
     if (!files.length) return;
     _showBusy();
-    const classified = { ss: [], fix: [], gc: [], vmstat: [], nstat: [] };
+    const classified = { ss: [], fix: [], gc: [], vmstat: [], nstat: [], sar: [] };
     for (const file of files) {
       try {
         const slice = await file.slice(0, 4096).text();
         if (/^===\s*\d{4}-/.test(slice) && /Tcp/.test(slice)) classified.nstat.push(file);
+        else if (/^Linux\s+\d.*\(\w+\)/.test(slice) && /%usr|%idle|kbmemfree|IFACE|tps/m.test(slice)) classified.sar.push(file);
         else if (/^procs\s+---/.test(slice) || /^\s*\d+\s+\d+\s+\d+\s+\d+.*\d{4}-\d{2}-\d{2}/m.test(slice)) classified.vmstat.push(file);
         else if (/GC\(\d+\)|Pause (Young|Full|G1)|\[gc[\],]|Using G1|Using ZGC|Using Shenandoah|gc,init/i.test(slice)) classified.gc.push(file);
         else if (/FIXTcpConnection|\\|52=\d{8}/.test(slice)) classified.fix.push(file);
@@ -10311,6 +10316,7 @@ function bindEvents(deps = appEventDependencies()) {
     if (classified.gc.length) { const file = classified.gc[0]; file.text().then(text => { const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; const lines = text.split("\n").filter(l => gcPattern.test(l)).join("\n"); const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; }); summary.push(`GC: ${classified.gc[0].name}`); }
     if (classified.vmstat.length) { classified.vmstat[0].text().then(text => { state.fixLatency.vmstat = parseVmstat(text).samples; render(); }); summary.push(`vmstat: ${classified.vmstat[0].name}`); }
     if (classified.nstat.length) { classified.nstat[0].text().then(text => { state.fixLatency.nstat = parseNstatTimestamped(text).samples; render(); }); summary.push(`nstat: ${classified.nstat[0].name}`); }
+    if (classified.sar.length) { classified.sar[0].text().then(text => { state.sar = parseSar(text); state.sarCorrelation = correlateSarWithTcp(state.sar, state.anomalies.filter(a => a.epochMs).map(a => ({ epochMs: a.epochMs }))); render(); }); summary.push(`sar: ${classified.sar[0].name}`); }
     if (classified.fix.length) { await ingestFixFiles(classified.fix); summary.push(`FIX: ${classified.fix.length} file(s)`); }
     _hideBusy();
     toast("Auto-detect complete", summary.length ? summary.join(" · ") : "No recognized files found");
@@ -10321,6 +10327,7 @@ function bindEvents(deps = appEventDependencies()) {
   document.querySelector("#ingestGcFileInput")?.addEventListener("change", e => { document.querySelector("#jvmGcFileInput")?.dispatchEvent || null; const el = document.querySelector("#jvmGcFileInput"); if (el) { el.files = e.target.files; el.dispatchEvent(new Event("change")); } else { const file = e.target.files?.[0]; if (!file) return; _showBusy(); const reader = file.stream().getReader(); const decoder = new TextDecoder(); let buffer = ""; let lines = ""; const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; function pump() { reader.read().then(({ done, value }) => { if (done) { if (buffer && gcPattern.test(buffer)) lines += buffer + "\n"; const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; runJvmCorrelation(); _hideBusy(); toast("GC log loaded", `${pauses.length} pauses from ${file.name}`); render(); return; } buffer += decoder.decode(value, { stream: true }); const parts = buffer.split("\n"); buffer = parts.pop(); for (const line of parts) { if (gcPattern.test(line)) lines += line + "\n"; } setTimeout(pump, 0); }); } pump(); } });
   document.querySelector("#ingestVmstatFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { const { samples } = parseVmstat(text); state.fixLatency.vmstat = samples; toast("vmstat loaded", `${samples.length} samples from ${file.name}`); render(); }); });
   document.querySelector("#ingestNstatFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { const { samples } = parseNstatTimestamped(text); state.fixLatency.nstat = samples; toast("nstat loaded", `${samples.length} samples from ${file.name}`); render(); }); });
+  document.querySelector("#ingestSarFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { state.sar = parseSar(text); const total = (state.sar.cpu?.length || 0) + (state.sar.memory?.length || 0) + (state.sar.io?.length || 0) + (state.sar.network?.length || 0); state.sarCorrelation = correlateSarWithTcp(state.sar, state.anomalies.filter(a => a.epochMs).map(a => ({ epochMs: a.epochMs }))); toast("sar loaded", `${total} samples from ${file.name} (CPU: ${state.sar.cpu.length}, IO: ${state.sar.io.length}, mem: ${state.sar.memory.length})`); render(); }); });
   document.querySelector("#ingestFixFileInput")?.addEventListener("change", e => { const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name)); ingestFixFiles(files); });
   document.querySelector("#ingestFixDirInput")?.addEventListener("change", e => { const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name)); ingestFixFiles(files); });
   document.querySelector("#fixVmstatFileInput")?.addEventListener("change", e => {
