@@ -767,11 +767,17 @@ button .ripple {
 .presentation-mode .toolbar { display: none !important; }
 .presentation-mode .analysis-tabs { display: none !important; }
 .presentation-mode .table-wrap { display: none !important; }
-.presentation-mode .panel-head { padding: 4px 10px !important; }
+.presentation-mode .panel-head { display: none !important; }
+.presentation-mode .metric-picks { display: none !important; }
+.presentation-mode .chart-controls { display: none !important; }
+.presentation-mode .correlation-controls { display: none !important; }
+.presentation-mode .chart-tabs { display: none !important; }
+.presentation-mode .sticky-chart-panel > .panel-body { display: none !important; }
+.presentation-mode .breadcrumb { display: none !important; }
 .presentation-mode .chart-card { min-height: 320px !important; }
 .presentation-mode .chart-card-body { min-height: 280px !important; }
 .presentation-mode svg.chart { min-height: 260px !important; }
 .presentation-mode .app-shell { padding-top: 0 !important; }
 .presentation-mode .workspace { max-height: 100vh !important; height: 100vh !important; }
 .presentation-mode .chart-grid { gap: 12px !important; }
-.presentation-mode .col-tools button:not([data-chart-png]) { display: none !important; }
+.presentation-mode .chart-card-tools button:not([data-chart-png]) { display: none !important; }
