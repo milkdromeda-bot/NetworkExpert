@@ -9,7 +9,7 @@
  * @param {{ width?: number, height?: number, escapeHtml?: function }} [options]
  * @returns {string} SVG markup
  */
-export function renderSankeySvg(map, { width = 1000, height = 500, escapeHtml = s => s } = {}) {
+export function renderSankeySvg(map, { width = 1000, height = 500, escapeHtml = s => s, sortBy = "risk" } = {}) {
   const { edges } = map;
   if (!edges.length) return `<div class="empty">No flows to visualize.</div>`;
 
@@ -40,7 +40,9 @@ export function renderSankeySvg(map, { width = 1000, height = 500, escapeHtml = 
 
   // Keep only top flows for readability
   const MAX_FLOWS = 15;
-  const sorted = [...flows.values()].sort((a, b) => riskOrd(b.risk) - riskOrd(a.risk) || b.weight - a.weight);
+  const sorted = [...flows.values()].sort((a, b) => sortBy === "bandwidth"
+    ? b.weight - a.weight || riskOrd(b.risk) - riskOrd(a.risk)
+    : riskOrd(b.risk) - riskOrd(a.risk) || b.weight - a.weight);
   const visible = sorted.slice(0, MAX_FLOWS);
   const hiddenCount = sorted.length - visible.length;
 

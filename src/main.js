@@ -293,6 +293,7 @@ let state = {
   conversationSort: { key: "anomalies", dir: "desc" },
   selectedMapEdgeId: null,
   mapView: "topology",
+  sankeySort: "risk",
   copiedGuideCommand: "",
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
@@ -8803,6 +8804,10 @@ function bindEvents(deps = appEventDependencies()) {
     state.mapView = btn.dataset.mapView;
     render();
   }));
+  document.querySelector("#sankeySortSelect")?.addEventListener("change", event => {
+    state.sankeySort = event.target.value;
+    render();
+  });
   document.querySelectorAll("[data-map-edge]").forEach(edge => edge.addEventListener("click", event => {
     event.stopPropagation();
     state.selectedMapEdgeId = event.currentTarget.dataset.mapEdge;
