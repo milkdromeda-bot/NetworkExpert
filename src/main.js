@@ -61,6 +61,13 @@ import { renderIngestPage as renderIngestPageView } from "./ingest-view.js";
 import { handleIngestAction } from "./ingest-actions.js";
 import { renderFixLatencyPanelView } from "./fix-latency-view.js";
 import { renderJvmGcPanelView } from "./jvm-gc-view.js";
+import { renderServiceMapView } from "./service-map-view.js";
+import { renderTimelineStoriesViewModel } from "./timeline-stories-view.js";
+import { bindSourceFileEvents } from "./source-file-events.js";
+import { handleServiceConfigAction } from "./service-config-actions.js";
+import { bindTableInteractionEvents } from "./table-interaction-events.js";
+import { bindSocketInteractionEvents } from "./socket-interaction-events.js";
+import { handleLayoutProfileAction } from "./layout-profile-actions.js";
 import { computeHealthScore } from "./health-score.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "./snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "./shared-buffer.js";
@@ -5138,99 +5145,28 @@ function parseEndpointAddress(endpoint = "") {
 }
 
 function renderServiceMap() {
-  const map = buildServiceMap();
-  const ordered = serviceMapConnectivityOrder(map);
-  const allNodes = [...ordered.processes, ...ordered.locals, ...ordered.peers];
-  if (!allNodes.length) return `<div class="empty">No service map is available for the current filters.</div>`;
-  const lanes = [
-    { key: "processes", title: "Processes", x: 160, nodes: ordered.processes },
-    { key: "locals", title: "Local sockets", x: 520, nodes: ordered.locals },
-    { key: "peers", title: "Peers", x: 920, nodes: ordered.peers }
-  ];
-  const positions = layoutTopologyLanePositions(lanes, { nodeGap: 86 });
-  const maxY = Math.max(...Object.values(positions).map(position => position.y));
-  const height = Math.max(420, maxY + 104);
-  const groupBands = serviceMapGroupBands(lanes, positions);
-  const visibleEdges = map.edges.filter(edge => positions[edge.from] && positions[edge.mid] && positions[edge.to]).slice(0, 160);
-  const routes = buildServiceMapRoutes(visibleEdges, positions);
-  const selectedEdge = visibleEdges.find(edge => edge.id === state.selectedMapEdgeId) || null;
-  const hotPaths = [...map.edges].sort((a, b) =>
-    riskRank(b.risk) - riskRank(a.risk) ||
-    b.anomalies - a.anomalies ||
-    b.weight - a.weight
-  ).slice(0, 8);
-  return `<div class="service-map-workbench">
-    <div class="service-map-head">
-      <div class="expert-strip">
-        <article><span>Processes</span><strong>${formatNumber(map.processes.length)}</strong></article>
-        <article><span>Local sockets</span><strong>${formatNumber(map.locals.length)}</strong></article>
-        <article><span>Peers</span><strong>${formatNumber(map.peers.length)}</strong></article>
-        <article><span>Labels</span><strong>${formatNumber(aliasCountForSource(state.serviceAliases, state.sourceName))}</strong></article>
-        <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
-      </div>
-      <div class="service-map-actions">
-        <button class="service-labels-button topology" type="button" data-topology-open aria-haspopup="dialog"><i class="ri-node-tree"></i> Topology</button>
-        <button class="service-labels-button" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Labels</button>
-      </div>
-    </div>
-    <div class="service-map-layout">
-      <div class="service-map-canvas">
-        ${renderMapLegend()}
-        <svg viewBox="0 0 1100 ${height}" role="img" aria-label="Service dependency map">
-          <defs>
-            <linearGradient id="editButtonGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#42e7f2"/>
-              <stop offset="48%" stop-color="#1586c5"/>
-              <stop offset="100%" stop-color="#12315f"/>
-            </linearGradient>
-          </defs>
-          ${lanes.map(lane => `<text x="${lane.x}" y="28" class="map-lane-title">${escapeHtml(lane.title)}</text>`).join("")}
-          ${groupBands.map(band => `<g class="map-group-band ${escapeHtml(band.group.color)}">
-            <rect x="${band.x}" y="${band.y}" width="${band.width}" height="${band.height}" rx="14"/>
-            <text x="${band.x + 14}" y="${band.labelY}">${escapeHtml(band.group.name)}</text>
-          </g>`).join("")}
-          ${visibleEdges.map(edge => {
-            const color = edge.risk === "critical" ? "#ff5c77" : edge.risk === "high" ? "#ff9f43" : edge.risk === "medium" ? "#ffd166" : "#39d6d6";
-            const width = Math.min(5, 1.5 + Math.log10(edge.weight + 1));
-            const d = routes.get(edge.id)?.d || "";
-            return `<g class="map-link-wrap ${edge.id === state.selectedMapEdgeId ? "selected" : ""} ${edge.risk}" data-map-edge="${escapeHtml(edge.id)}" style="--link-color:${color};--link-width:${width}px;--link-hover-width:${Math.max(width + 2, 5.5)}px">
-              <path class="map-link-hit" d="${d}"/>
-              <path class="map-link" d="${d}"/>
-              <title>${escapeHtml(edge.socket.local)} -> ${escapeHtml(edge.socket.peer)} | ${edge.risk} | ${formatNumber(edge.anomalies)} anomaly signal(s)</title>
-            </g>`;
-          }).join("")}
-          ${lanes.flatMap(lane => lane.nodes.map(node => {
-            const p = positions[node.id];
-            const isDark = state.prefs.theme !== "light";
-            const fill = isDark
-              ? (node.risk === "critical" ? "#1a0a10" : node.risk === "high" ? "#1a1008" : node.risk === "medium" ? "#161408" : "#0a1520")
-              : (node.risk === "critical" ? "#fff1f3" : node.risk === "high" ? "#fff4e6" : node.risk === "medium" ? "#fffbe6" : "#e8f4fd");
-            const stroke = node.risk === "critical" ? "#ff5c77" : node.risk === "high" ? "#ff9f43" : node.risk === "medium" ? "#ffd166" : "#39d6d6";
-            const subtitle = nodeSubtitle(node);
-            const nodeH = Math.max(48, Math.min(80, 36 + (node.count || 1) * 4));
-            return `<g class="map-node ${node.endpoint ? "has-edit" : ""}">
-              <rect x="${p.x - 146}" y="${p.y - nodeH / 2}" width="292" height="${nodeH}" rx="8" fill="${fill}" stroke="${stroke}" opacity=".96"/>
-              <text x="${p.x - 134}" y="${subtitle ? p.y - 3 : p.y + 5}" class="map-node-label">${escapeHtml(truncateMiddle(nodeLabel(node), 30))}</text>
-              ${subtitle ? `<text x="${p.x - 134}" y="${p.y + 14}" class="map-node-subtitle">${escapeHtml(subtitle)}</text>` : ""}
-              ${node.endpoint ? `<g class="map-node-edit-action" data-map-alias="${escapeHtml(node.endpoint)}" role="button" tabindex="0" aria-label="Edit ${escapeHtml(node.endpoint)} label">
-                <title>Edit service label for ${escapeHtml(node.endpoint)}</title>
-                <rect x="${p.x + 96}" y="${p.y - 16}" width="31" height="32" rx="10"/>
-                <g class="map-node-edit-glyph" transform="translate(${p.x + 101} ${p.y - 10}) scale(.74)">
-                  <path d="M12 20h9"/>
-                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-                </g>
-              </g>` : ""}
-              <circle cx="${p.x + 134}" cy="${p.y}" r="5" fill="${stroke}"/>
-              <title>${escapeHtml(mapNodeTitle(node))}</title>
-            </g>`;
-          })).join("")}
-        </svg>
-      </div>
-      ${selectedEdge ? renderMapEdgeInsight(selectedEdge) : renderHotPaths(hotPaths)}
-      ${(() => { const markers = buildGeoMarkers(state.ipIntel, state.sockets); return markers.length || Object.keys(state.ipIntel).length ? `<div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Geographic peer distribution</div></div><div class="panel-body">${renderGeoMapSvg(markers)}</div></div>` : ""; })()}
-      <div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Flow Sankey — bandwidth proportional</div></div><div class="panel-body">${renderSankeySvg({ edges: map.edges, nodes: new Map([...map.processes, ...map.locals, ...map.peers].map(n => [n.id, n])) }, { escapeHtml })}</div></div>
-    </div>
-  </div>`;
+  return renderServiceMapView({
+    state,
+    buildServiceMap,
+    serviceMapConnectivityOrder,
+    layoutTopologyLanePositions,
+    serviceMapGroupBands,
+    buildServiceMapRoutes,
+    riskRank,
+    formatNumber,
+    aliasCountForSource,
+    renderMapLegend,
+    escapeHtml,
+    renderMapEdgeInsight,
+    renderHotPaths,
+    buildGeoMarkers,
+    renderGeoMapSvg,
+    renderSankeySvg,
+    nodeSubtitle,
+    truncateMiddle,
+    nodeLabel,
+    mapNodeTitle
+  });
 }
 
 function renderExpertInformation() {
@@ -5304,76 +5240,11 @@ function renderTimelineHeatmap(events) {
 }
 
 function renderTimelineStoriesView(stories) {
-  if (!stories.length && !state._multiSocketEvents?.length) return `<div class="timeline-stories-empty"><i class="ri-movie-2-line"></i><p>No causal pattern detected yet. Need more snapshots or stronger signals.</p></div>`;
-  const groupEvents = state._multiSocketEvents || [];
-  const _rawRates = state._rateAlerts || [];
-  const _rateGroupMap = new Map();
-  for (const a of _rawRates) { const k = `${a.process || a.peer}|${a.metric}|${a.epochMs}`; const g = _rateGroupMap.get(k); if (g) { g.count++; } else { _rateGroupMap.set(k, { ...a, count: 1 }); } }
-  const rateAlerts = [..._rateGroupMap.values()].slice(0, 3);
-  const rateTotal = _rateGroupMap.size;
-  return `<section class="timeline-stories">
-    ${rateAlerts.length ? `<div class="rate-alerts">
-      ${rateAlerts.map(a => {
-        const isBytes = a.metric === "recvQ" || a.metric === "sendQ" || a.metric === "skmem.r";
-        const prev = isBytes ? `${Math.round(a.prevValue / 1024)} KB` : String(a.prevValue);
-        const curr = isBytes ? `${Math.round(a.currValue / 1024)} KB` : String(a.currValue);
-        const dt = a.dtMs >= 1000 ? `${(a.dtMs / 1000).toFixed(1)}s` : `${Math.round(a.dtMs)} ms`;
-        const explain = a.metric === "sendQ" ? "App is writing faster than TCP can drain - peer or path cannot keep up."
-          : a.metric === "recvQ" ? "Data arriving faster than the app reads - local process may be stalled."
-          : a.metric === "skmem.r" ? "Kernel receive buffer filling rapidly - app not consuming."
-          : a.metric === "skmem.d" ? "Packets being dropped - buffer overflow."
-          : a.metric === "rto" ? "Retransmission timeout escalating - path or peer unresponsive."
-          : a.metric === "backoff" ? "TCP retry backoff jumped - prolonged wait before next probe."
-          : "";
-        const time = a.epochMs ? new Date(a.epochMs).toISOString().slice(11, 23) + " UTC" : "";
-        const countBadge = a.count > 1 ? ` <span class="rate-count">\u00d7${a.count} sockets</span>` : "";
-        return `<div class="rate-alert ${a.severity}"><span class="risk ${a.severity}">${escapeHtml(a.severity)}</span>${time ? ` <span class="rate-time">${escapeHtml(time)}</span>` : ""} <b>${escapeHtml(a.label)}</b> on ${escapeHtml(a.process || a.peer)}${countBadge} &middot; <span class="rate-value">${escapeHtml(a.rateFormatted)}</span> <small>(${prev} &rarr; ${curr} in ${dt})</small> <span class="rate-explain">${explain}</span></div>`;
-      }).join("")}
-      ${rateTotal > 3 ? `<div class="rate-more"><button data-action="timelineView" data-value="events"><i class="ri-list-unordered"></i> +${rateTotal - 3} more velocity alerts ? All Events</button></div>` : ""}
-    </div>` : ""}
-    ${groupEvents.length ? `<div class="multi-socket-events">
-      ${(() => {
-        const byProcess = new Map();
-        for (const event of groupEvents) {
-          const k = event.narrative.title;
-          const g = byProcess.get(k);
-          if (g) { g.lines.push(event.narrative.line); } else { byProcess.set(k, { title: event.narrative.title, socketCount: event.socketCount, conclusion: event.narrative.conclusion, lines: [event.narrative.line] }); }
-        }
-        return [...byProcess.values()].slice(0, 2).map(g => `<article class="timeline-story group-event">
-          <div class="story-header">
-            <strong>${escapeHtml(g.title)}</strong>
-            <span class="story-completeness">${g.socketCount} sockets</span>
-          </div>
-          <div class="story-narrative">
-            ${g.lines.map(line => `<div class="story-step"><span class="story-dot group-dot"></span><span class="story-text">${escapeHtml(line)}</span></div>`).join("")}
-            <div class="story-conclusion">${escapeHtml(g.conclusion)}</div>
-          </div>
-        </article>`).join("");
-      })()}
-    </div>` : ""}
-    ${stories.length ? (() => {
-      const socketKeys = [...new Set(stories.map(s => s.socketKey))];
-      const socketCount = socketKeys.length;
-      const patternTypes = [...new Set(stories.map(s => s.title))];
-      const scope = socketCount === 1 ? `1 socket affected` : `${socketCount} sockets affected`;
-      const peerLabel = socketCount === 1 && stories[0].socket ? (stories[0].socket.peer || stories[0].socketKey) : "";
-      const socketNav = socketCount > 1 ? `<div class="stories-socket-nav">${socketKeys.map((sk, i) => { const s = stories.find(st => st.socketKey === sk); const label = s?.socket?.details?.process ? `${s.socket.details.process.name}:${s.socket.details.process.pid}` : sk.slice(0, 24); const peer = s?.socket?.peer || ""; const active = (!state.storySocketFilter && i === 0) || state.storySocketFilter === sk; return `<button class="story-socket-pill ${active ? "active" : ""}" data-action="filterStorySocket" data-socket-key="${escapeHtml(sk)}" title="${escapeHtml(sk)}">${escapeHtml(label)} → ${escapeHtml(peer.slice(0, 20))}</button>`; }).join("")}</div>` : "";
-      return `${socketNav}<div class="stories-summary"><i class="ri-git-merge-line"></i> <b>${stories.length} ${stories.length === 1 ? "story" : "stories"}</b> - ${scope}${socketCount > 1 ? ` - ${patternTypes.length} distinct ${patternTypes.length === 1 ? "pattern" : "patterns"} (${escapeHtml(patternTypes.join(", "))})` : peerLabel ? ` - ${escapeHtml(peerLabel)}` : ""}</div>`;
-    })() : ""}
-    ${(() => { const filtered = state.storySocketFilter ? stories.filter(s => s.socketKey === state.storySocketFilter) : stories; return filtered.slice(0, 6); })().map(story => `<article class="timeline-story">
-      <div class="story-header">
-        <strong>${escapeHtml(story.title)}</strong>
-        <span class="story-socket" title="${escapeHtml(story.socketKey)}">${escapeHtml((() => { const p = story.socket?.details?.process; const local = p ? `${p.name}:${p.pid}` : "local"; const peer = story.socket?.peer || story.socketKey.slice(0, 28); return `${local} \u2192 ${peer}`; })())}</span>
-        <span class="story-completeness" title="${story.matchedSteps.length}/${story.totalSteps} expected steps observed in sequence">${story.matchedSteps.length}/${story.totalSteps} steps matched</span>
-      </div>
-      <div class="story-narrative">
-        ${story.narrative.map((line, i) => i === story.narrative.length - 1
-          ? `<div class="story-conclusion">${escapeHtml(line)}</div>`
-          : `<div class="story-step${i === story.narrative.length - 2 && /torn down|abandoned|critical/i.test(line) ? " story-step-critical" : ""}"><button class="story-jump" data-action="storyJumpToChart" data-epoch="${story.matchedSteps[i]?.epochMs || ""}" data-metric="${storyStepMetric(story.matchedSteps[i]?.key || "")}" data-label="${escapeHtml(story.matchedSteps[i]?.label || "")}" title="Zoom chart to this moment"><i class="ri-line-chart-line"></i></button><span class="story-dot"></span><span class="story-text">${escapeHtml(line)}</span></div>`
-        ).join("")}
-      </div>
-    </article>`).join("")}
-  </section>`;
+  return renderTimelineStoriesViewModel(stories, {
+    state,
+    escapeHtml,
+    storyStepMetric
+  });
 }
 
 function renderTimelineEventsView(events) {
@@ -8187,6 +8058,127 @@ function ingestActionDependencies() {
   };
 }
 
+function sourceFileEventDependencies() {
+  return {
+    document,
+    state,
+    cmInstance,
+    parseGcLog,
+    parsePidstat,
+    parseNstat,
+    parseFixLog,
+    parseVmstat,
+    parseNstatTimestamped,
+    parseSar,
+    extractTcpCounters,
+    correlateCpuWithStalls,
+    correlateSarWithTcp,
+    visibleHistory,
+    runJvmCorrelation,
+    runFixCorrelation,
+    drawJvmCharts,
+    drawFixCharts,
+    toast,
+    render,
+    _showBusy,
+    _hideBusy
+  };
+}
+
+function serviceConfigActionDependencies() {
+  return {
+    document,
+    state,
+    currentAliasDisplay,
+    upsertEndpointAlias,
+    deleteEndpointAlias,
+    saveServiceAliases,
+    upsertServiceOverride,
+    deleteServiceOverride,
+    saveServiceOverrides,
+    upsertTopologyGroup,
+    deleteTopologyGroup,
+    saveCurrentTopology,
+    toast,
+    render
+  };
+}
+
+function tableInteractionDependencies() {
+  return {
+    document,
+    state,
+    TABLE_COLUMNS,
+    tableDefaults,
+    tableSettingsPlacement,
+    applyTableColumnSearchFilter,
+    resetTableSort,
+    resetTableColumns,
+    toggleTableColumnPin,
+    setTableColumnVisibility,
+    toggleTableColumnVisibility,
+    saveTableState,
+    applyTableLayout,
+    saveTableProfiles,
+    moveTableColumn,
+    toast,
+    renderKeepingWorkspacePosition,
+    renderKeepingModalPosition,
+    render
+  };
+}
+
+function socketInteractionDependencies() {
+  return {
+    document,
+    window,
+    state,
+    CONVERSATION_SORT_LABELS,
+    conversationDefaultSortDir,
+    positionConversationInsight,
+    socketsById,
+    focusSocket,
+    chartMetricList,
+    metricLabel,
+    anomaliesBySocketId,
+    metricValue,
+    formatNumber,
+    openIncidentReport,
+    exportIncidentReportHtml,
+    exportEvidencePack,
+    buildJiraReport,
+    exportFixSpikeCsv,
+    copyTextToClipboard,
+    toast,
+    renderKeepingWorkspacePosition,
+    render
+  };
+}
+
+function layoutProfileActionDependencies() {
+  return {
+    document,
+    state,
+    DEFAULT_TABLE_ORDER,
+    parseFormattedNumber,
+    cloneThresholds,
+    clampChartColumns,
+    clampChartTooltipOpacity,
+    defaultTableColumns,
+    saveTableState,
+    tableLayoutSnapshot,
+    saveTableProfiles,
+    applyDashboardProfile,
+    saveDashboardProfiles,
+    dashboardSnapshot,
+    dashboardPresetIdOrDefault,
+    savePrefs,
+    toast,
+    renderKeepingWorkspacePosition,
+    render
+  };
+}
+
 function bindChartMinimapEvents(deps = appEventDependencies()) {
   const {
     root = document,
@@ -8724,194 +8716,8 @@ function bindEvents(deps = appEventDependencies()) {
       renderKeepingWorkspacePosition();
     }
     if (action === "saveCharts") { saveChartsPng().catch(error => toast("Export failed", error.message || "PNG export failed.", "danger")); }
-    if (action === "saveThresholds") {
-      document.querySelectorAll("[data-threshold]").forEach(input => {
-        const metric = input.dataset.threshold;
-        const key = input.dataset.thresholdKey;
-        state.thresholds[metric][key] = parseFormattedNumber(input.value);
-      });
-      toast("Thresholds saved", "Chart comfort, warning, and danger zones have been updated.");
-      state.drawer = null;
-      render();
-    }
-    if (action === "resetThresholdDefaults") {
-      state.thresholds = cloneThresholds();
-      toast("Expert defaults restored", "Thresholds have been reset to the built-in network analysis baseline.");
-      render();
-    }
-    if (action === "saveLayout") {
-      const l = state.prefs.chartLayout;
-      l.columns = clampChartColumns(document.querySelector("#layoutColumns")?.value || l.columns);
-      l.density = document.querySelector("#layoutDensity")?.value || l.density;
-      l.mainChart = Boolean(document.querySelector("#layoutMainChart")?.checked);
-      l.sharedZoom = Boolean(document.querySelector("#layoutSharedZoom")?.checked);
-      l.showLegend = Boolean(document.querySelector("#layoutLegend")?.checked);
-      l.showCrosshair = Boolean(document.querySelector("#layoutCrosshair")?.checked);
-      l.syncCrosshair = Boolean(document.querySelector("#layoutSyncCrosshair")?.checked);
-      l.tooltipOpacity = clampChartTooltipOpacity(document.querySelector("#layoutTooltipOpacity")?.value ?? l.tooltipOpacity);
-      l.showThresholds = Boolean(document.querySelector("#layoutThresholds")?.checked);
-      l.stickyToolbar = Boolean(document.querySelector("#layoutStickyToolbar")?.checked);
-      const preset = document.querySelector("#layoutPreset")?.value;
-      if (preset === "noc") Object.assign(l, { columns: 3, density: "compact", mainChart: true, sharedZoom: true, showLegend: true });
-      if (preset === "deep") Object.assign(l, { columns: 2, density: "tall", mainChart: true, sharedZoom: true, showLegend: true });
-      if (preset === "single") Object.assign(l, { columns: 1, density: "tall", mainChart: true, sharedZoom: true, showLegend: true });
-      savePrefs();
-      toast("Layout saved", "Chart layout preferences have been stored in this browser.");
-      state.modal = null;
-      const fast = document.querySelector(".modal-overlay-fast");
-      if (fast) fast.remove();
-      render();
-    }
-    if (action === "resetGrid") {
-      state.table = {
-        ...state.table,
-        page: 1,
-        pageSize: state.prefs.defaultPageSize,
-        sortKey: "risk",
-        sortDir: "desc",
-        pinned: ["risk", "state", "local"],
-        visible: defaultTableColumns(),
-        order: [...DEFAULT_TABLE_ORDER],
-        filters: { text: "", risk: "all", state: "all", family: "all", minRecvQ: "", minSendQ: "", minRtt: "", srcIp: "", dstIp: "", srcPort: "", dstPort: "", process: "", onlyAnomalies: false }
-      };
-      saveTableState();
-      render();
-    }
-    if (action === "saveTableLayout") {
-      const name = document.querySelector("#tableLayoutName")?.value?.trim() || "";
-      if (!name) {
-        toast("Layout name required", "Give this table layout a name before saving.", "danger");
-        return;
-      }
-      const next = tableLayoutSnapshot(name);
-      state.tableProfiles = [next, ...state.tableProfiles.filter(profile => profile.name.toLowerCase() !== name.toLowerCase())];
-      saveTableProfiles();
-      toast("Table layout saved", `"${name}" is now available in named table layouts.`);
-      render();
-    }
-
-    if (action === "loadSelectedDashboard") {
-      const id = document.querySelector("#savedDashboardSelect")?.value || "";
-      applyDashboardProfile(state.dashboardProfiles.find(profile => profile.id === id));
-      toast("Dashboard loaded", "Saved widgets, layout, style, and correlation were restored.");
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "deleteSelectedDashboard") {
-      const id = document.querySelector("#savedDashboardSelect")?.value || "";
-      state.dashboardProfiles = state.dashboardProfiles.filter(profile => profile.id !== id);
-      saveDashboardProfiles();
-      toast("Dashboard deleted", "The saved dashboard has been removed.");
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "saveDashboard") {
-      const name = document.querySelector("#dashboardName")?.value?.trim() || "";
-      if (!name) {
-        toast("Dashboard name required", "Give this dashboard a name before saving.", "danger");
-        return;
-      }
-      const next = dashboardSnapshot(name);
-      state.dashboardProfiles = [next, ...state.dashboardProfiles.filter(profile => profile.name.toLowerCase() !== name.toLowerCase())];
-      saveDashboardProfiles();
-      toast("Dashboard saved", `"${name}" is ready in saved dashboards.`);
-      render();
-    }
-    if (action === "saveServiceAlias") {
-      const endpoint = document.querySelector("#aliasEndpoint")?.value?.trim() || "";
-      if (!endpoint) {
-        toast("Endpoint required", "Choose an IP:port endpoint before saving a service label.", "danger");
-        return;
-      }
-      const scope = document.querySelector("#aliasGlobal")?.checked ? "global" : "source";
-      state.serviceAliases = upsertEndpointAlias(state.serviceAliases, endpoint, {
-        label: document.querySelector("#aliasLabel")?.value || "",
-        role: document.querySelector("#aliasRole")?.value || "",
-        note: document.querySelector("#aliasNote")?.value || ""
-      }, Date.now(), {
-        sourceName: state.sourceName,
-        scope
-      });
-      state.aliasEditKey = endpoint;
-      state.aliasEditScope = scope;
-      saveServiceAliases();
-      toast("Service label saved", `${currentAliasDisplay(endpoint, { scope })} is now shown ${scope === "global" ? "globally" : "for this recording"}.`);
-      render();
-    }
-    if (action === "deleteServiceAlias") {
-      const endpoint = document.querySelector("#aliasEndpoint")?.value?.trim() || "";
-      const scope = document.querySelector("#aliasGlobal")?.checked ? "global" : "source";
-      state.serviceAliases = deleteEndpointAlias(state.serviceAliases, endpoint, state.sourceName, { scope });
-      saveServiceAliases();
-      toast("Service label deleted", scope === "global" ? "Global endpoint label removed." : "Recording endpoint label removed.");
-      render();
-    }
-    if (action === "saveServiceOverride") {
-      const hidden = Boolean(document.querySelector("#serviceOverrideHidden")?.checked);
-      const label = document.querySelector("#serviceOverrideLabel")?.value?.trim() || "";
-      if (!hidden && !label) {
-        toast("Service name required", "Set a replacement service name, or choose to hide the inferred service.", "danger");
-        return;
-      }
-      const scope = document.querySelector("#serviceOverrideGlobal")?.checked ? "global" : "source";
-      state.serviceOverrides = upsertServiceOverride(state.serviceOverrides, {
-        target: document.querySelector("#serviceOverrideTarget")?.value || "port",
-        endpoint: document.querySelector("#serviceOverrideEndpoint")?.value || "",
-        port: document.querySelector("#serviceOverridePort")?.value || "",
-        transport: document.querySelector("#serviceOverrideTransport")?.value || "",
-        label,
-        hidden,
-        note: document.querySelector("#serviceOverrideNote")?.value || ""
-      }, Date.now(), {
-        sourceName: state.sourceName,
-        scope
-      });
-      saveServiceOverrides();
-      toast("Service classification saved", hidden ? "The inferred service is hidden for this scope." : `${label} now overrides the port heuristic for this scope.`);
-      render();
-    }
-    if (action === "deleteServiceOverride") {
-      const scope = document.querySelector("#serviceOverrideGlobal")?.checked ? "global" : "source";
-      state.serviceOverrides = deleteServiceOverride(state.serviceOverrides, {
-        target: document.querySelector("#serviceOverrideTarget")?.value || "port",
-        endpoint: document.querySelector("#serviceOverrideEndpoint")?.value || "",
-        port: document.querySelector("#serviceOverridePort")?.value || "",
-        transport: document.querySelector("#serviceOverrideTransport")?.value || ""
-      }, {
-        sourceName: state.sourceName,
-        scope
-      });
-      saveServiceOverrides();
-      toast("Service classification deleted", scope === "global" ? "Global override removed." : "Recording override removed.");
-      render();
-    }
-    if (action === "saveTopologyGroup") {
-      const name = document.querySelector("#topologyName")?.value?.trim() || "";
-      const match = document.querySelector("#topologyMatch")?.value?.trim() || "";
-      if (!name || !match) {
-        toast("Topology group incomplete", "Add a group name and at least one IP or IP:port matcher.", "danger");
-        return;
-      }
-      state.topology = upsertTopologyGroup(state.topology, {
-        id: state.topologyEditId || "",
-        name,
-        match,
-        color: document.querySelector("#topologyColor")?.value || "cyan",
-        note: document.querySelector("#topologyNote")?.value || ""
-      });
-      state.topologyEditId = state.topology.groups[0]?.id || "";
-      state.topologyDraftMatch = "";
-      saveCurrentTopology();
-      toast("Topology group saved", `${name} is mapped for ${state.sourceName}.`);
-      render();
-    }
-    if (action === "deleteTopologyGroup") {
-      if (!state.topologyEditId) return;
-      state.topology = deleteTopologyGroup(state.topology, state.topologyEditId);
-      state.topologyEditId = "";
-      state.topologyDraftMatch = "";
-      saveCurrentTopology();
-      toast("Topology group deleted", "This recording topology was updated.");
-      render();
-    }
+    if (handleLayoutProfileAction(action, event, layoutProfileActionDependencies())) return;
+    if (handleServiceConfigAction(action, event, serviceConfigActionDependencies())) return;
     if (action === "closeDrawer") {
       const wasThresholds = state.drawer === "thresholds";
       state.drawer = null;
@@ -8928,30 +8734,6 @@ function bindEvents(deps = appEventDependencies()) {
       state.modal = null; state.helpColumn = null; state.helpMetric = null; state.annotationContext = null;
       const fast = document.querySelector(".modal-overlay-fast");
       if (fast) { fast.remove(); return; }
-      render();
-    }
-    if (action === "savePrefs") {
-      state.prefs.severityFloor = document.querySelector("#prefSeverity")?.value || state.prefs.severityFloor;
-      state.prefs.autoToast = document.querySelector("#prefToast")?.checked ?? state.prefs.autoToast;
-      state.prefs.deepAnalysis = true;
-      state.prefs.compactRows = document.querySelector("#prefCompact")?.checked ?? state.prefs.compactRows;
-      state.prefs.tableUnits = document.querySelector("#prefTableUnits")?.checked ?? state.prefs.tableUnits;
-      state.prefs.colorBlind = document.querySelector("#prefColorBlind")?.checked ?? state.prefs.colorBlind;
-      state.prefs.linuxProfile = document.querySelector("#prefLinuxProfile")?.value || state.prefs.linuxProfile;
-      state.prefs.accessRole = document.querySelector("#prefAccessRole")?.value || state.prefs.accessRole;
-      state.prefs.ubuntuVersion = document.querySelector("#prefUbuntuVersion")?.value || state.prefs.ubuntuVersion;
-      state.prefs.numberLocale = document.querySelector("#prefNumberLocale")?.value || state.prefs.numberLocale;
-      state.prefs.numberGrouping = document.querySelector("#prefNumberGrouping")?.checked ?? state.prefs.numberGrouping;
-      state.prefs.chartTimeZone = document.querySelector("#prefChartTimeZone")?.value || state.prefs.chartTimeZone;
-      state.prefs.chartPointSize = document.querySelector("#prefChartPointSize")?.value || state.prefs.chartPointSize;
-      state.prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(document.querySelector("#prefDefaultDashboardPreset")?.value || state.prefs.defaultDashboardPreset);
-      state.prefs.chartLayout.tooltipOpacity = clampChartTooltipOpacity(document.querySelector("#prefTooltipOpacity")?.value ?? state.prefs.chartLayout.tooltipOpacity);
-      state.prefs.paginationPosition = document.querySelector("#prefPagination")?.value || state.prefs.paginationPosition;
-      state.prefs.defaultPageSize = Number(document.querySelector("#prefPageSize")?.value || state.prefs.defaultPageSize);
-      state.table.pageSize = state.prefs.defaultPageSize;
-      state.prefs.graphWindow = Number(document.querySelector("#prefWindow")?.value || state.prefs.graphWindow);
-      savePrefs();
-      toast("Preferences saved", "Your settings will be kept in this browser.");
       render();
     }
   }));
@@ -9131,260 +8913,8 @@ function bindEvents(deps = appEventDependencies()) {
     state.chartAnnotationMenuPos = null;
     if (context) openAnnotationModal(context.metric, context);
   }));
-  document.querySelectorAll("[data-table-settings-menu]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    if (state.openTableSettings) {
-      state.openTableSettings = false;
-      state.openTableSettingsPos = null;
-    } else {
-      const placement = tableSettingsPlacement(event.currentTarget);
-      if (placement.drawer) {
-        state.openTableSettings = false;
-        state.openTableSettingsPos = null;
-        state.drawer = "tableSettings";
-      } else {
-        state.drawer = state.drawer === "tableSettings" ? null : state.drawer;
-        state.openTableSettings = true;
-        state.openTableSettingsPos = { left: placement.left, top: placement.top, width: placement.width, height: placement.height };
-      }
-    }
-    renderKeepingWorkspacePosition();
-  }));
-  document.querySelectorAll(".table-settings-menu").forEach(menu => menu.addEventListener("click", event => {
-    event.stopPropagation();
-  }));
-  document.querySelectorAll("[data-table-column-search]").forEach(input => input.addEventListener("input", event => {
-    event.stopPropagation();
-    state.tableColumnSearch = event.currentTarget.value;
-    applyTableColumnSearchFilter(event.currentTarget.closest(".table-settings-menu, .table-settings-drawer"), state.tableColumnSearch);
-  }));
-  document.querySelectorAll("[data-table-column-search-clear]").forEach(btn => btn.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    state.tableColumnSearch = "";
-    const panel = event.currentTarget.closest(".table-settings-menu, .table-settings-drawer");
-    const input = panel?.querySelector("[data-table-column-search]");
-    if (input) {
-      input.value = "";
-      input.focus();
-    }
-    applyTableColumnSearchFilter(panel, "");
-  }));
-  document.querySelectorAll("[data-table-menu-action]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const action = event.currentTarget.dataset.tableMenuAction;
-    if (action === "clearSort") {
-      state.table = resetTableSort(state.table, TABLE_COLUMNS, tableDefaults());
-    }
-    if (action === "resetColumns") {
-      state.table = resetTableColumns(state.table, TABLE_COLUMNS, tableDefaults());
-    }
-    saveTableState();
-    renderKeepingWorkspacePosition();
-  }));
-  document.querySelectorAll("[data-export-menu]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const scope = event.currentTarget.dataset.exportMenu;
-    const wrap = event.currentTarget.closest(".export-menu-wrap");
-    const menu = wrap?.querySelector(".export-menu");
-    if (!menu) return;
-    if (state.openExportMenu === scope) {
-      state.openExportMenu = null;
-      state.openExportMenuPos = null;
-      menu.classList.remove("open");
-      menu.removeAttribute("style");
-    } else {
-      document.querySelectorAll(".export-menu.open").forEach(m => { m.classList.remove("open"); m.removeAttribute("style"); });
-      const rect = event.currentTarget.getBoundingClientRect();
-      const menuWidth = 260;
-      const menuHeight = 110;
-      const left = Math.min(Math.max(8, rect.left), window.innerWidth - menuWidth - 8);
-      const preferBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
-      state.openExportMenu = scope;
-      state.openExportMenuPos = { left: Math.round(left), top: Math.round(top) };
-      menu.style.left = `${Math.round(left)}px`;
-      menu.style.top = `${Math.round(top)}px`;
-      menu.classList.add("open");
-    }
-  }));
-  document.querySelectorAll(".export-menu").forEach(menu => menu.addEventListener("click", event => {
-    event.stopPropagation();
-  }));
-  document.querySelectorAll("[data-export-action]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const action = event.currentTarget.dataset.exportAction;
-    state.openExportMenu = null;
-    state.openExportMenuPos = null;
-    const reportEl = document.getElementById("inlineReport");
-    if (reportEl) reportEl.classList.add("visible");
-    setTimeout(() => {
-      try {
-        if (action === "pdf") openIncidentReport();
-        if (action === "incident-html") exportIncidentReportHtml();
-        if (action === "pack") exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger")).finally(() => { if (reportEl) reportEl.classList.remove("visible"); });
-        if (action === "jira") { copyTextToClipboard(buildJiraReport()); toast("Jira report copied", "Paste into a Jira ticket description or comment."); }
-        if (action === "fix-csv") { exportFixSpikeCsv(); }
-      } finally { if (action !== "pack" && reportEl) reportEl.classList.remove("visible"); }
-    }, 16);
-  }));
-  document.querySelectorAll("[data-action-menu]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const id = event.currentTarget.dataset.actionMenu;
-    if (state.openMenuId === id) {
-      state.openMenuId = null;
-      state.openMenuPos = null;
-    } else {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const menuWidth = 250;
-      const menuHeight = 188;
-      const left = Math.min(Math.max(8, rect.left), window.innerWidth - menuWidth - 8);
-      const preferBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const top = preferBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
-      state.openMenuId = id;
-      state.openMenuPos = { left: Math.round(left), top: Math.round(top) };
-    }
-    render();
-  }));
-  document.querySelectorAll("[data-conversation-sort]").forEach(btn => btn.addEventListener("click", event => {
-    const key = event.currentTarget.dataset.conversationSort;
-    if (!CONVERSATION_SORT_LABELS[key]) return;
-    const current = state.conversationSort || { key: "anomalies", dir: "desc" };
-    const nextDir = current.key === key ? (current.dir === "asc" ? "desc" : "asc") : conversationDefaultSortDir(key);
-    state.conversationSort = { key, dir: nextDir };
-    state.table.page = 1;
-    state.openConversationInsightKey = null;
-    state.openConversationInsightPos = null;
-    renderKeepingWorkspacePosition();
-  }));
-  document.querySelectorAll("[data-conversation-insight]").forEach(btn => {
-    btn.addEventListener("click", event => {
-      event.stopPropagation();
-      const key = event.currentTarget.dataset.conversationInsight;
-      if (state.openConversationInsightKey === key) {
-        state.openConversationInsightKey = null;
-        state.openConversationInsightPos = null;
-      } else {
-        positionConversationInsight(event.currentTarget);
-      }
-      renderKeepingWorkspacePosition();
-    });
-  });
-  document.querySelectorAll(".conversation-insight-popover").forEach(popover => popover.addEventListener("click", event => {
-    event.stopPropagation();
-  }));
-  document.querySelectorAll("[data-conversation-close]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    state.openConversationInsightKey = null;
-    state.openConversationInsightPos = null;
-    renderKeepingWorkspacePosition();
-  }));
-  document.querySelectorAll("[data-conversation-action]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const socket = socketsById().get(event.currentTarget.dataset.socketId);
-    if (!socket) return;
-    const action = event.currentTarget.dataset.conversationAction;
-    const metric = event.currentTarget.dataset.metric || "rtt";
-    focusSocket(socket.id, "Chosen from conversation action");
-    state.openConversationInsightKey = null;
-    state.openConversationInsightPos = null;
-    if (action === "chart") {
-      state.view = "charts";
-      if (chartMetricList().includes(metric)) {
-        state.prefs.graphMetric = metric;
-        state.chartMetrics = [...new Set([metric, ...state.chartMetrics])];
-      }
-      toast("Conversation chart opened", `${metricLabel(metric)} for ${socket.local} -> ${socket.peer}.`);
-    }
-    if (action === "details") {
-      state.activeTab = "sockets";
-      state.drawer = "details";
-      toast("Conversation context selected", `${socket.local} -> ${socket.peer}.`);
-    }
-    if (action === "anomalies") {
-      state.view = "analysis";
-      state.activeTab = "anomalies";
-      state.anomalyFilters = { ...state.anomalyFilters, severity: "all", metric: metric === "socket" ? "all" : metric, text: socket.id, sort: "priority" };
-      toast("Anomalies filtered", "Showing detailed signals for this conversation.");
-    }
-    render();
-  }));
-  document.querySelectorAll("[data-row-action]").forEach(btn => btn.addEventListener("click", async event => {
-    event.stopPropagation();
-    const socket = socketsById().get(event.currentTarget.dataset.socketId);
-    if (!socket) return;
-    const action = event.currentTarget.dataset.rowAction;
-    focusSocket(socket.id, "Chosen from row action");
-    state.openMenuId = null;
-    state.openMenuPos = null;
-    if (action === "chart") {
-      state.view = "charts";
-      toast("Chart context selected", `${socket.local} -> ${socket.peer}`);
-    }
-    if (action === "details") {
-      state.drawer = "details";
-    }
-    if (action === "filter-src") {
-      state.table.filters.srcIp = socket.localAddress.host;
-      state.table.page = 1;
-    }
-    if (action === "filter-dst") {
-      state.table.filters.dstIp = socket.peerAddress.host;
-      state.table.page = 1;
-    }
-    if (action === "copy") {
-      const p = socket.details?.process;
-      const summary = [
-        `${socket.state} ${socket.local} -> ${socket.peer}`,
-        p ? `Process: ${p.name}:${p.pid}` : "",
-        `Send-Q: ${formatNumber(socket.sendQ)} | Recv-Q: ${formatNumber(socket.recvQ)}`,
-        metricValue(socket, "rtt") ? `RTT: ${metricValue(socket, "rtt").toFixed(1)}ms | RTO: ${metricValue(socket, "rto")}ms` : "",
-        metricValue(socket, "cwnd") ? `cwnd: ${metricValue(socket, "cwnd")} | retrans: ${socket.details?.timer?.retrans || 0}` : "",
-        metricValue(socket, "skmem.d") ? `drops: ${metricValue(socket, "skmem.d")}` : "",
-        socket.risk !== "none" ? `Risk: ${socket.risk}` : ""
-      ].filter(Boolean).join("\\n");
-      await navigator.clipboard?.writeText(summary);
-      toast("Socket copied", "Formatted summary copied to clipboard (paste in Slack/email).");
-    }
-    render();
-  }));
-  document.querySelectorAll("[data-pin-col]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const key = event.currentTarget.dataset.pinCol;
-    state.table = toggleTableColumnPin(state.table, key, TABLE_COLUMNS, tableDefaults());
-    saveTableState();
-    event.currentTarget.closest(".modal") ? renderKeepingModalPosition() : render();
-  }));
-  document.querySelectorAll("[data-column-help]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    state.helpColumn = event.currentTarget.dataset.columnHelp;
-    state.modal = "columnHelp";
-    render();
-  }));
-  document.querySelectorAll("[data-metric-help]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    state.helpMetric = event.currentTarget.dataset.metricHelp;
-    state.modal = "metricHelp";
-    render();
-  }));
-  document.querySelectorAll("[data-hide-col]").forEach(btn => btn.addEventListener("click", event => {
-    event.stopPropagation();
-    const key = event.currentTarget.dataset.hideCol;
-    state.table = setTableColumnVisibility(state.table, key, false, TABLE_COLUMNS, tableDefaults());
-    saveTableState();
-    event.currentTarget.closest(".modal") ? renderKeepingModalPosition() : render();
-  }));
-  document.querySelectorAll("[data-load-table-layout]").forEach(btn => btn.addEventListener("click", event => {
-    applyTableLayout(state.tableProfiles.find(profile => profile.id === event.currentTarget.dataset.loadTableLayout));
-    toast("Table layout applied", "Column order, visibility, pinning, sort, and page size have been restored.");
-    render();
-  }));
-  document.querySelectorAll("[data-delete-table-layout]").forEach(btn => btn.addEventListener("click", event => {
-    state.tableProfiles = state.tableProfiles.filter(profile => profile.id !== event.currentTarget.dataset.deleteTableLayout);
-    saveTableProfiles();
-    toast("Table layout deleted", "The saved table layout has been removed.");
-    render();
-  }));
+  bindTableInteractionEvents(tableInteractionDependencies());
+  bindSocketInteractionEvents(socketInteractionDependencies());
   document.querySelector("[data-dashboard-preset-toggle]")?.addEventListener("click", event => {
     event.stopPropagation();
     if (state.openDashboardPresetMenu) {
@@ -9438,34 +8968,6 @@ function bindEvents(deps = appEventDependencies()) {
     saveAlertRules();
     render();
   }));
-  document.querySelectorAll("[draggable][data-col-key]").forEach(item => {
-    item.addEventListener("dragstart", event => {
-      event.dataTransfer.setData("text/plain", event.currentTarget.dataset.colKey);
-      event.dataTransfer.effectAllowed = "move";
-      event.currentTarget.classList.add("dragging");
-    });
-    item.addEventListener("dragend", event => {
-      event.currentTarget.classList.remove("dragging");
-      document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
-    });
-    item.addEventListener("dragover", event => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      event.currentTarget.classList.add("drag-over");
-    });
-    item.addEventListener("dragleave", event => {
-      event.currentTarget.classList.remove("drag-over");
-    });
-    item.addEventListener("drop", event => {
-      event.preventDefault();
-      const from = event.dataTransfer.getData("text/plain");
-      const to = event.currentTarget.dataset.colKey;
-      if (moveTableColumn(from, to)) {
-        saveTableState();
-        render();
-      }
-    });
-  });
   document.querySelectorAll("[data-chart-drag]").forEach(handle => {
     handle.addEventListener("dragstart", e => {
       e.dataTransfer.setData("text/plain", handle.dataset.chartDrag);
@@ -9536,29 +9038,6 @@ function bindEvents(deps = appEventDependencies()) {
     state.prefs.chartLayout.panelOrder = order;
     savePrefs();
     render();
-  }));
-  document.querySelectorAll("[data-visible-col]").forEach(input => input.addEventListener("change", event => {
-    event.stopPropagation();
-    const key = event.currentTarget.dataset.visibleCol;
-    state.table = setTableColumnVisibility(state.table, key, event.currentTarget.checked, TABLE_COLUMNS, tableDefaults());
-    saveTableState();
-    event.currentTarget.closest(".modal") ? renderKeepingModalPosition() : renderKeepingWorkspacePosition();
-  }));
-  document.querySelectorAll("[data-menu-visible-col]").forEach(btn => btn.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    const key = event.currentTarget.dataset.menuVisibleCol;
-    state.table = toggleTableColumnVisibility(state.table, key, TABLE_COLUMNS, tableDefaults());
-    saveTableState();
-    renderKeepingWorkspacePosition();
-  }));
-  document.querySelectorAll("[data-menu-pin-col]").forEach(btn => btn.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    const key = event.currentTarget.dataset.menuPinCol;
-    state.table = toggleTableColumnPin(state.table, key, TABLE_COLUMNS, tableDefaults());
-    saveTableState();
-    renderKeepingWorkspacePosition();
   }));
   document.querySelectorAll("[data-opt]").forEach(input => {
     const stopOptionBubble = event => event.stopPropagation();
@@ -9645,154 +9124,7 @@ function bindEvents(deps = appEventDependencies()) {
     render();
     requestAnimationFrame(drawJvmCharts);
   });
-  document.querySelector("#jvmGcFileInput")?.addEventListener("change", e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    _showBusy();
-    const reader = file.stream().getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let lines = "";
-    const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i;
-    function pump() {
-      reader.read().then(({ done, value }) => {
-        if (done) {
-          if (buffer) { if (gcPattern.test(buffer)) lines += buffer + "\n"; }
-          finishParse();
-          return;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n");
-        buffer = parts.pop();
-        for (const line of parts) {
-          if (gcPattern.test(line)) lines += line + "\n";
-        }
-        setTimeout(pump, 0);
-      });
-    }
-    function finishParse() {
-      const { pauses, safepoints } = parseGcLog(lines);
-      state.jvmGc.rawLog = `[${file.name}: ${pauses.length} pauses extracted from ${(file.size / 1e6).toFixed(1)} MB]`;
-      state.jvmGc.pauses = pauses;
-      state.jvmGc.safepoints = safepoints;
-      runJvmCorrelation();
-      _hideBusy();
-      toast("GC log loaded & parsed", `${pauses.length} pauses, ${safepoints.length} safepoints from ${file.name} (${(file.size / 1e6).toFixed(1)} MB).`);
-      render();
-      requestAnimationFrame(drawJvmCharts);
-    }
-    pump();
-  });
-  document.querySelector("#pidstatFileInput")?.addEventListener("change", e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    file.text().then(text => {
-      const { samples } = parsePidstat(text);
-      state.jvmGc.pidstat = samples;
-      // Run CPU correlation if GC pauses exist
-      if (state.jvmGc.pauses.length) {
-        state.jvmGc.cpuCorrelation = correlateCpuWithStalls({
-          pidstatSamples: samples,
-          gcPauses: state.jvmGc.correlation?.results?.map(r => ({ ...r.pause, alignedEpochMs: r.epochMs })) || state.jvmGc.pauses,
-          history: visibleHistory().filter(s => s.epochMs),
-          clockOffsetMs: state.jvmGc.clockOffsetMs
-        });
-      }
-      toast("pidstat loaded", `${samples.length} CPU samples parsed from ${file.name}.`);
-      render();
-    });
-  });
-  document.querySelector("#nstatFileInput")?.addEventListener("change", e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    file.text().then(text => {
-      const { counters } = parseNstat(text);
-      state.jvmGc.nstat = extractTcpCounters(counters);
-      toast("nstat loaded", `${counters.size} counters parsed. Key: retrans=${state.jvmGc.nstat.retransSegs}, timeouts=${state.jvmGc.nstat.timeouts}, listenDrops=${state.jvmGc.nstat.listenDrops}.`);
-      render();
-    });
-  });
-  async function readFixFileText(file) {
-    const name = file.name.toLowerCase();
-    if (name.endsWith(".gz")) {
-      if ("DecompressionStream" in window) {
-        const stream = file.stream().pipeThrough(new DecompressionStream("gzip"));
-        const reader = stream.getReader();
-        const chunks = [];
-        while (true) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
-        return new TextDecoder().decode(await new Blob(chunks).arrayBuffer());
-      }
-    }
-    if (name.endsWith(".zip") && window.JSZip) {
-      const zip = await window.JSZip.loadAsync(file);
-      const entries = Object.values(zip.files).filter(e => !e.dir && /\.(log|txt|gz)$/i.test(e.name));
-      const texts = [];
-      for (const entry of entries) {
-        let t = await entry.async("string");
-        if (entry.name.toLowerCase().endsWith(".gz") && window.pako) {
-          const buf = await entry.async("uint8array");
-          t = window.pako.ungzip(buf, { to: "string" });
-        }
-        texts.push({ name: entry.name, text: t });
-      }
-      return texts;
-    }
-    return file.text();
-  }
-  async function ingestFixFiles(files) {
-    if (!files.length) return;
-    const progressEl = document.querySelector("#fixProgressBar");
-    const progressLabel = document.querySelector("#fixProgressLabel");
-    if (progressEl) { progressEl.style.width = "0%"; progressEl.parentElement.style.display = "flex"; }
-    let allRecords = [...state.fixLatency.records];
-    const total = files.length;
-    for (let i = 0; i < total; i++) {
-      const file = files[i];
-      const pct = Math.round(((i) / total) * 100);
-      if (progressEl) progressEl.style.width = `${pct}%`;
-      if (progressLabel) progressLabel.textContent = `Parsing ${file.name} (${i + 1}/${total})`;
-      await new Promise(r => setTimeout(r, 0));
-      try {
-        const result = await readFixFileText(file);
-        if (Array.isArray(result)) {
-          for (const { name, text } of result) {
-            const { records, stats } = parseFixLog(text, name);
-            allRecords.push(...records);
-            state.fixLatency.fileStats.push({ fileName: name, size: text.length, ...stats });
-          }
-        } else {
-          const { records, stats } = parseFixLog(result, file.name);
-          allRecords.push(...records);
-          state.fixLatency.fileStats.push({ fileName: file.name, size: file.size, ...stats });
-        }
-      } catch (err) {
-        state.fixLatency.fileStats.push({ fileName: file.name, size: file.size, parsed: 0, rejected: 0, error: err.message });
-      }
-    }
-    if (progressEl) progressEl.style.width = "100%";
-    if (progressLabel) progressLabel.textContent = "Done";
-    allRecords.sort((a, b) => a.receiveMs - b.receiveMs);
-    state.fixLatency.records = allRecords;
-    runFixCorrelation();
-    toast("FIX logs loaded", `${allRecords.length} messages from ${total} file(s). ${state.fixLatency.correlation?.summary?.totalSpikes || 0} spikes above ${state.fixLatency.threshold}ms.`);
-    setTimeout(() => { if (progressEl) progressEl.parentElement.style.display = "none"; }, 1500);
-    render();
-    requestAnimationFrame(drawFixCharts);
-  }
-  document.querySelector("#fixFileInput")?.addEventListener("change", e => {
-    const files = Array.from(e.target.files || []);
-    ingestFixFiles(files);
-  });
-  document.querySelector("#fixDirInput")?.addEventListener("change", e => {
-    const files = Array.from(e.target.files || []);
-    ingestFixFiles(files);
-  });
-  document.querySelector("#fixThresholdInput")?.addEventListener("change", e => {
-    state.fixLatency.threshold = parseInt(e.target.value, 10) || 5;
-    runFixCorrelation();
-    render();
-    setTimeout(drawFixCharts, 50);
-  });
+  bindSourceFileEvents(sourceFileEventDependencies());
   document.querySelector("#cmdPaletteInput")?.addEventListener("input", e => { state.commandPaletteQuery = e.target.value; state.cmdPaletteIdx = 0; render(); setTimeout(() => document.querySelector("#cmdPaletteInput")?.focus(), 10); });
   document.querySelector("#cmdPaletteInput")?.addEventListener("keydown", e => {
     const items = document.querySelectorAll(".cmd-palette-results button");
@@ -9801,94 +9133,6 @@ function bindEvents(deps = appEventDependencies()) {
     if (e.key === "Enter") { e.preventDefault(); const active = items[state.cmdPaletteIdx || 0]; if (active) active.click(); }
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && state.modal === "commandPalette") { state.modal = null; render(); } });
-  document.querySelector("#ingestPeerSsInput")?.addEventListener("change", async e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const { parseSs } = await import("./parser.js");
-    const sockets = parseSs(text);
-    state.peerCapture = { raw: text, sockets, sourceName: file.name };
-    // Auto-correlate: match local sockets with peer sockets by inverted 4-tuple
-    const correlations = [];
-    for (const local of state.sockets) {
-      const peer = sockets.find(s => s.local?.includes(local.peerAddress?.host) && s.peer?.includes(local.localAddress?.host));
-      if (peer) correlations.push({ localSocket: local, peerSocket: peer, localSendQ: local.sendQ, peerRecvQ: peer.recvQ, localRecvQ: local.recvQ, peerSendQ: peer.sendQ });
-    }
-    state.peerCapture.correlations = correlations;
-    toast("Peer ss loaded", `${sockets.length} sockets from ${file.name}. ${correlations.length} cross-host correlation(s) found.`);
-    render();
-  });
-  document.querySelector("#ingestAutoDir")?.addEventListener("change", async e => {
-    const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|out|gz|zip|ss)$/i.test(f.name));
-    if (!files.length) return;
-    _showBusy();
-    const classified = { ss: [], fix: [], gc: [], vmstat: [], nstat: [], sar: [] };
-    for (const file of files) {
-      try {
-        const slice = await file.slice(0, 4096).text();
-        if (/^===\s*\d{4}-/.test(slice) && /Tcp/.test(slice)) classified.nstat.push(file);
-        else if (/^Linux\s+\d.*\(\w+\)/.test(slice) && /%usr|%idle|kbmemfree|IFACE|tps/m.test(slice)) classified.sar.push(file);
-        else if (/^procs\s+---/.test(slice) || /^\s*\d+\s+\d+\s+\d+\s+\d+.*\d{4}-\d{2}-\d{2}/m.test(slice)) classified.vmstat.push(file);
-        else if (/GC\(\d+\)|Pause (Young|Full|G1)|\[gc[\],]|Using G1|Using ZGC|Using Shenandoah|gc,init/i.test(slice)) classified.gc.push(file);
-        else if (/FIXTcpConnection|\\|52=\d{8}/.test(slice)) classified.fix.push(file);
-        else if (/tcp\s+(ESTAB|LISTEN|TIME-WAIT|CLOSE-WAIT)/i.test(slice) || /^tcp\s/m.test(slice)) classified.ss.push(file);
-      } catch(err) {}
-    }
-    const summary = [];
-    // Load ss FIRST and wait for it to be parsed before loading other sources
-    if (classified.ss.length) {
-      const ssFile = classified.ss[0];
-      const ssText = await ssFile.text();
-      const cmEl = document.querySelector("#rawInput") || document.querySelector(".CodeMirror");
-      if (cmInstance) cmInstance.setValue(ssText);
-      else if (cmEl) cmEl.value = ssText;
-      state.raw = ssText; state.rawVersion = (state.rawVersion || 0) + 1; state.sourceName = ssFile.name;
-      state.cache = {};
-      document.querySelector("[data-action='parse']")?.click();
-      await new Promise(resolve => { const check = () => (state.sockets.length > 0 || state.view === "analysis") ? resolve() : setTimeout(check, 500); check(); });
-      summary.push(`ss: ${ssFile.name}`);
-    }
-    if (classified.gc.length) { const file = classified.gc[0]; file.text().then(text => { const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; const lines = text.split("\n").filter(l => gcPattern.test(l)).join("\n"); const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; }); summary.push(`GC: ${classified.gc[0].name}`); }
-    if (classified.vmstat.length) { classified.vmstat[0].text().then(text => { state.fixLatency.vmstat = parseVmstat(text).samples; render(); }); summary.push(`vmstat: ${classified.vmstat[0].name}`); }
-    if (classified.nstat.length) { classified.nstat[0].text().then(text => { state.fixLatency.nstat = parseNstatTimestamped(text).samples; render(); }); summary.push(`nstat: ${classified.nstat[0].name}`); }
-    if (classified.sar.length) { classified.sar[0].text().then(text => { state.sar = parseSar(text); state.sarCorrelation = correlateSarWithTcp(state.sar, state.anomalies.filter(a => a.epochMs).map(a => ({ epochMs: a.epochMs }))); render(); }); summary.push(`sar: ${classified.sar[0].name}`); }
-    if (classified.fix.length) { await ingestFixFiles(classified.fix); summary.push(`FIX: ${classified.fix.length} file(s)`); }
-    _hideBusy();
-    toast("Auto-detect complete", summary.length ? summary.join(" · ") : "No recognized files found");
-    render();
-    // Wait for ss to be fully parsed, then run correlations
-    const waitForSs = (retries = 0) => { if (state.sockets.length > 0 || state.view === "analysis") { setTimeout(() => { if (state.jvmGc.pauses.length) runJvmCorrelation(); if (state.fixLatency.records.length) runFixCorrelation(); render(); }, 500); } else if (retries < 60) { setTimeout(() => waitForSs(retries + 1), 500); } }; waitForSs();
-  });
-  document.querySelector("#ingestGcFileInput")?.addEventListener("change", e => { document.querySelector("#jvmGcFileInput")?.dispatchEvent || null; const el = document.querySelector("#jvmGcFileInput"); if (el) { el.files = e.target.files; el.dispatchEvent(new Event("change")); } else { const file = e.target.files?.[0]; if (!file) return; _showBusy(); const reader = file.stream().getReader(); const decoder = new TextDecoder(); let buffer = ""; let lines = ""; const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; function pump() { reader.read().then(({ done, value }) => { if (done) { if (buffer && gcPattern.test(buffer)) lines += buffer + "\n"; const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; runJvmCorrelation(); _hideBusy(); toast("GC log loaded", `${pauses.length} pauses from ${file.name}`); render(); return; } buffer += decoder.decode(value, { stream: true }); const parts = buffer.split("\n"); buffer = parts.pop(); for (const line of parts) { if (gcPattern.test(line)) lines += line + "\n"; } setTimeout(pump, 0); }); } pump(); } });
-  document.querySelector("#ingestVmstatFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { const { samples } = parseVmstat(text); state.fixLatency.vmstat = samples; toast("vmstat loaded", `${samples.length} samples from ${file.name}`); render(); }); });
-  document.querySelector("#ingestNstatFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { const { samples } = parseNstatTimestamped(text); state.fixLatency.nstat = samples; toast("nstat loaded", `${samples.length} samples from ${file.name}`); render(); }); });
-  document.querySelector("#ingestSarFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { state.sar = parseSar(text); const total = (state.sar.cpu?.length || 0) + (state.sar.memory?.length || 0) + (state.sar.io?.length || 0) + (state.sar.network?.length || 0); state.sarCorrelation = correlateSarWithTcp(state.sar, state.anomalies.filter(a => a.epochMs).map(a => ({ epochMs: a.epochMs }))); toast("sar loaded", `${total} samples from ${file.name} (CPU: ${state.sar.cpu.length}, IO: ${state.sar.io.length}, mem: ${state.sar.memory.length})`); render(); }); });
-  document.querySelector("#ingestFixFileInput")?.addEventListener("change", e => { const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name)); ingestFixFiles(files); });
-  document.querySelector("#ingestFixDirInput")?.addEventListener("change", e => { const files = Array.from(e.target.files || []).filter(f => /\.(log|txt|gz|zip)$/i.test(f.name)); ingestFixFiles(files); });
-  document.querySelector("#fixVmstatFileInput")?.addEventListener("change", e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    file.text().then(text => {
-      const { samples } = parseVmstat(text);
-      state.fixLatency.vmstat = samples;
-      runFixCorrelation();
-      toast("vmstat loaded", `${samples.length} samples parsed from ${file.name}. CPU/scheduling correlation active.`);
-      render();
-      requestAnimationFrame(drawFixCharts);
-    });
-  });
-  document.querySelector("#fixNstatFileInput")?.addEventListener("change", e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    file.text().then(text => {
-      const { samples } = parseNstatTimestamped(text);
-      state.fixLatency.nstat = samples;
-      runFixCorrelation();
-      toast("nstat loaded", `${samples.length} per-second samples parsed from ${file.name}. Kernel/network correlation active.`);
-      render();
-      requestAnimationFrame(drawFixCharts);
-    });
-  });
   document.querySelectorAll("[data-fix-epoch]").forEach(row => {
     row.addEventListener("click", () => {
       const epoch = Number(row.dataset.fixEpoch);

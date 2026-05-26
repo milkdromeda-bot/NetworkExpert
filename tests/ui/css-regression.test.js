@@ -25,6 +25,7 @@ const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8")
 const ingestView = readFileSync(new URL("../../src/ingest-view.js", import.meta.url), "utf8");
 const ingestActions = readFileSync(new URL("../../src/ingest-actions.js", import.meta.url), "utf8");
 const jvmGcView = readFileSync(new URL("../../src/jvm-gc-view.js", import.meta.url), "utf8");
+const serviceMapView = readFileSync(new URL("../../src/service-map-view.js", import.meta.url), "utf8");
 const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
 const ssCommandView = readFileSync(new URL("../../src/ss-command-view.js", import.meta.url), "utf8");
 const captureQualityView = readFileSync(new URL("../../src/capture-quality-view.js", import.meta.url), "utf8");
@@ -475,12 +476,12 @@ test("analysis tabs expose short guidance and a single detailed view guide", () 
 test("topology action uses a dedicated modal opener", () => {
   assert.match(main, /import \{ applyContextAction, openTopologyModal, setActiveInvestigation \} from "\.\/navigation\.js";/);
   assert.match(main, /normalizeTopologyProfile,/);
-  assert.match(main, /data-topology-open aria-haspopup="dialog"/);
+  assert.match(serviceMapView, /data-topology-open aria-haspopup="dialog"/);
   assert.match(main, /document\.querySelectorAll\("\[data-topology-open\]"\)\.forEach/);
   assert.match(main, /openTopologyModal\(state\);[\s\S]*renderKeepingWorkspacePosition\(\);/);
   assert.match(main, /openTopologyModal\(state, \{ editId: event\.currentTarget\.dataset\.topologyEdit, draftMatch: "" \}\);/);
   assert.match(main, /openTopologyModal\(state, \{ editId: "", draftMatch: event\.currentTarget\.dataset\.topologySuggest \}\);/);
-  assert.doesNotMatch(main, /class="service-labels-button topology" data-action="topology"/);
+  assert.doesNotMatch(serviceMapView, /class="service-labels-button topology" data-action="topology"/);
 });
 
 test("BDP window module exposes cautious controls and bounded charts", () => {

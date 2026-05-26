@@ -62,10 +62,20 @@ test("chart draw dependencies isolate DOM and mutable app state", () => {
 
 test("bindEvents is split into dependency-injected chart binders", () => {
   assert.match(main, /function appEventDependencies\(\)\s*\{/);
+  assert.match(main, /function sourceFileEventDependencies\(\)\s*\{/);
+  assert.match(main, /function serviceConfigActionDependencies\(\)\s*\{/);
+  assert.match(main, /function tableInteractionDependencies\(\)\s*\{/);
+  assert.match(main, /function socketInteractionDependencies\(\)\s*\{/);
+  assert.match(main, /function layoutProfileActionDependencies\(\)\s*\{/);
   assert.match(main, /function bindEvents\(deps = appEventDependencies\(\)\)/);
   assert.match(main, /function bindChartMinimapEvents\(deps = appEventDependencies\(\)\)/);
   assert.match(main, /function bindChartChromeEvents\(deps = appEventDependencies\(\)\)/);
   assert.match(main, /function bindChartSeriesEvents\(deps = appEventDependencies\(\)\)/);
+  assert.match(main, /bindSourceFileEvents\(sourceFileEventDependencies\(\)\);/);
+  assert.match(main, /handleServiceConfigAction\(action, event, serviceConfigActionDependencies\(\)\)/);
+  assert.match(main, /bindTableInteractionEvents\(tableInteractionDependencies\(\)\);/);
+  assert.match(main, /bindSocketInteractionEvents\(socketInteractionDependencies\(\)\);/);
+  assert.match(main, /handleLayoutProfileAction\(action, event, layoutProfileActionDependencies\(\)\)/);
   assert.match(main, /bindChartMinimapEvents\(deps\);/);
   assert.match(main, /bindChartChromeEvents\(deps\);/);
   assert.match(main, /bindChartSeriesEvents\(deps\);/);
