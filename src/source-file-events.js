@@ -212,13 +212,14 @@ export function bindSourceFileEvents(deps) {
       try {
         let slice;
         if (file.name.toLowerCase().endsWith(".gz") && "DecompressionStream" in window) {
-          const stream = file.slice(0, 16384).stream().pipeThrough(new DecompressionStream("gzip"));
+          const stream = file.stream().pipeThrough(new DecompressionStream("gzip"));
           const reader = stream.getReader();
           const chunks = [];
           let len = 0;
           while (len < 4096) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); len += value.length; }
-          reader.cancel();
-          slice = new TextDecoder().decode(chunks.length === 1 ? chunks[0].slice(0, 4096) : (await new Blob(chunks).arrayBuffer()).slice(0, 4096));
+          try { reader.cancel(); } catch {}
+          const buf = chunks.length === 1 ? chunks[0] : new Uint8Array(await new Blob(chunks).arrayBuffer());
+          slice = new TextDecoder().decode(buf.slice(0, 4096));
         } else {
           slice = await file.slice(0, 4096).text();
         }
