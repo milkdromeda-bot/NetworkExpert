@@ -23,6 +23,8 @@ const css = [stylesCss, importPageCss, captureQualityCss, analysisGuideCss, anal
 const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
 const ingestView = readFileSync(new URL("../../src/ingest-view.js", import.meta.url), "utf8");
+const ingestActions = readFileSync(new URL("../../src/ingest-actions.js", import.meta.url), "utf8");
+const jvmGcView = readFileSync(new URL("../../src/jvm-gc-view.js", import.meta.url), "utf8");
 const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
 const ssCommandView = readFileSync(new URL("../../src/ss-command-view.js", import.meta.url), "utf8");
 const captureQualityView = readFileSync(new URL("../../src/capture-quality-view.js", import.meta.url), "utf8");
@@ -210,7 +212,7 @@ test("file import flow has one clear filter entry point", () => {
   assert.match(ingestView, /<button data-action="pickFile" class="primary">[\s\S]*Open ss file<\/button>[\s\S]*<button data-action="pickAutoDir"[\s\S]*Auto-detect dir<\/button>[\s\S]*<button data-action="showEditor"[\s\S]*Editor<\/button>[\s\S]*<button data-action="toggleSsOptions"[\s\S]*ss command<\/button>[\s\S]*data-action="sampleIncidentDemo"[\s\S]*See it in action/);
   assert.doesNotMatch(ingestView, /<button data-action="toggleSsOptions"[^>]*>[\s\S]*Capture<\/button>/);
   assert.match(ingestView, /data-action="copySsCommand"[\s\S]*Copy<\/button>/);
-  assert.match(main, /toast\("ss command copied", "Paste it on the target server to collect the ss evidence\."\);/);
+  assert.match(ingestActions, /toast\("ss command copied", "Paste it on the target server to collect the ss evidence\."\);/);
   assert.doesNotMatch(main, /data-action="applyCommand"/);
   assert.doesNotMatch(main, /ss command updated/);
   assert.doesNotMatch(main, /Capture command updated/);
@@ -257,15 +259,15 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /input\?\.setCustomValidity\(result\.valid === false \? result\.message : ""\);/);
   assert.doesNotMatch(main, /placeholder="192\.168\.145\.205"/);
   assert.match(ingestView, /data-action="loadSsCommandEndpointExample"/);
-  assert.doesNotMatch(main, /market-data example/);
-  assert.doesNotMatch(main, /lfxbench_tcp-laloRcvMarketSimu/);
-  assert.match(main, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"1"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
+  assert.doesNotMatch(`${main}\n${ingestActions}`, /market-data example/);
+  assert.doesNotMatch(`${main}\n${ingestActions}`, /lfxbench_tcp-laloRcvMarketSimu/);
+  assert.match(ingestActions, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"1"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
   assert.match(ssCommandView, /const teeRisk = Boolean\(c\.outputPath && c\.appendOutput !== false && c\.loop && interval <= 0\.05\);/);
   assert.match(ssCommandView, /terminal output plus <code>tee<\/code> can become the bottleneck/);
   assert.match(ssCommandView, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
   assert.match(main, /function syncSsCommandFromBuilder\(\{ updateWarning = true \} = \{\}\)/);
   assert.match(main, /if \(validation\.valid\) \{[\s\S]*state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
-  assert.match(main, /toast\("Invalid ss command fields", first\?\.message \|\| "Fix the highlighted fields before copying\.", "danger"\);/);
+  assert.match(ingestActions, /toast\("Invalid ss command fields", first\?\.message \|\| "Fix the highlighted fields before copying\.", "danger"\);/);
   assert.match(main, /document\.querySelectorAll\("\[id\^='ssCmd'\]"\)\.forEach\(input => \{/);
   assert.match(main, /input\.addEventListener\(eventName, \(\) => syncSsCommandFromBuilder\(\)\);/);
   assert.match(main, /document\.querySelector\("#commandInput"\)\?\.addEventListener\("input"/);
@@ -568,8 +570,8 @@ test("chart statistics modal keeps the percentile curve to the right of a compac
 
 test("JVM stall charts are promoted above the table with metric-like controls", () => {
   assert.match(main, /hiddenJvmSeries:\s*new Set\(\)/);
-  assert.match(main, /data-chart-zoom="zoomIn" data-jvm-zoom/);
-  assert.match(main, /<div class="jvm-chart-section">[\s\S]*data-jvm-chart="recvq"[\s\S]*renderJvmLegend\("timeline"\)[\s\S]*data-jvm-chart="scatter"[\s\S]*renderJvmLegend\("scatter"\)[\s\S]*<div class="jvm-gc-results">/);
+  assert.match(jvmGcView, /data-chart-zoom="zoomIn" data-jvm-zoom/);
+  assert.match(jvmGcView, /<div class="jvm-chart-section">[\s\S]*data-jvm-chart="recvq"[\s\S]*renderJvmLegend\("timeline"\)[\s\S]*data-jvm-chart="scatter"[\s\S]*renderJvmLegend\("scatter"\)[\s\S]*<div class="jvm-gc-results">/);
   assert.match(main, /function jvmLegendSeries\(kind\)/);
   assert.match(main, /function renderJvmLegend\(kind\)/);
   assert.match(main, /data-jvm-series-key="\$\{escapeHtml\(item\.key\)\}"/);
@@ -597,10 +599,10 @@ test("JVM stall table has precise timestamps nature sorting severity and paginat
   assert.match(main, /data-jvm-page-size/);
   assert.match(main, /data-jvm-page="first"/);
   assert.match(main, /data-jvm-page="last"/);
-  assert.match(main, /Correlated JVM stall events/);
-  assert.match(main, /renderJvmSortHeader\("time", "Timestamp"\)/);
-  assert.match(main, /renderJvmSortHeader\("nature", "Stall nature"\)/);
-  assert.match(main, /jvm-severity-pill/);
+  assert.match(jvmGcView, /Correlated JVM stall events/);
+  assert.match(jvmGcView, /renderJvmSortHeader\("time", "Timestamp"\)/);
+  assert.match(jvmGcView, /renderJvmSortHeader\("nature", "Stall nature"\)/);
+  assert.match(jvmGcView, /jvm-severity-pill/);
   assert.match(main, /event\.target\.closest\("\[data-jvm-sort\]"\)/);
   assert.match(main, /event\.target\.closest\("\[data-jvm-page\]"\)/);
   assert.match(main, /\[data-jvm-page-size\]/);
@@ -640,7 +642,7 @@ test("analysis exposes a dedicated capture quality report tab", () => {
   assert.match(main, /function captureQualityReport\(\)/);
   assert.match(main, /function renderCaptureQualityReport\(\)/);
   assert.match(captureQualityView, /data-action="copyQualityCommand"/);
-  assert.match(main, /toast\("Capture command copied", "Paste it on the target server to collect stronger ss evidence\."\);/);
+  assert.match(ingestActions, /toast\("Capture command copied", "Paste it on the target server to collect stronger ss evidence\."\);/);
   assert.match(captureQuality, /export function analyzeCaptureQuality/);
   assert.match(captureQuality, /Timestamped snapshots/);
   assert.match(captureQuality, /Socket memory \(-m\)/);

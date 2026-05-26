@@ -55,8 +55,12 @@ import { createModalView } from "./modal-view.js";
 import { downloadBlob, drawPdfSection, drawPdfTextBlock, reportChartDataUrl, svgToPngBlob } from "./report-utils.js";
 import { buildAdvisorFindings as buildAdvisorFindingsModel } from "./advisor-findings.js";
 import { buildPrintableIncidentReportHtml } from "./printable-incident-report.js";
+import { buildIncidentReportPdf as buildIncidentReportPdfModel } from "./incident-report-pdf.js";
 import { buildJiraReport as buildJiraReportModel } from "./jira-report.js";
 import { renderIngestPage as renderIngestPageView } from "./ingest-view.js";
+import { handleIngestAction } from "./ingest-actions.js";
+import { renderFixLatencyPanelView } from "./fix-latency-view.js";
+import { renderJvmGcPanelView } from "./jvm-gc-view.js";
 import { computeHealthScore } from "./health-score.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "./snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "./shared-buffer.js";
@@ -740,7 +744,7 @@ function markAnalysisDirty({ raw = false } = {}) {
 function recompute() {
   state.sockets = applyRisks(parseAnalysisSockets());
   state.bandwidthIndex = buildSocketBandwidthIndex();
-  state.sparklineIndex = hasRealTimestampHistory() ? buildSparklineIndex(parsedTimestampSnapshots(), socketIdentityKey, metricValue) : null;
+  state.sparklineIndex = null;
   state.anomalies = analyzeAll(state.sockets);
   state.fragmentation = detectFragmentation(state.sockets);
   state.reordering = detectReordering(state.sockets);
@@ -765,7 +769,7 @@ function parseAnalysisSockets() {
 function recomputeFromSockets() {
   state.sockets = withStableSocketIds(state.sockets);
   state.bandwidthIndex = buildSocketBandwidthIndex();
-  state.sparklineIndex = hasRealTimestampHistory() ? buildSparklineIndex(parsedTimestampSnapshots(), socketIdentityKey, metricValue) : null;
+  state.sparklineIndex = null;
   state.anomalies = analyzeAll(state.sockets);
   state.fragmentation = detectFragmentation(state.sockets);
   state.reordering = detectReordering(state.sockets);
@@ -2874,109 +2878,20 @@ function renderBdpWindowPanel() {
 }
 
 function renderJvmGcPanel() {
-  const gc = state.jvmGc;
-  const hasPauses = gc.pauses.length > 0;
-  const corr = gc.correlation;
-  const summary = corr?.summary;
-  const jvmRows = jvmPagedRows(corr?.results || [], gc.safepoints || []);
-  return `<section class="panel jvm-gc-panel">
-    <div class="panel-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px">
-      <span style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap">JVM Stall / GC Correlation</span>
-      ${hasPauses ? `<button class="jvm-clear-btn" data-action="clearJvmGcLog" title="Clear GC data"><i class="ri-delete-bin-line"></i> Clear</button>` : ""}
-      ${hasPauses ? `<span class="jvm-sep"></span><div style="display:flex;gap:4px;margin:0 auto">
-        <button class="mini" data-chart-zoom="zoomIn" data-jvm-zoom title="Zoom in">${icons.zoomIn}</button>
-        <button class="mini" data-chart-zoom="zoomOut" data-jvm-zoom title="Zoom out">${icons.zoomOut}</button>
-        <button class="mini" data-chart-zoom="resetZoom" data-jvm-zoom title="Reset zoom">${icons.reset}</button>
-        <button class="mini" data-chart-zoom="panLeft" data-jvm-zoom title="Pan left">${icons.arrowLeft}</button>
-        <button class="mini" data-chart-zoom="panRight" data-jvm-zoom title="Pan right">${icons.arrowRight}</button>
-      </div><span class="jvm-sep"></span>` : ""}
-      <div class="bdp-controls" style="margin-left:auto">
-
-        <label style="margin-left:10px"><span>Severity</span><select id="jvmSeverityFilter"><option value="all"${state.jvmGc.severityFilter === "all" || !state.jvmGc.severityFilter ? " selected" : ""}>All</option><option value="info"${state.jvmGc.severityFilter === "info" ? " selected" : ""} style="color:#39d6d6">? Info+</option><option value="warning"${state.jvmGc.severityFilter === "warning" ? " selected" : ""} style="color:#ffd166">? Warning+</option><option value="warning_high"${state.jvmGc.severityFilter === "warning_high" ? " selected" : ""} style="color:#ff9f43">? Warning high+</option><option value="critical"${state.jvmGc.severityFilter === "critical" ? " selected" : ""} style="color:#ff5c77">? Critical</option></select></label>
-        <label style="margin-left:10px"><span>Sync crosshair</span><input id="jvmSyncCrosshair" type="checkbox" ${state.jvmGc.syncCrosshair !== false ? "checked" : ""} style="width:auto;min-height:auto;height:16px"/></label>
-        <label style="margin-left:10px"><span>Clock offset (ms)</span><input id="jvmClockOffset" type="number" value="${gc.clockOffsetMs}" step="1" style="width:80px"/></label>
-      </div>
-    </div>
-    <div class="panel-body">
-      ${!hasPauses ? `<div class="jvm-gc-import"><p>No GC log loaded. Use <strong>Auto-detect dir</strong> or the <strong>GC</strong> button in the Import tab to load a Java GC log.</p></div>` : `
-        <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
-          <span class="field-info" tabindex="0" aria-label="Score interpretation" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto"><span class="tooltip-kicker">Correlation score interpretation</span><strong>0.00 - 0.20</strong><p>No correlation. GC pause detected but no TCP symptom change observed in the time window.</p><strong>0.20 - 0.40 (info)</strong><p>Weak temporal correlation. A TCP signal appeared near the pause but counter-evidence or low buffer pressure reduces confidence.</p><strong>0.40 - 0.60 (warning)</strong><p>Moderate correlation. Multiple TCP symptoms (Recv-Q rise, rcv_space drop) coincide with the pause. Buffer pressure is significant.</p><strong>0.60 - 0.80 (warning_high)</strong><p>Strong correlation. Pause + buffer overflow risk + rcv_space collapse. JVM stall is a likely contributor to slow consumer behavior.</p><strong>0.80 - 1.00 (critical)</strong><p>Very strong correlation. Long pause or Full GC + persist/zero-window + confirmed flow disruption. JVM stall is the probable root cause.</p><strong>Counter-evidence reduces score:</strong><p>Pre-existing Recv-Q, retransmissions, RTT spikes, high Send-Q (downstream), or app_limited each subtract 0.15 from the score to avoid false positives.</p></span></span>
-          <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "info")}</span>
-          <strong>${summary?.correlatedCount || 0} correlated pauses / ${summary?.totalPauses || 0} in window${gc.analysisWindow ? ` (${gc.analysisWindow.filteredPauses}/${gc.analysisWindow.totalPauses} pauses in ss period)` : ""}</strong>
-          <em>Max correlation score: ${(summary?.maxScore || 0).toFixed(2)}${gc.analysisWindow?.start ? ` · Analysis window: ${preciseDateTimeLabel(gc.analysisWindow.start)} → ${preciseDateTimeLabel(gc.analysisWindow.end)}` : ""}</em>
-          <span style="margin-left:auto;font-size:11px;color:var(--soft)">${summary?.recommendations?.map(r => `<b style="color:${r.severity === "critical" ? "#ff5c77" : r.severity === "warning" ? "#ffd166" : "#39d6d6"}">${escapeHtml(r.severity)}</b> ${escapeHtml(r.text)}`).join(" · ") || ""}</span>
-        </div>
-        ${gc.cpuCorrelation?.summary ? `<div class="bdp-context-line info" style="margin-top:8px">
-          <i class="ri-cpu-line" style="font-size:16px;color:#a78bfa"></i>
-          <strong>CPU correlation: ${gc.cpuCorrelation.summary.correlatedCount} GC pause(s) with CPU scheduling issues</strong>
-          <em>Max wait: ${gc.cpuCorrelation.summary.maxWaitObserved.toFixed(1)}% · Saturation events: ${gc.cpuCorrelation.summary.cpuSaturationEvents} · High cswch: ${gc.cpuCorrelation.summary.highContextSwitchEvents}</em>
-        </div>` : ""}
-        ${gc.nstat ? `<div class="bdp-context-line info" style="margin-top:4px">
-          <i class="ri-bar-chart-line" style="font-size:16px;color:#7dd3fc"></i>
-          <strong>nstat counters</strong>
-          <em>Retrans: ${gc.nstat.retransSegs} · Timeouts: ${gc.nstat.timeouts} · ListenDrops: ${gc.nstat.listenDrops} · MemPressure: ${gc.nstat.tcpMemoryPressures} · RcvPruned: ${gc.nstat.rcvPruned}</em>
-        </div>` : ""}
-        <details style="padding:6px 12px;border-radius:8px;background:rgba(140,183,255,0.06);border:1px solid rgba(140,183,255,0.12);font-size:11px;color:var(--muted);line-height:1.5;margin:0 0 0 0"><summary style="cursor:pointer;color:var(--text);font-weight:600">How to read</summary>
-          Each dot is a FIX message with lag > threshold. Dot color = <strong style="color:#ff5c77">correlation strength</strong> (not lag severity). 
-          <br/><span style="color:#ff5c77">● critical</span> = strong evidence of network/GC/CPU cause.<br/>
-          <span style="color:#ff9f43">● warning_high</span> = moderate-strong evidence.<br/>
-          <span style="color:#ffd166">● warning</span> = moderate evidence.<br/>
-          <span style="color:#39d6d6">● info</span> = weak.<br/>
-          <span style="color:#8c9aab">● none</span> = no cause found (healthy socket at spike time).<br/>
-          The scatter plot shows lag (X) vs correlation score (Y) — top-right = high lag with strong cause.
-          <br/><strong>Note:</strong> nstat counters are host-wide (all sockets), not per-connection. On a busy host with many connections, nstat retrans may be coincidental — ss per-socket evidence is more reliable.
-        </details>
-        <div class="jvm-chart-section">
-          <div class="bdp-chart-grid jvm-chart-grid">
-            <article>
-              <div class="bdp-chart-title"><strong>Recv-Q + GC pauses</strong><span>local receiver timeline</span></div>
-              <svg class="chart bdp-chart" data-jvm-chart="recvq" role="img" aria-label="JVM GC correlation chart"></svg>
-              ${renderJvmLegend("timeline")}
-            </article>
-            <article>
-              <div class="bdp-chart-title"><strong>Pause duration vs Delta Recv-Q</strong><span>scatter</span></div>
-              <svg class="chart bdp-chart" data-jvm-chart="scatter" role="img" aria-label="GC pause scatter plot"></svg>
-              ${renderJvmLegend("scatter")}
-            </article>
-          </div>
-        </div>
-        ${corr?.results?.length > 5 ? `<div style="margin:8px 0"><div class="bdp-chart-title"><strong>Spike density heatmap</strong><span>time x lag</span></div><canvas data-fix-heatmap style="width:100%;height:80px;border-radius:6px;background:rgba(30,42,56,0.6)"></canvas></div>` : ""}
-        <div class="jvm-gc-results">
-          <div class="jvm-table-head">
-            <strong>Correlated JVM stall events</strong>
-            <span>${formatNumber(jvmRows.total)} row(s)</span>
-          </div>
-          ${renderJvmPagination(jvmRows.total, jvmRows.totalPages, jvmRows.start)}
-          <div class="table-wrap jvm-table-wrap"><table class="mini-table jvm-gc-table"><thead><tr>
-            ${renderJvmSortHeader("time", "Timestamp")}
-            ${renderJvmSortHeader("nature", "Stall nature")}
-            ${renderJvmSortHeader("id", "GC#")}
-            ${renderJvmSortHeader("type", "Type")}
-            ${renderJvmSortHeader("cause", "Cause")}
-            ${renderJvmSortHeader("duration", "Duration")}
-            ${renderJvmSortHeader("score", "Score")}
-            ${renderJvmSortHeader("severity", "Severity")}
-            ${renderJvmSortHeader("signals", "Signals")}
-          </tr></thead><tbody>
-            ${jvmRows.rows.map(r => `<tr class="jvm-severity-${escapeHtml(jvmSeverityClass(r.severity))}" data-jvm-row-epoch="${r.timestampMs || r.epochMs || ""}" style="cursor:pointer">
-              <td class="mono-cell">${escapeHtml(preciseDateTimeLabel(r.timestampMs))}</td>
-              <td><span class="jvm-nature">${escapeHtml(jvmStallNature(r))}</span></td>
-              <td>${escapeHtml(String(r.eventId ?? r.pause.id))}</td>
-              <td>${escapeHtml(r.pause.type || "-")}</td>
-              <td>${escapeHtml(r.pause.cause || "-")}</td>
-              <td>${Number(r.durationMs || 0).toFixed(1)} ms</td>
-              <td>${Number(r.score || 0).toFixed(2)}</td>
-              <td><span class="jvm-severity-pill ${escapeHtml(jvmSeverityClass(r.severity))}">${escapeHtml(jvmSeverityLabel(r.severity))}</span></td>
-              <td>${escapeHtml(r.symptoms?.signals?.map(s => s.signal).join(", ") || "-")}</td>
-            </tr>`).join("")}
-          </tbody></table></div>
-          ${renderJvmPagination(jvmRows.total, jvmRows.totalPages, jvmRows.start)}
-          
-          ${jvmRows.total === 0 ? "<p>No correlated pauses detected. GC pauses did not coincide with TCP symptom changes in the available snapshots.</p>" : ""}
-        </div>
-      `}
-    </div>
-  </section>`;
+  return renderJvmGcPanelView({
+    state,
+    icons,
+    jvmPagedRows,
+    renderJvmLegend,
+    renderJvmPagination,
+    renderJvmSortHeader,
+    jvmSeverityClass,
+    jvmSeverityLabel,
+    jvmStallNature,
+    escapeHtml,
+    formatNumber,
+    preciseDateTimeLabel
+  });
 }
 
 function jvmLegendSeries(kind) {
@@ -3861,150 +3776,16 @@ function fixPagedRows() {
 }
 
 function renderFixLatencyPanel() {
-  const fix = state.fixLatency;
-  const fixTools = (id) => `<span class="chart-card-tools"><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomIn" title="Zoom in">${icons.zoomIn}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="zoomOut" title="Zoom out">${icons.zoomOut}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="resetZoom" title="Reset">${icons.reset}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panLeft" title="Pan left">${icons.arrowLeft}</button><button class="mini" data-fix-zoom-chart="${id}" data-fix-zoom-action="panRight" title="Pan right">${icons.arrowRight}</button><button class="mini" data-action="fixPlayback" title="Playback"><i class="${state.fixLatency.playing ? "ri-pause-line" : "ri-play-line"}"></i></button><button class="mini" data-action="expandFixChart" data-fix-chart-id="${id}" title="${fix.expandedChart === id ? "Collapse" : "Expand"}"><i class="${fix.expandedChart === id ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}"></i></button></span>`;
-  const hasRecords = fix.records.length > 0;
-  const corr = fix.correlation;
-  const summary = corr?.summary;
-  const stats = hasRecords ? computeFixStats(fix.records) : null;
-  const paged = fixPagedRows();
-  return `<section class="panel jvm-gc-panel">
-    <div class="panel-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px">
-      <span style="font-weight:700;font-size:13px;color:var(--text);white-space:nowrap">FIX Latency Correlation</span>
-      
-
-      ${hasRecords ? `<div class="bdp-controls" style="margin-left:auto">
-        <label><span>Lag threshold</span><select id="fixThresholdInput" style="width:auto"><option value="1"${fix.threshold===1?" selected":""}>1 ms</option><option value="2"${fix.threshold===2?" selected":""}>2 ms</option><option value="5"${fix.threshold===5?" selected":""}>5 ms (default)</option><option value="10"${fix.threshold===10?" selected":""}>10 ms</option><option value="20"${fix.threshold===20?" selected":""}>20 ms</option><option value="50"${fix.threshold===50?" selected":""}>50 ms</option><option value="100"${fix.threshold===100?" selected":""}>100 ms</option></select></label>
-        <label><span>GC window</span><select id="fixGcWindowInput" style="width:auto"><option value="0"${!fix.gcWindowMs?" selected":""}>auto${state.jvmGc.pauses.length ? ` (${Math.round(Math.max(50, (state.jvmGc.pauses.reduce((s,p) => s + (p.durationMs||0), 0) / state.jvmGc.pauses.length) * 2))}ms)` : ""}</option><option value="50"${fix.gcWindowMs===50?" selected":""}>50 ms</option><option value="100"${fix.gcWindowMs===100?" selected":""}>100 ms</option><option value="200"${fix.gcWindowMs===200?" selected":""}>200 ms</option><option value="500"${fix.gcWindowMs===500?" selected":""}>500 ms</option><option value="1000"${fix.gcWindowMs===1000?" selected":""}>1000 ms</option></select></label>
-        
-        <label style="margin-left:6px"><span>CPUs</span><select id="fixCpuCores" style="width:auto"><option value="0"${!fix.cpuCores?" selected":""}>auto</option><option value="24"${fix.cpuCores===24?" selected":""}>24</option><option value="32"${fix.cpuCores===32?" selected":""}>32</option><option value="48"${fix.cpuCores===48?" selected":""}>48</option><option value="64"${fix.cpuCores===64?" selected":""}>64</option><option value="96"${fix.cpuCores===96?" selected":""}>96</option><option value="128"${fix.cpuCores===128?" selected":""}>128</option></select></label>
-      </div>` : ""}
-    </div>
-    <div class="panel-body">
-      <input type="file" id="fixFileInput" accept="*" multiple style="display:none"/>
-      <input type="file" id="fixDirInput" webkitdirectory style="display:none"/>
-      <input type="file" id="fixVmstatFileInput" accept=".log,.txt,.out" style="display:none"/>
-      <input type="file" id="fixNstatFileInput" accept=".log,.txt,.out" style="display:none"/>
-      ${!hasRecords ? `<div class="jvm-gc-import"><p>No FIX logs loaded. Use <strong>Auto-detect dir</strong> or the <strong>FIX</strong> button in the Import tab to load FIX connector logs.</p></div>` : `
-        <div class="bdp-context-line ${summary?.overallSeverity || "info"}">
-          <span class="risk ${escapeHtml(summary?.overallSeverity || "info")}">${escapeHtml(summary?.overallSeverity || "none")}</span>
-          <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:520px;max-height:280px;overflow-y:auto;columns:2;column-gap:18px"><span class="tooltip-kicker">FIX Latency Correlation — How to read</span><strong>Messages</strong><p>Total FIX messages parsed from all loaded files.</p><strong>Spikes</strong><p>Messages where lag (server receive time − tag 52 SendingTime) exceeds the configured threshold. These are the candidates for root-cause investigation.</p><strong>With ss evidence</strong><p>Spikes for which a matching TCP socket was found in the ss snapshots (by IP:port). This means we could inspect the socket state at the time of the spike.</p><strong>Endpoint match %</strong><p>Proportion of spikes where the FIX connection IP:port was found in ss data. 0% means ss was captured on a different host or the socket was not included.</p><strong>Cause breakdown</strong><p><b style="color:#3b82f6">Network</b>: ss shows retransmissions, RTT spike, cwnd collapse, or backoff at spike time.<br/><b style="color:#a855f7">Kernel</b>: nstat shows backlog drops, listen overflows, or RcvQ drops.<br/><b style="color:#ff9f43">CPU</b>: vmstat shows high run queue, CPU saturation, or I/O wait.<br/><b style="color:#2cc62c">GC</b>: a JVM GC pause overlaps the spike.<br/><b style="color:#8c9aab">Unknown</b>: no symptom found in any source — likely application thread-pool scheduling or application-level delay.</p><strong>GC window</strong><p>A FIX spike is attributed to GC if it occurs during the pause or within this window after the pause ends. The JVM connector cannot read the socket during Stop-The-World, and needs time to drain the backlog after resuming. Shorter window = stricter attribution (only spikes very close to the pause). Longer window = catches backlog drain effects.</p><strong>If all causes are Unknown</strong><p>The network is innocent. The TCP socket was healthy at spike time (recvQ=0, retrans=0, RTT stable, cwnd normal). The lag is caused by something above TCP: thread scheduling, GC, or application processing. Load vmstat/nstat to investigate further.</p></span></span>
-          <strong>${summary?.totalRecords || 0} messages · ${summary?.totalSpikes || 0} spikes (lag > ${fix.threshold}ms) · ${summary?.correlatedCount || 0} with ss evidence</strong>
-          <em>Max score: ${(summary?.maxScore || 0).toFixed(2)} - Endpoint match: ${((summary?.endpointMatchRate || 0) * 100).toFixed(0)}%</em>
-          ${stats ? `<span style="margin-left:auto;font-size:11px;color:var(--soft)">Median: ${stats.median.toFixed(1)}ms - P95: ${stats.p95.toFixed(1)}ms - P99: ${stats.p99.toFixed(1)}ms - Max: ${stats.max.toFixed(1)}ms</span>` : ""}
-        </div>
-        ${summary?.causeCounts ? `<div class="bdp-context-line info" style="margin-top:6px">
-          <i class="ri-pie-chart-line" style="font-size:16px;color:#a78bfa"></i>
-          <strong>Cause breakdown:</strong>
-          <em>Network: ${summary.causeCounts.network} · GC: ${summary.causeCounts.gc || 0} · Kernel: ${summary.causeCounts.kernel} · CPU: ${summary.causeCounts.cpu} · Unknown: ${summary.causeCounts.unknown}</em>
-          
-          
-          
-          <span style="margin-left:auto;display:flex;gap:6px">
-            ${!fix.vmstat ? '<button class="tiny-btn" data-action="pickFixVmstatFile"><i class="ri-cpu-line"></i> + vmstat</button>' : '<span class="chip" style="font-size:10px"><i class="ri-cpu-line"></i> vmstat ✓</span>'}
-            ${!fix.nstat ? '<button class="tiny-btn" data-action="pickFixNstatFile"><i class="ri-bar-chart-line"></i> + nstat</button>' : '<span class="chip" style="font-size:10px"><i class="ri-bar-chart-line"></i> nstat ✓</span>'}
-          </span>
-        </div>` : ""}
-        <details style="padding:6px 12px;border-radius:8px;background:rgba(140,183,255,0.06);border:1px solid rgba(140,183,255,0.12);font-size:11px;color:var(--muted);line-height:1.5;margin:0 0 0 0"><summary style="cursor:pointer;color:var(--text);font-weight:600">How to read</summary>
-          Each dot is a FIX message with lag > threshold. Dot color = <strong style="color:#ff5c77">correlation strength</strong> (not lag severity). 
-          <br/><span style="color:#ff5c77">● critical</span> = strong evidence of network/GC/CPU cause.<br/>
-          <span style="color:#ff9f43">● warning_high</span> = moderate-strong evidence.<br/>
-          <span style="color:#ffd166">● warning</span> = moderate evidence.<br/>
-          <span style="color:#39d6d6">● info</span> = weak.<br/>
-          <span style="color:#8c9aab">● none</span> = no cause found (healthy socket at spike time).<br/>
-          The scatter plot shows lag (X) vs correlation score (Y) — top-right = high lag with strong cause.
-          <br/><strong>Note:</strong> nstat counters are host-wide (all sockets), not per-connection. On a busy host with many connections, nstat retrans may be coincidental — ss per-socket evidence is more reliable.
-        </div>
-        ${buildMultiSourceSummary(fix)}
-        <div class="jvm-chart-section">
-          <div class="bdp-chart-grid jvm-chart-grid">
-            <article class="${fix.expandedChart === "timeline" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
-              <div class="bdp-chart-title"><strong>FIX Lag + ss Recv-Q timeline</strong><span>overlay</span>${fixTools("timeline")}</div>
-              <svg class="chart bdp-chart" data-fix-chart="timeline" role="img" aria-label="FIX latency timeline"></svg>
-              <div class="chart-legend fix-chart-legend">
-                <button class="chart-legend-item ${fix.hiddenSeries.has("lag") ? "is-muted" : ""}" data-fix-series="lag" title="Toggle lag spike dots. Colors indicate correlation severity: critical (strong network/GC cause), warning (moderate), info (weak)."><i style="--legend-color:#ff5c77"></i><span>critical</span></button><button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning_high") ? "is-muted" : ""}" data-fix-series="sev_warning_high" title="Score 0.5-0.7: moderate correlation. Click to toggle."><i style="--legend-color:#ff9f43"></i><span>warning_high</span></button><button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning") ? "is-muted" : ""}" data-fix-series="sev_warning" title="Score 0.3-0.5: weak correlation. Click to toggle."><i style="--legend-color:#ffd166"></i><span>warning</span></button><button class="chart-legend-item ${fix.hiddenSeries.has("sev_info") ? "is-muted" : ""}" data-fix-series="sev_info" title="Score 0.01-0.3: minimal correlation. Click to toggle."><i style="--legend-color:#39d6d6"></i><span>info</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("recvq") ? "is-muted" : ""}" data-fix-series="recvq" title="Toggle Recv-Q area. Shows unread bytes in the socket receive buffer from ss snapshots."><i style="--legend-color:rgba(59,130,246,0.8)"></i><span>Recv-Q</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("gczone") ? "is-muted" : ""}" data-fix-series="gczone" title="Toggle GC freeze zones. Red = JVM Stop-The-World (cannot read socket). Orange = drain window (backlog processing after STW)."><i style="--legend-color:rgba(255,92,119,0.4)"></i><span>GC zones</span></button>
-              </div>
-            </article>
-            <article class="${fix.expandedChart === "scatter" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
-              <div class="bdp-chart-title"><strong>Lag vs Correlation Score</strong><span>scatter</span>${fixTools("scatter")}</div>
-              <svg class="chart bdp-chart" data-fix-chart="scatter" role="img" aria-label="FIX lag scatter"></svg>
-              <div class="chart-legend fix-chart-legend">
-                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_critical") ? "is-muted" : ""}" data-fix-series="sev_critical" title="Score 0.7-1.0: strong cause identified. Click to toggle."><i style="--legend-color:#ff5c77"></i><span>critical</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning_high") ? "is-muted" : ""}" data-fix-series="sev_warning_high" title="Score 0.5-0.7: moderate correlation. Click to toggle."><i style="--legend-color:#ff9f43"></i><span>warning_high</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_warning") ? "is-muted" : ""}" data-fix-series="sev_warning" title="Score 0.3-0.5: weak correlation. Click to toggle."><i style="--legend-color:#ffd166"></i><span>warning</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_info") ? "is-muted" : ""}" data-fix-series="sev_info" title="Score 0.01-0.3: minimal correlation. Click to toggle."><i style="--legend-color:#39d6d6"></i><span>info</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("sev_none") ? "is-muted" : ""}" data-fix-series="sev_none" title="Score 0: no symptom found. Click to toggle."><i style="--legend-color:#8c9aab"></i><span>none</span></button>
-              </div>
-            </article>
-            ${fix.vmstat ? `<article class="${fix.expandedChart === "vmstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : !fix.nstat ? "fix-chart-expanded" : ""}">
-              <div class="bdp-chart-title"><strong>CPU + Run Queue (vmstat)</strong><span>timeline</span>${fixTools("vmstat")}</div>
-              <svg class="chart bdp-chart" data-fix-chart="vmstat" role="img" aria-label="vmstat CPU timeline"></svg>
-              <div class="chart-legend fix-chart-legend">
-                <button class="chart-legend-item ${fix.hiddenSeries.has("us") ? "is-muted" : ""}" data-fix-series="us" title="Toggle user CPU %. Time spent in user-space code."><i style="--legend-color:#3b82f6"></i><span>us%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("sy") ? "is-muted" : ""}" data-fix-series="sy" title="Toggle system CPU %. Time spent in kernel."><i style="--legend-color:#a855f7"></i><span>sy%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("ussy") ? "is-muted" : ""}" data-fix-series="ussy" title="Toggle us+sy combined. Application + kernel CPU."><i style="--legend-color:#38bdf8"></i><span>us+sy%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("wa") ? "is-muted" : ""}" data-fix-series="wa" title="Toggle I/O wait %. CPU idle waiting for disk. High values indicate storage bottleneck."><i style="--legend-color:#ff9f43"></i><span>wa%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("total") ? "is-muted" : ""}" data-fix-series="total" title="Toggle us+sy+wa total. Combined CPU busy time."><i style="--legend-color:#d4ff00"></i><span>us+sy+wa%</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("blocked") ? "is-muted" : ""}" data-fix-series="blocked" title="Toggle blocked processes (b column). Processes in uninterruptible sleep (usually I/O)."><i style="--legend-color:#f472b6"></i><span>blocked</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("runqueue") ? "is-muted" : ""}" data-fix-series="runqueue" title="Toggle run queue (r column). Processes waiting for CPU. Above CPU count = scheduling contention."><i style="--legend-color:#4ade80"></i><span>runqueue</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("fixmarkers") ? "is-muted" : ""}" data-fix-series="fixmarkers" title="Toggle FIX spike markers. White vertical lines showing when FIX messages had lag > threshold."><i style="--legend-color:#ffffff"></i><span>FIX spikes</span></button>
-              </div>
-            </article>` : ""}
-            ${fix.nstat ? `<article class="${fix.expandedChart === "nstat" ? "fix-chart-expanded" : fix.expandedChart ? "fix-chart-hidden" : ""}">
-              <div class="bdp-chart-title"><strong>TCP Drops & Retrans (nstat)</strong><span>timeline</span>${fixTools("nstat")}</div>
-              <svg class="chart bdp-chart" data-fix-chart="nstat" role="img" aria-label="nstat counters timeline"></svg>
-              <div class="chart-legend fix-chart-legend">
-                <button class="chart-legend-item ${fix.hiddenSeries.has("retrans") ? "is-muted" : ""}" data-fix-series="retrans" title="Toggle TcpRetransSegs/s. Retransmitted TCP segments per second — indicates packet loss."><i style="--legend-color:#ff5c77"></i><span>Retrans</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("timeouts") ? "is-muted" : ""}" data-fix-series="timeouts" title="Toggle TcpExtTCPTimeouts/s. TCP retransmission timeouts — severe loss or path failure."><i style="--legend-color:#ff9f43"></i><span>Timeouts</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("backlogdrop") ? "is-muted" : ""}" data-fix-series="backlogdrop" title="Toggle TcpExtTCPBacklogDrop/s. Packets dropped because socket backlog is full — application too slow to accept()."><i style="--legend-color:#a855f7"></i><span>BacklogDrop</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("listendrop") ? "is-muted" : ""}" data-fix-series="listendrop" title="Toggle TcpExtListenDrops/s. Incoming connections dropped — listen queue overflow."><i style="--legend-color:#ffd166"></i><span>ListenDrop</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("rcvqdrop") ? "is-muted" : ""}" data-fix-series="rcvqdrop" title="Toggle TcpExtTCPRcvQDrop/s. Packets dropped from receive queue — kernel memory pressure."><i style="--legend-color:#39d6d6"></i><span>RcvQDrop</span></button>
-                <button class="chart-legend-item ${fix.hiddenSeries.has("fixmarkers") ? "is-muted" : ""}" data-fix-series="fixmarkers" title="Toggle FIX spike markers. White vertical lines showing when FIX messages had lag > threshold."><i style="--legend-color:#ffffff"></i><span>FIX spikes</span></button>
-              </div>
-            </article>` : ""}
-          </div>
-        </div>
-        ${corr?.results?.length > 5 ? `<div style="margin:8px 0"><div class="bdp-chart-title"><strong>Spike density heatmap</strong><span>time x lag</span></div><canvas data-fix-heatmap style="width:100%;height:80px;border-radius:6px;background:rgba(30,42,56,0.6)"></canvas></div>` : ""}
-        <div class="jvm-gc-results">
-          <div class="jvm-table-head">
-            <strong>Correlated FIX latency spikes</strong>
-            <span>${formatNumber(paged.total)} spike(s) above ${fix.threshold}ms</span>
-            <select id="fixCauseFilter" style="margin-left:auto;font-size:11px;padding:2px 6px;width:150px"><option value="">All causes</option><option value="network"${state.fixTable.causeFilter==="network"?" selected":""}>Network</option><option value="gc"${state.fixTable.causeFilter==="gc"?" selected":""}>GC</option><option value="kernel"${state.fixTable.causeFilter==="kernel"?" selected":""}>Kernel</option><option value="cpu"${state.fixTable.causeFilter==="cpu"?" selected":""}>CPU</option><option value="unknown"${state.fixTable.causeFilter==="unknown"?" selected":""}>Unknown</option></select>
-            <span style="font-size:11px;color:var(--muted)">Page ${state.fixTable.page}/${paged.totalPages || 1}</span>
-            <button class="tiny-btn" data-action="fixTablePrev" ${state.fixTable.page <= 1 ? "disabled" : ""}>←</button>
-            <button class="tiny-btn" data-action="fixTableNext" ${state.fixTable.page >= paged.totalPages ? "disabled" : ""}>→</button>
-          </div>
-          <div class="table-wrap jvm-table-wrap"><table class="mini-table jvm-gc-table"><thead><tr>
-            <th data-fix-sort="time" style="cursor:pointer">Time</th>
-            <th data-fix-sort="lag" style="cursor:pointer">Lag (ms)</th>
-            <th>Direction</th>
-            <th>MsgType</th>
-            <th>Symbol</th>
-            <th>Endpoint</th>
-            <th data-fix-sort="score" style="cursor:pointer">Score</th>
-            <th>Severity</th>
-            <th data-fix-sort="cause" style="cursor:pointer">Cause</th>
-            <th>Signals</th>
-          </tr></thead><tbody>
-            ${paged.rows.map(r => `<tr class="jvm-severity-${escapeHtml(r.severity || "none")}${r.receiveMs === state.fixTable.selectedEpoch ? " fix-selected-row" : ""}" data-fix-epoch="${r.receiveMs}" style="cursor:pointer">
-              <td class="mono-cell">${escapeHtml(preciseDateTimeLabel(r.receiveMs))}</td>
-              <td><strong>${r.lagMs.toFixed(1)}</strong></td>
-              <td>${escapeHtml(r.direction)}</td>
-              <td>${escapeHtml(r.msgType)}</td>
-              <td>${escapeHtml(r.symbol)}</td>
-              <td class="mono-cell">${escapeHtml(r.endpoint)}</td>
-              <td>${r.score.toFixed(2)}</td>
-              <td><span class="risk ${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</span></td>
-              <td>${escapeHtml(r.cause || "")}</td>
-              <td>${r.signals.map(s => `<span class="chip">${escapeHtml(s)}</span>`).join(" ")}</td>
-            </tr>`).join("")}
-          </tbody></table></div>
-        </div>
-      `}
-    </div>
-  </section>`;
+  return renderFixLatencyPanelView({
+    state,
+    icons,
+    computeFixStats,
+    fixPagedRows,
+    escapeHtml,
+    buildMultiSourceSummary,
+    formatNumber,
+    preciseDateTimeLabel
+  });
 }
 
 function fixDrawDependencies() {
@@ -4723,6 +4504,17 @@ function cachedCwndPhases() {
   _cachedCwndPhasesVersion = key;
   _cachedCwndPhases = detectCwndPhases(state.history);
   return _cachedCwndPhases;
+}
+
+let _sparklineVersion = -1;
+function lazySparklineIndex() {
+  if (state.sparklineIndex && _sparklineVersion === state.dataVersion) return state.sparklineIndex;
+  if (!hasRealTimestampHistory()) return null;
+  const snapshots = parsedTimestampSnapshots();
+  if (snapshots.length < 3 || snapshots.length > 300) return null; // skip for huge captures
+  _sparklineVersion = state.dataVersion;
+  state.sparklineIndex = buildSparklineIndex(snapshots, socketIdentityKey, metricValue);
+  return state.sparklineIndex;
 }
 
 function renderDiagnosis() {
@@ -6288,7 +6080,8 @@ function formatTableMetricValue(metric, value) {
 
 function renderTableMetricCell(metric, value, socketKey) {
   const severity = thresholdSeverity(metric, Number(value || 0));
-  const spark = socketKey && state.sparklineIndex?.get(socketKey)?.[metric];
+  const idx = socketKey ? lazySparklineIndex() : null;
+  const spark = idx?.get(socketKey)?.[metric];
   const sparkHtml = spark?.length > 2 ? ` ${renderSparkline(spark)}` : "";
   return `<span class="table-metric ${severity}" title="${escapeHtml(metricLabel(metric))}: ${formatMetricValue(metric, value)}">${formatTableMetricValue(metric, value)}${sparkHtml}</span>`;
 }
@@ -7999,171 +7792,38 @@ async function captureEvidenceChartAssets(captures = []) {
   return assets;
 }
 
-async function buildIncidentReportPdf(chartAssets = []) {
-  if (typeof PDFLib === "undefined") throw new Error("PDF engine unavailable");
-  const { PDFDocument, StandardFonts, rgb } = PDFLib;
-  const pdfDoc = await PDFDocument.create();
-  const fonts = {
-    regular: await pdfDoc.embedFont(StandardFonts.Helvetica),
-    bold: await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-  };
-  const colors = {
-    ink: rgb(0.09, 0.14, 0.2),
-    muted: rgb(0.35, 0.41, 0.48),
-    accent: rgb(0.05, 0.43, 0.62),
-    line: rgb(0.83, 0.88, 0.92),
-    panel: rgb(0.96, 0.98, 0.99)
-  };
-  const selected = selectedSocket();
-  const visibleSockets = reportVisibleSockets();
-  const anomalies = reportRelevantAnomalies(visibleSockets);
-  const focusSocket = pickExecutiveFocusSocket(selected, visibleSockets);
-  const annotations = reportAnnotations(selected);
-  const microburst = microburstSummary();
-  const tailLatency = tailLatencyLens();
-  const checklistItems = focusSocket ? guidedChecklistItems(focusSocket) : [];
-  const snapshot = buildExecutiveSummary({
-    focusSocket,
-    anomalies,
-    advisorFindings: state.advisorFindings || [],
-    microburst,
-    tailLatency,
-    checklistItems,
+function incidentReportPdfDependencies() {
+  return {
+    PDFLib: globalThis.PDFLib,
+    selectedSocket,
+    reportVisibleSockets,
+    reportRelevantAnomalies,
+    pickExecutiveFocusSocket,
+    reportAnnotations,
+    microburstSummary,
+    tailLatencyLens,
+    guidedChecklistItems,
+    state,
+    buildExecutiveSummary,
     formatMicroburstWindow,
     formatTailLatencyWindow,
-    formatMetricValue
-  });
-  const generatedAt = new Date().toLocaleString(resolvedNumberLocale(), { timeZone: resolvedTimeZone() });
-  const page = pdfDoc.addPage([595.28, 841.89]);
-  const margin = 36;
-  const gutter = 18;
-  const contentWidth = page.getWidth() - margin * 2;
-  const columnWidth = (contentWidth - gutter) / 2;
-  let y = page.getHeight() - margin;
+    formatMetricValue,
+    resolvedNumberLocale,
+    resolvedTimeZone,
+    formatNumber,
+    drawPdfTextBlock,
+    drawPdfSection,
+    metricValue,
+    socketsById,
+    metricLabel,
+    timeLabel,
+    reportFilterTokens,
+    reportTopSockets
+  };
+}
 
-  page.drawText("NetworkExpert Incident Snapshot", { x: margin, y, size: 11, font: fonts.bold, color: colors.accent });
-  y -= 24;
-  page.drawText(state.sourceName || "Current workspace", { x: margin, y, size: 22, font: fonts.bold, color: colors.ink });
-  y -= 18;
-  y = drawPdfTextBlock(page, "Portable incident evidence generated from the current workspace, including prioritized signals, focused context, and chart captures.", {
-    x: margin,
-    y,
-    width: contentWidth,
-    size: 10,
-    font: fonts.regular,
-    color: colors.muted,
-    lineHeight: 13
-  }) - 10;
-
-  const metaLines = [
-    `Generated: ${generatedAt}`,
-    `Timezone: ${resolvedTimeZone()}`,
-    `Visible sockets: ${formatNumber(visibleSockets.length)}`,
-    `Relevant anomalies: ${formatNumber(anomalies.length)}`,
-    `Critical sockets: ${formatNumber(visibleSockets.filter(socket => socket.risk === "critical").length)}`,
-    `ss command: ${state.command || "n/a"}`
-  ];
-  y = drawPdfSection(page, "Incident frame", metaLines, margin, y, contentWidth, fonts, colors) - 8;
-
-  const leftLines = [];
-  if (snapshot) {
-    leftLines.push(`${snapshot.title} [${snapshot.severity}]`);
-    leftLines.push(snapshot.headline);
-    leftLines.push(snapshot.summary);
-    leftLines.push(`Next step: ${snapshot.next}`);
-  }
-  if (focusSocket) {
-    leftLines.push(`Focus flow: ${focusSocket.local} -> ${focusSocket.peer}`);
-    leftLines.push(`Focus process: ${focusSocket.details.process ? `${focusSocket.details.process.name}:${focusSocket.details.process.pid}` : "unknown process"}`);
-    leftLines.push(`Focus metrics: RTT ${formatMetricValue("rtt", metricValue(focusSocket, "rtt"))}, RTO ${formatMetricValue("rto", metricValue(focusSocket, "rto"))}, Send-Q ${formatMetricValue("sendQ", focusSocket.sendQ)}, Recv-Q ${formatMetricValue("recvQ", focusSocket.recvQ)}`);
-  }
-  if (microburst) leftLines.push(`Microburst: ${formatMicroburstWindow(microburst)} with RX ${formatMetricValue("rx_bps", microburst.peakRxBps)} and ${formatMetricValue("skmem.d", microburst.dropDeltaTotal)} new drops.`);
-  if (tailLatency) leftLines.push(`Tail lens: ${formatTailLatencyWindow(tailLatency)} with suspicion ${tailLatency.suspicion || "tail latency spike"}.`);
-  leftLines.push(`Filters: ${reportFilterTokens().join(", ") || "none"}`);
-
-  const rightLines = [];
-  if (anomalies.length) {
-    rightLines.push("Top anomalies:");
-    anomalies.slice(0, 5).forEach(item => {
-      const socket = socketsById().get(item.socketId);
-      rightLines.push(`${item.severity.toUpperCase()} - ${item.title}${socket ? ` - ${socket.local} -> ${socket.peer}` : ""}`);
-    });
-  }
-  if (annotations.length) {
-    rightLines.push("Annotations:");
-    annotations.slice(0, 5).forEach(item => {
-      rightLines.push(`${item.label} - ${item.metric === "*" ? "socket-wide" : metricLabel(item.metric)} - ${timeLabel(0, item.resolvedEpochMs)}`);
-    });
-  }
-  if (!rightLines.length) rightLines.push("No annotations or scoped anomalies are currently attached to the active incident view.");
-
-  const leftBottom = drawPdfSection(page, "Snapshot and focus", leftLines, margin, y, columnWidth, fonts, colors);
-  const rightBottom = drawPdfSection(page, "Signals and analyst notes", rightLines, margin + columnWidth + gutter, y, columnWidth, fonts, colors);
-
-  let tableY = Math.min(leftBottom, rightBottom) - 8;
-  const topSockets = reportTopSockets(visibleSockets, 5);
-  if (topSockets.length && tableY > 190) {
-    page.drawText("Top flows in scope", { x: margin, y: tableY, size: 12, font: fonts.bold, color: colors.accent });
-    tableY -= 18;
-    const rows = [
-      ["Risk", "Flow", "Process", "RTT", "RTO", "Drops"],
-      ...topSockets.map(socket => [
-        socket.risk,
-        `${socket.local} -> ${socket.peer}`,
-        socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "-",
-        formatMetricValue("rtt", metricValue(socket, "rtt")),
-        formatMetricValue("rto", metricValue(socket, "rto")),
-        formatMetricValue("skmem.d", metricValue(socket, "skmem.d"))
-      ])
-    ];
-    const columns = [50, 205, 110, 55, 55, 48];
-    rows.forEach((row, rowIndex) => {
-      let x = margin;
-      if (rowIndex === 0) {
-        page.drawRectangle({ x, y: tableY - 4, width: contentWidth, height: 18, color: colors.panel, borderColor: colors.line, borderWidth: 1 });
-      }
-      row.forEach((value, index) => {
-        const cellFont = rowIndex === 0 ? fonts.bold : fonts.regular;
-        const cellSize = rowIndex === 0 ? 9 : 8.5;
-        const clipped = String(value).length > 34 ? `${String(value).slice(0, 31)}...` : String(value);
-        page.drawText(clipped, { x: x + 4, y: tableY + 2, size: cellSize, font: cellFont, color: rowIndex === 0 ? colors.ink : colors.muted, maxWidth: columns[index] - 8 });
-        x += columns[index];
-      });
-      tableY -= 18;
-    });
-  }
-
-  for (const asset of chartAssets) {
-    const chartPage = pdfDoc.addPage([841.89, 595.28]);
-    const pageMargin = 28;
-    const pageWidth = chartPage.getWidth() - pageMargin * 2;
-    const pageHeight = chartPage.getHeight() - pageMargin * 2;
-    let cursor = chartPage.getHeight() - pageMargin;
-    chartPage.drawText(asset.title, { x: pageMargin, y: cursor, size: 18, font: fonts.bold, color: colors.ink });
-    cursor -= 18;
-    cursor = drawPdfTextBlock(chartPage, asset.context || "Chart evidence from the current visible incident window.", {
-      x: pageMargin,
-      y: cursor,
-      width: pageWidth,
-      size: 10,
-      font: fonts.regular,
-      color: colors.muted,
-      lineHeight: 13
-    }) - 8;
-    const image = await pdfDoc.embedPng(asset.bytes);
-    const availableWidth = pageWidth;
-    const availableHeight = pageHeight - 64;
-    const scale = Math.min(availableWidth / image.width, availableHeight / image.height);
-    const drawWidth = image.width * scale;
-    const drawHeight = image.height * scale;
-    const imageX = pageMargin + (availableWidth - drawWidth) / 2;
-    const imageY = Math.max(pageMargin, cursor - drawHeight);
-    chartPage.drawRectangle({ x: imageX - 1, y: imageY - 1, width: drawWidth + 2, height: drawHeight + 2, borderColor: colors.line, borderWidth: 1 });
-    chartPage.drawImage(image, { x: imageX, y: imageY, width: drawWidth, height: drawHeight });
-    chartPage.drawText(metricLabel(asset.metric), { x: pageMargin, y: pageMargin + 8, size: 10, font: fonts.bold, color: colors.accent });
-  }
-
-  return await pdfDoc.save();
+async function buildIncidentReportPdf(chartAssets = []) {
+  return buildIncidentReportPdfModel(chartAssets, incidentReportPdfDependencies());
 }
 
 async function exportEvidencePack() {
@@ -8493,6 +8153,40 @@ function appEventDependencies() {
   };
 }
 
+function ingestActionDependencies() {
+  return {
+    document,
+    state,
+    cmInstance,
+    performance,
+    SAMPLE,
+    INGEST_RAW_EAGER_LIMIT,
+    generateIncidentDemoSample,
+    generateSlowConsumerSample,
+    generateMicroburstSample,
+    generateTailLatencySample,
+    setSourceName,
+    setActiveInvestigation,
+    resetDerivedCaches,
+    markAnalysisDirty,
+    recompute,
+    applyDashboardPreset,
+    setZoom,
+    syncSsCommandFromBuilder,
+    copyTextToClipboard,
+    captureQualityReport,
+    defaultSsLogPath,
+    buildSsCollectionCommand,
+    render,
+    renderKeepingWorkspacePosition,
+    _showBusy,
+    _hideBusy,
+    _renderSkeleton,
+    toast,
+    savePrefs
+  };
+}
+
 function bindChartMinimapEvents(deps = appEventDependencies()) {
   const {
     root = document,
@@ -8667,194 +8361,8 @@ function bindEvents(deps = appEventDependencies()) {
   });
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", async event => {
     const action = event.currentTarget.dataset.action;
-    if (action === "parse") {
-      const rawInput = document.querySelector("#rawInput");
-      const cmValue = cmInstance ? cmInstance.getValue() : "";
-      state.raw = rawInput ? rawInput.value : (cmValue || state.raw);
-      setActiveInvestigation(state, null);
-      resetDerivedCaches({ raw: true });
-      const parseStart = performance.now();
-      if (state.raw.length > 5000000 && window.Worker) {
-        _showBusy();
-        const ws = document.querySelector(".workspace");
-        if (ws) ws.innerHTML = _renderSkeleton("analysis");
-        const worker = new Worker(new URL("./parse-worker.js", import.meta.url), { type: "module" });
-        if (sharedBufferAvailable()) {
-          const { buffer, byteLength } = encodeShared(state.raw);
-          worker.postMessage({ type: "parseSs", payload: { sharedBuffer: buffer, byteLength } });
-        } else {
-          worker.postMessage({ type: "parseSs", payload: { raw: state.raw } });
-        }
-        worker.onmessage = msg => {
-          if (msg.data.type === "parseSs:progress") {
-            const { parsed, progress } = msg.data.payload;
-            const busyLabel = document.querySelector(".busy-label");
-            if (busyLabel) busyLabel.textContent = `Parsing... ${parsed} sockets (${progress}%)`;
-          }
-          if (msg.data.type === "parseSs:done") {
-            worker.terminate();
-            _hideBusy();
-            recompute();
-            const elapsed = ((performance.now() - parseStart) / 1000).toFixed(1);
-            toast("Analysis complete", `${state.sockets.length} sockets parsed in ${elapsed}s (background worker).`);
-            state.view = "analysis"; state.activeTab = "advisor"; render();
-          }
-        };
-        return;
-      }
-      recompute();
-      const elapsed = ((performance.now() - parseStart) / 1000).toFixed(1);
-      if (state.prefs.autoToast) {
-        const top = state.anomalies[0];
-        toast("Analysis complete", `${state.sockets.length} sockets in ${elapsed}s. ${top ? `${top.severity}: ${top.title}` : "No major anomaly."}`, top?.severity === "critical" ? "danger" : "warn");
-      }
-      state.view = "analysis";
-      state.activeTab = "advisor";
-      render();
-    }
-    if (action === "copySsCommand") {
-      const result = syncSsCommandFromBuilder();
-      if (!result.validation.valid) {
-        const first = result.validation.errors[0];
-        toast("Invalid ss command fields", first?.message || "Fix the highlighted fields before copying.", "danger");
-        return;
-      }
-      const ok = await copyTextToClipboard(result.command);
-      if (!ok) {
-        toast("Copy failed", "The ss command could not be copied by the browser.", "danger");
-        return;
-      }
-      toast("ss command copied", "Paste it on the target server to collect the ss evidence.");
-    }
-    if (action === "copyQualityCommand") {
-      const report = captureQualityReport();
-      const ok = await copyTextToClipboard(report.recommendedCommand);
-      if (!ok) {
-        toast("Copy failed", "The recommended capture command could not be copied by the browser.", "danger");
-        return;
-      }
-      toast("Capture command copied", "Paste it on the target server to collect stronger ss evidence.");
-    }
-    if (action === "loadSsCommandEndpointExample") {
-      const commandInput = document.querySelector("#commandInput");
-      state.ssCommandConfig = {
-        timestamp: true,
-        loop: true,
-        intervalSeconds: "1",
-        srcIp: "10.0.0.10",
-        srcPort: "50000",
-        dstIp: "10.0.0.20",
-        dstPort: "443",
-        outputPath: defaultSsLogPath(),
-        appendOutput: true
-      };
-      state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
-      toast("Example loaded", "The ss command fields now contain a generic endpoint filter example.");
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "sample") { state.raw = SAMPLE; state.ingestRawExpanded = true; setSourceName("built-in sample"); setActiveInvestigation(state, null); markAnalysisDirty({ raw: true }); toast("Sample loaded", "Demo ss snapshot loaded."); render(); }
-    if (action === "toggleSsOptions") {
-      state.showSsOptions = true;
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "showEditor") {
-      state.showSsOptions = false;
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "showRawEditor") {
-      state.showEditor = true;
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "toggleAnalysisSidebar") {
-      state.analysisSidebarCollapsed = !state.analysisSidebarCollapsed;
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "toggleBreadcrumbMenu") {
-      state.breadcrumbMenuOpen = !state.breadcrumbMenuOpen;
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "toggleWordWrap") {
-      state.editorWordWrap = !state.editorWordWrap;
-      if (cmInstance) cmInstance.setOption("lineWrapping", state.editorWordWrap);
-    }
-    if (action === "toggleSsEditorThemeMenu") {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openSsEditorThemeMenu = !state.openSsEditorThemeMenu;
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "toggleGuidedChecklist") {
-      state.prefs.guidedChecklistCollapsed = !state.prefs.guidedChecklistCollapsed;
-      savePrefs();
-      renderKeepingWorkspacePosition();
-    }
-    if (action === "sampleIncidentDemo") {
-      state.raw = generateIncidentDemoSample();
-      state.ingestRawExpanded = false;
-      setSourceName("JVM GC stall incident (demo)");
-      // Generate synthetic GC pauses for the demo
-      const demoBase = Date.now() - 60000;
-      state.jvmGc.pauses = Array.from({ length: 8 }, (_, i) => ({ id: i, epochMs: demoBase + i * 8000, durationMs: i === 5 ? 450 : 5 + Math.random() * 15, type: i === 5 ? "Full" : "Young", cause: i === 5 ? "Heap exhausted" : "G1 Evacuation Pause" }));
-      state.jvmGc.safepoints = [];
-      state.jvmGc.rawLog = "[demo]";
-      state.selectedId = null;
-      setActiveInvestigation(state, null);
-      state.showSsOptions = false;
-      setZoom(0, 1);
-      markAnalysisDirty({ raw: true });
-      toast("🔥 Incident demo loaded", "Press Analyze to see stories, matrix, and multi-socket correlation in action.");
-      render();
-    }
-    if (action === "sample10m") {
-      state.raw = generateSlowConsumerSample();
-      state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
-      setSourceName("20-min slow consumer scenario");
-      state.selectedId = null;
-      setActiveInvestigation(state, null);
-      state.showSsOptions = false;
-      setZoom(0, 1);
-      markAnalysisDirty({ raw: true });
-      toast("Sample loaded", "Press Analyze to parse the 20-min slow consumer scenario.");
-      render();
-    }
-    if (action === "sampleMicroburst") {
-      state.raw = generateMicroburstSample();
-      state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
-      setSourceName("microburst guide sample");
-      state.selectedId = null;
-      setActiveInvestigation(state, null);
-      state.drawer = null;
-      state.view = "charts";
-      setZoom(0, 1);
-      markAnalysisDirty({ raw: true });
-      recompute();
-      applyDashboardPreset("microburst");
-      toast("Microburst sample loaded", "The guide sample opened in Charts with the Microburst investigation preset.");
-      render();
-    }
-    if (action === "sampleTailLatency") {
-      state.raw = generateTailLatencySample();
-      state.ingestRawExpanded = state.raw.length <= INGEST_RAW_EAGER_LIMIT;
-      setSourceName("tail latency guide sample");
-      state.selectedId = null;
-      setActiveInvestigation(state, null);
-      state.drawer = null;
-      state.view = "charts";
-      setZoom(0, 1);
-      markAnalysisDirty({ raw: true });
-      recompute();
-      applyDashboardPreset("tail");
-      toast("Tail latency sample loaded", "The guide sample opened in Charts with the Tail latency preset.");
-      render();
-    }
-    if (action === "clear") {
-      state.raw = "";
-      state.importStatus = null;
-      state.ingestRawExpanded = true;
-      markAnalysisDirty({ raw: true });
-      toast("Input cleared", "Only the ss text input was emptied. Current parsed analysis is unchanged until you parse again.");
-      render();
-    }
+    const ingestActionFlow = await handleIngestAction(action, event, ingestActionDependencies());
+    if (ingestActionFlow.stop) return;
     if (action === "exportReport") { openIncidentReport(); }
     if (action === "exportEvidencePack") { exportEvidencePack().catch(error => toast("Evidence pack failed", error.message || "Evidence pack export failed.", "danger")); }
     if (action === "saveAnnotation") {
@@ -10337,7 +9845,7 @@ function bindEvents(deps = appEventDependencies()) {
       state.raw = ssText; state.rawVersion = (state.rawVersion || 0) + 1; state.sourceName = ssFile.name;
       state.cache = {};
       document.querySelector("[data-action='parse']")?.click();
-      await new Promise(resolve => { const check = () => state.sockets.length > 0 ? resolve() : setTimeout(check, 300); check(); });
+      await new Promise(resolve => { const check = () => (state.sockets.length > 0 || state.view === "analysis") ? resolve() : setTimeout(check, 500); check(); });
       summary.push(`ss: ${ssFile.name}`);
     }
     if (classified.gc.length) { const file = classified.gc[0]; file.text().then(text => { const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; const lines = text.split("\n").filter(l => gcPattern.test(l)).join("\n"); const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; }); summary.push(`GC: ${classified.gc[0].name}`); }
@@ -10349,7 +9857,7 @@ function bindEvents(deps = appEventDependencies()) {
     toast("Auto-detect complete", summary.length ? summary.join(" · ") : "No recognized files found");
     render();
     // Wait for ss to be fully parsed, then run correlations
-    const waitForSs = () => { if (state.sockets.length > 0) { setTimeout(() => { if (state.jvmGc.pauses.length) runJvmCorrelation(); if (state.fixLatency.records.length) runFixCorrelation(); render(); }, 500); } else { setTimeout(waitForSs, 500); } }; waitForSs();
+    const waitForSs = (retries = 0) => { if (state.sockets.length > 0 || state.view === "analysis") { setTimeout(() => { if (state.jvmGc.pauses.length) runJvmCorrelation(); if (state.fixLatency.records.length) runFixCorrelation(); render(); }, 500); } else if (retries < 60) { setTimeout(() => waitForSs(retries + 1), 500); } }; waitForSs();
   });
   document.querySelector("#ingestGcFileInput")?.addEventListener("change", e => { document.querySelector("#jvmGcFileInput")?.dispatchEvent || null; const el = document.querySelector("#jvmGcFileInput"); if (el) { el.files = e.target.files; el.dispatchEvent(new Event("change")); } else { const file = e.target.files?.[0]; if (!file) return; _showBusy(); const reader = file.stream().getReader(); const decoder = new TextDecoder(); let buffer = ""; let lines = ""; const gcPattern = /GC\(\d+\)|Pause |Safepoint|safepoint|stopped.*seconds|User=.*Sys=.*Real=|Eden:|Survivor|Old:|Humongous|->.*M\(|Evacuation Failure|To-space exhausted/i; function pump() { reader.read().then(({ done, value }) => { if (done) { if (buffer && gcPattern.test(buffer)) lines += buffer + "\n"; const { pauses, safepoints } = parseGcLog(lines); state.jvmGc.rawLog = `[${file.name}]`; state.jvmGc.pauses = pauses; state.jvmGc.safepoints = safepoints; runJvmCorrelation(); _hideBusy(); toast("GC log loaded", `${pauses.length} pauses from ${file.name}`); render(); return; } buffer += decoder.decode(value, { stream: true }); const parts = buffer.split("\n"); buffer = parts.pop(); for (const line of parts) { if (gcPattern.test(line)) lines += line + "\n"; } setTimeout(pump, 0); }); } pump(); } });
   document.querySelector("#ingestVmstatFileInput")?.addEventListener("change", e => { const file = e.target.files?.[0]; if (!file) return; file.text().then(text => { const { samples } = parseVmstat(text); state.fixLatency.vmstat = samples; toast("vmstat loaded", `${samples.length} samples from ${file.name}`); render(); }); });
