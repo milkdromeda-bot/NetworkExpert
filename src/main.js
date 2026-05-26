@@ -294,6 +294,7 @@ let state = {
   selectedMapEdgeId: null,
   mapView: "topology",
   sankeySort: "risk",
+  sankeySnapshot: null,
   copiedGuideCommand: "",
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
@@ -2203,17 +2204,17 @@ function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
 
 function renderOnboarding() {
   const steps = [
-    { icon: "ri-upload-cloud-line", title: "Import your ss capture", desc: "Paste output directly in the editor, open a file, or click <b>See it in action</b> for a demo.", view: "ingest" },
-    { icon: "ri-brain-line", title: "Instant diagnosis", desc: "Click <b>Analyze</b> — the tool builds a Root Cause Matrix, causal stories, and multi-socket correlation.", view: "analysis" },
-    { icon: "ri-line-chart-line", title: "Monitor in real-time", desc: "Charts with minimap, crosshair sync, zoom, and annotations. Toggle between chart and table view.", view: "charts" },
-    { icon: "ri-file-pdf-line", title: "Export reports", desc: "PDF, HTML incident report, evidence ZIP, or Jira — one click to share findings.", view: "ingest" },
-    { icon: "ri-settings-3-line", title: "Customize everything", desc: "Thresholds, layout, alerts, profiles — make it yours via the gear icon.", view: "ingest" }
+    { icon: "ri-upload-cloud-line", title: "Import your data", desc: "Click <b>Open ss file</b> or <b>Auto-detect dir</b> to load ss, vmstat, nstat, GC logs, and FIX logs at once.", target: "[data-action='pickAutoDir'],[data-action='openSsFile']", view: "ingest", anchor: "bottom" },
+    { icon: "ri-play-line", title: "Analyze", desc: "Paste ss output in the editor and click <b>Analyze</b> — or use a sample from <b>See it in action</b>.", target: "[data-action='parse']", view: "ingest", anchor: "bottom" },
+    { icon: "ri-stethoscope-line", title: "Diagnosis & Advisor", desc: "The tool builds a Root Cause Matrix, causal stories, and multi-socket correlation. Explore tabs for deep analysis.", target: "[data-tab='diagnosis'],[data-tab='advisor']", view: "analysis", anchor: "bottom" },
+    { icon: "ri-line-chart-line", title: "Monitoring charts", desc: "Real-time charts with zoom, crosshair sync, and annotations. Use sub-tabs for BDP, JVM, and FIX Latency.", target: "[data-view='charts']", view: "charts", anchor: "bottom" },
+    { icon: "ri-node-tree", title: "Service Map", desc: "Topology view shows process → socket → peer connections. Use <b>Geo & Flow</b> tabs for traffic distribution.", target: "[data-tab='map']", view: "analysis", anchor: "bottom" },
+    { icon: "ri-settings-3-line", title: "Settings & Export", desc: "Customize thresholds, export PDF/HTML reports, evidence packs, or Jira tickets from the gear menu.", target: ".gear-btn", view: "ingest", anchor: "left" }
   ];
   const step = steps[state.onboarding] || steps[0];
   const isLast = state.onboarding >= steps.length - 1;
-  // Navigate to the correct view for this step
   if (step.view && state.view !== step.view) state.view = step.view;
-  return `<div class="onboarding-overlay" data-tour-step="${state.onboarding}">
+  return `<div class="onboarding-overlay" data-tour-step="${state.onboarding}" data-tour-target="${step.target}" data-tour-anchor="${step.anchor}">
     <div class="onboarding-card">
       <div class="onboarding-progress">${steps.map((_, i) => `<span class="${i <= state.onboarding ? "active" : ""}"></span>`).join("")}</div>
       <div class="onboarding-icon"><i class="${step.icon}"></i></div>
@@ -2223,8 +2224,34 @@ function renderOnboarding() {
         <button data-action="skipOnboarding" class="onboarding-skip">Skip tour</button>
         <button data-action="${isLast ? "finishOnboarding" : "nextOnboarding"}" class="primary">${isLast ? "Start using" : "Next →"}</button>
       </div>
+      <span class="onboarding-step-count">${state.onboarding + 1}/${steps.length}</span>
     </div>
   </div>`;
+}
+
+function _positionTourCard() {
+  const overlay = document.querySelector(".onboarding-overlay");
+  if (!overlay) return;
+  const selector = overlay.dataset.tourTarget;
+  const anchor = overlay.dataset.tourAnchor || "bottom";
+  const target = selector ? document.querySelector(selector) : null;
+  const card = overlay.querySelector(".onboarding-card");
+  if (!target || !card) return;
+  const rect = target.getBoundingClientRect();
+  // Highlight the target element
+  target.style.position = target.style.position || "relative";
+  target.style.zIndex = "100001";
+  target.style.boxShadow = "0 0 0 4px rgba(57,214,214,0.6), 0 0 20px rgba(57,214,214,0.3)";
+  target.style.borderRadius = "6px";
+  // Position card near target
+  card.style.position = "fixed";
+  if (anchor === "bottom") {
+    card.style.top = `${Math.min(rect.bottom + 12, window.innerHeight - 260)}px`;
+    card.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 380))}px`;
+  } else if (anchor === "left") {
+    card.style.top = `${Math.max(12, rect.top - 40)}px`;
+    card.style.left = `${Math.max(12, rect.left - 380)}px`;
+  }
 }
 
 function render() {
@@ -2331,6 +2358,7 @@ function _renderSync() {
   _staggerReveal();
   _positionTabIndicator();
   _animateCounters();
+  _positionTourCard();
   initCodeMirror();
   if (state.view === "charts") {
     scheduleChartPageDraw();
@@ -5167,7 +5195,22 @@ function renderServiceMap() {
     nodeSubtitle,
     truncateMiddle,
     nodeLabel,
-    mapNodeTitle
+    mapNodeTitle,
+    snapshotCount: parsedTimestampSnapshots().length,
+    buildServiceMapForSnapshot: (idx) => {
+      const snapshots = parsedTimestampSnapshots();
+      if (idx == null || !snapshots[idx]) return null;
+      return buildServiceMapData({
+        sockets: snapshots[idx].sockets.map(s => ({ ...s, id: s.id || `${s.local}-${s.peer}` })),
+        anomalyMap: anomaliesBySocketId(),
+        topology: state.topology,
+        endpointPresentation,
+        topologyGroupForEndpoint,
+        riskRank,
+        socketBandwidth,
+        sortCollator: SERVICE_MAP_SORT_COLLATOR
+      });
+    }
   });
 }
 
@@ -8806,6 +8849,10 @@ function bindEvents(deps = appEventDependencies()) {
   }));
   document.querySelector("#sankeySortSelect")?.addEventListener("change", event => {
     state.sankeySort = event.target.value;
+    render();
+  });
+  document.querySelector("#sankeyTimeSlider")?.addEventListener("input", event => {
+    state.sankeySnapshot = parseInt(event.target.value, 10);
     render();
   });
   document.querySelectorAll("[data-map-edge]").forEach(edge => edge.addEventListener("click", event => {
