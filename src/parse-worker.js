@@ -13,7 +13,10 @@ self.onmessage = function(e) {
 
   if (type === "parseSs") {
     try {
-      const sockets = parseSs(payload.raw);
+      const raw = payload.sharedBuffer
+        ? new TextDecoder().decode(new Uint8Array(payload.sharedBuffer, 0, payload.byteLength))
+        : payload.raw;
+      const sockets = parseSs(raw);
       self.postMessage({ type: "parseSs:done", payload: { sockets } });
     } catch (err) {
       self.postMessage({ type: "parseSs:error", payload: { message: err.message } });

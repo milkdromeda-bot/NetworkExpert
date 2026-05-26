@@ -52,6 +52,7 @@ import { buildJiraReport as buildJiraReportModel } from "./jira-report.js";
 import { renderIngestPage as renderIngestPageView } from "./ingest-view.js";
 import { computeHealthScore } from "./health-score.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "./snapshot-compression.js";
+import { sharedBufferAvailable, encodeShared } from "./shared-buffer.js";
 
 const TABLE_COLUMNS = createTableColumns({
   riskRank,
@@ -8648,7 +8649,12 @@ function bindEvents(deps = appEventDependencies()) {
         const ws = document.querySelector(".workspace");
         if (ws) ws.innerHTML = _renderSkeleton("analysis");
         const worker = new Worker(new URL("./parse-worker.js", import.meta.url), { type: "module" });
-        worker.postMessage({ type: "parseSs", payload: { raw: state.raw } });
+        if (sharedBufferAvailable()) {
+          const { buffer, byteLength } = encodeShared(state.raw);
+          worker.postMessage({ type: "parseSs", payload: { sharedBuffer: buffer, byteLength } });
+        } else {
+          worker.postMessage({ type: "parseSs", payload: { raw: state.raw } });
+        }
         worker.onmessage = msg => {
           if (msg.data.type === "parseSs:done") {
             worker.terminate();
