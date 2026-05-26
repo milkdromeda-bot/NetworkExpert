@@ -210,7 +210,18 @@ export function bindSourceFileEvents(deps) {
     const classified = { ss: [], fix: [], gc: [], vmstat: [], nstat: [], sar: [] };
     for (const file of files) {
       try {
-        const slice = await file.slice(0, 4096).text();
+        let slice;
+        if (file.name.toLowerCase().endsWith(".gz") && "DecompressionStream" in window) {
+          const stream = file.slice(0, 16384).stream().pipeThrough(new DecompressionStream("gzip"));
+          const reader = stream.getReader();
+          const chunks = [];
+          let len = 0;
+          while (len < 4096) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); len += value.length; }
+          reader.cancel();
+          slice = new TextDecoder().decode(chunks.length === 1 ? chunks[0].slice(0, 4096) : (await new Blob(chunks).arrayBuffer()).slice(0, 4096));
+        } else {
+          slice = await file.slice(0, 4096).text();
+        }
         if (/^===\s*\d{4}-/.test(slice) && /Tcp/.test(slice)) classified.nstat.push(file);
         else if (/^Linux\s+\d.*\(\w+\)/.test(slice) && /%usr|%idle|kbmemfree|IFACE|tps/m.test(slice)) classified.sar.push(file);
         else if (/^procs\s+---/.test(slice) || /^\s*\d+\s+\d+\s+\d+\s+\d+.*\d{4}-\d{2}-\d{2}/m.test(slice)) classified.vmstat.push(file);
@@ -284,6 +295,7 @@ export function bindSourceFileEvents(deps) {
           if (state.jvmGc.pauses.length) runJvmCorrelation();
           if (state.fixLatency.records.length) runFixCorrelation();
           render();
+          setTimeout(drawFixCharts, 100);
         }, 500);
       } else if (retries < 60) {
         setTimeout(() => waitForSs(retries + 1), 500);
@@ -339,8 +351,10 @@ export function bindSourceFileEvents(deps) {
     file.text().then(text => {
       const { samples } = parseVmstat(text);
       state.fixLatency.vmstat = samples;
+      if (state.fixLatency.records.length) runFixCorrelation();
       toast("vmstat loaded", `${samples.length} samples from ${file.name}`);
       render();
+      requestAnimationFrame(drawFixCharts);
     });
   });
   document.querySelector("#ingestNstatFileInput")?.addEventListener("change", event => {
@@ -349,8 +363,10 @@ export function bindSourceFileEvents(deps) {
     file.text().then(text => {
       const { samples } = parseNstatTimestamped(text);
       state.fixLatency.nstat = samples;
+      if (state.fixLatency.records.length) runFixCorrelation();
       toast("nstat loaded", `${samples.length} samples from ${file.name}`);
       render();
+      requestAnimationFrame(drawFixCharts);
     });
   });
   document.querySelector("#ingestSarFileInput")?.addEventListener("change", event => {
