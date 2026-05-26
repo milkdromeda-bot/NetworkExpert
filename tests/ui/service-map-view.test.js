@@ -73,7 +73,7 @@ test("service map view returns an empty state when no nodes exist", () => {
 });
 
 test("service map view renders lanes, links, topology actions, and sankey", () => {
-  const html = renderServiceMapView(deps({ state: { mapView: "insights" } }));
+  const html = renderServiceMapView(deps({ state: { mapView: "sankey" } }));
 
   assert.match(html, /service-map-workbench/);
   assert.match(html, /Processes/);

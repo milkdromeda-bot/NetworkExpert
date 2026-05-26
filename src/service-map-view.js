@@ -54,8 +54,9 @@ export function renderServiceMapView(deps) {
       </div>
       <div class="service-map-actions">
         <nav class="charts-sub-tabs" style="margin:0;border:0;padding:0">
-          <button class="charts-sub-tab ${state.mapView !== "insights" ? "active" : ""}" data-map-view="topology">Topology</button>
-          <button class="charts-sub-tab ${state.mapView === "insights" ? "active" : ""}" data-map-view="insights">Geo & Flow</button>
+          <button class="charts-sub-tab ${!state.mapView || state.mapView === "topology" ? "active" : ""}" data-map-view="topology">Topology</button>
+          <button class="charts-sub-tab ${state.mapView === "geo" ? "active" : ""}" data-map-view="geo">Geographic</button>
+          <button class="charts-sub-tab ${state.mapView === "sankey" ? "active" : ""}" data-map-view="sankey">Flow Sankey</button>
         </nav>
         <button class="service-labels-button topology" type="button" data-topology-open aria-haspopup="dialog"><i class="ri-node-tree"></i> Topology</button>
         <button class="service-labels-button" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Labels</button>
@@ -117,9 +118,11 @@ export function renderServiceMapView(deps) {
       ${selectedEdge ? renderMapEdgeInsight(selectedEdge) : renderHotPaths(hotPaths)}
     </div>
   </div>` : ""}
-    ${state.mapView === "insights" ? `
+    ${state.mapView === "geo" ? `
       ${(() => { const markers = buildGeoMarkers(state.ipIntel, state.sockets); return markers.length || Object.keys(state.ipIntel).length ? `<div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Geographic peer distribution</div></div><div class="panel-body">${renderGeoMapSvg(markers)}</div></div>` : `<div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Geographic peer distribution</div></div><div class="panel-body"><p style="color:var(--muted);text-align:center;padding:24px">No geolocated peers — IP intel needs public IPs with country data</p></div></div>`; })()}
-      <div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Flow Sankey — bandwidth proportional <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:420px"><span class="tooltip-kicker">Flow Sankey — How to read</span><strong>What it shows</strong><p>Each curve connects a process (left) to a remote peer (right). Thickness is proportional to bandwidth (bytes_acked + bytes_received).</p><strong>Colors</strong><p><b style="color:#ff5c77">Red</b> = critical risk (retrans, backoff, drops).<br/><b style="color:#ff9f43">Orange</b> = high risk.<br/><b style="color:#ffd166">Yellow</b> = medium risk.<br/><b style="color:#5db7ff">Blue</b> = normal.</p><strong>Filtering</strong><p>Only the top 20 flows are shown, sorted by risk severity then bandwidth. This highlights the most problematic or busiest connections.</p><strong>Use cases</strong><p>• Identify which peer concentrates the most traffic.<br/>• Spot a single high-risk flow dominating bandwidth.<br/>• Correlate with the Topology view to understand the full path.</p></span></span></div></div><div class="panel-body">${renderSankeySvg({ edges: map.edges, nodes: new Map([...map.processes, ...map.locals, ...map.peers].map(n => [n.id, n])) }, { escapeHtml })}</div></div>
+    ` : ""}
+    ${state.mapView === "sankey" ? `
+      <div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Flow Sankey — bandwidth proportional <span class="field-info" tabindex="0" style="position:relative"><i class="ri-information-line"></i><span class="field-info-card" role="tooltip" style="left:0;right:auto;min-width:420px"><span class="tooltip-kicker">Flow Sankey — How to read</span><strong>What it shows</strong><p>Each curve connects a process (left) to a remote peer (right). Thickness is proportional to bandwidth (bytes_acked + bytes_received).</p><strong>Colors</strong><p><b style="color:#ff5c77">Red</b> = critical risk (retrans, backoff, drops).<br/><b style="color:#ff9f43">Orange</b> = high risk.<br/><b style="color:#ffd166">Yellow</b> = medium risk.<br/><b style="color:#5db7ff">Blue</b> = normal.</p><strong>Filtering</strong><p>Only the top 15 flows are shown, grouped by peer IP and sorted by risk then bandwidth.</p><strong>Use cases</strong><p>• Identify which peer concentrates the most traffic.<br/>• Spot a single high-risk flow dominating bandwidth.<br/>• Correlate with the Topology view to understand the full path.</p></span></span></div></div><div class="panel-body">${renderSankeySvg({ edges: map.edges, nodes: new Map([...map.processes, ...map.locals, ...map.peers].map(n => [n.id, n])) }, { escapeHtml })}</div></div>
     ` : ""}
   </div>`;
 
