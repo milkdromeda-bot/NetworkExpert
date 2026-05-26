@@ -2213,7 +2213,7 @@ function renderOnboarding() {
   ];
   const step = steps[state.onboarding] || steps[0];
   const isLast = state.onboarding >= steps.length - 1;
-  if (step.view && state.view !== step.view) state.view = step.view;
+  if (step.view) state.view = step.view;
   return `<div class="onboarding-overlay" data-tour-step="${state.onboarding}" data-tour-target="${step.target}" data-tour-anchor="${step.anchor}">
     <div class="onboarding-card">
       <div class="onboarding-progress">${steps.map((_, i) => `<span class="${i <= state.onboarding ? "active" : ""}"></span>`).join("")}</div>
@@ -2234,17 +2234,25 @@ function _positionTourCard() {
   if (!overlay) return;
   const selector = overlay.dataset.tourTarget;
   const anchor = overlay.dataset.tourAnchor || "bottom";
-  const target = selector ? document.querySelector(selector) : null;
   const card = overlay.querySelector(".onboarding-card");
-  if (!target || !card) return;
+  if (!card) return;
+  const target = selector ? document.querySelector(selector) : null;
+  if (!target) {
+    card.style.position = "fixed";
+    card.style.bottom = "24px";
+    card.style.right = "24px";
+    card.style.top = "auto";
+    card.style.left = "auto";
+    return;
+  }
   const rect = target.getBoundingClientRect();
-  // Highlight the target element
   target.style.position = target.style.position || "relative";
   target.style.zIndex = "100001";
   target.style.boxShadow = "0 0 0 4px rgba(57,214,214,0.6), 0 0 20px rgba(57,214,214,0.3)";
   target.style.borderRadius = "6px";
-  // Position card near target
   card.style.position = "fixed";
+  card.style.bottom = "auto";
+  card.style.right = "auto";
   if (anchor === "bottom") {
     card.style.top = `${Math.min(rect.bottom + 12, window.innerHeight - 260)}px`;
     card.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 380))}px`;
@@ -2307,7 +2315,6 @@ function _renderSync() {
           ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
           <button class="icon" data-action="undo" title="Undo (Ctrl+Z)" aria-label="Undo" ${!state._undoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-back-line"></i></button>
           <button class="icon" data-action="redo" title="Redo (Ctrl+Y)" aria-label="Redo" ${!state._redoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-forward-line"></i></button>
-          <button class="icon" data-action="toggleDensity" title="Toggle compact/comfortable mode" aria-label="Toggle density"><i class="${state.prefs.density === "compact" ? "ri-expand-diagonal-line" : "ri-contract-line"}"></i></button>
           <button class="icon" data-action="togglePresentation" title="Presentation mode (hide controls, enlarge charts)" aria-label="Toggle presentation mode"><i class="ri-slideshow-line"></i></button>
           <button class="theme-toggle" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><span class="theme-toggle-track"><i class="ri-sun-line"></i><i class="ri-moon-line"></i><span class="theme-toggle-thumb ${state.prefs.theme === "light" ? "" : "dark"}"></span></span></button>
           <div class="gear-menu-wrap">
