@@ -53,11 +53,15 @@ export function renderServiceMapView(deps) {
         <article><span>Mapped flows</span><strong>${formatNumber(visibleEdges.length)}</strong></article>
       </div>
       <div class="service-map-actions">
+        <nav class="charts-sub-tabs" style="margin:0;border:0;padding:0">
+          <button class="charts-sub-tab ${state.mapView !== "insights" ? "active" : ""}" data-map-view="topology">Topology</button>
+          <button class="charts-sub-tab ${state.mapView === "insights" ? "active" : ""}" data-map-view="insights">Geo & Flow</button>
+        </nav>
         <button class="service-labels-button topology" type="button" data-topology-open aria-haspopup="dialog"><i class="ri-node-tree"></i> Topology</button>
         <button class="service-labels-button" data-action="serviceAliases"><i class="ri-price-tag-3-line"></i> Labels</button>
       </div>
     </div>
-    <div class="service-map-layout">
+    ${state.mapView !== "insights" ? `<div class="service-map-layout">
       <div class="service-map-canvas">
         ${renderMapLegend()}
         <svg viewBox="0 0 1100 ${height}" role="img" aria-label="Service dependency map">
@@ -111,9 +115,12 @@ export function renderServiceMapView(deps) {
         </svg>
       </div>
       ${selectedEdge ? renderMapEdgeInsight(selectedEdge) : renderHotPaths(hotPaths)}
-      ${(() => { const markers = buildGeoMarkers(state.ipIntel, state.sockets); return markers.length || Object.keys(state.ipIntel).length ? `<div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Geographic peer distribution</div></div><div class="panel-body">${renderGeoMapSvg(markers)}</div></div>` : ""; })()}
-      <div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Flow Sankey — bandwidth proportional</div></div><div class="panel-body">${renderSankeySvg({ edges: map.edges, nodes: new Map([...map.processes, ...map.locals, ...map.peers].map(n => [n.id, n])) }, { escapeHtml })}</div></div>
     </div>
+  </div>` : ""}
+    ${state.mapView === "insights" ? `
+      ${(() => { const markers = buildGeoMarkers(state.ipIntel, state.sockets); return markers.length || Object.keys(state.ipIntel).length ? `<div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Geographic peer distribution</div></div><div class="panel-body">${renderGeoMapSvg(markers)}</div></div>` : `<div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Geographic peer distribution</div></div><div class="panel-body"><p style="color:var(--muted);text-align:center;padding:24px">No geolocated peers — IP intel needs public IPs with country data</p></div></div>`; })()}
+      <div class="panel" style="margin-top:12px"><div class="panel-head"><div class="panel-title">Flow Sankey — bandwidth proportional</div></div><div class="panel-body">${renderSankeySvg({ edges: map.edges, nodes: new Map([...map.processes, ...map.locals, ...map.peers].map(n => [n.id, n])) }, { escapeHtml })}</div></div>
+    ` : ""}
   </div>`;
 
 }

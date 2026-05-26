@@ -292,6 +292,7 @@ let state = {
   openConversationInsightPos: null,
   conversationSort: { key: "anomalies", dir: "desc" },
   selectedMapEdgeId: null,
+  mapView: "topology",
   copiedGuideCommand: "",
   history: [],
   chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
@@ -8797,6 +8798,10 @@ function bindEvents(deps = appEventDependencies()) {
     event.preventDefault();
     event.stopPropagation();
     openMapAliasEditor(event.currentTarget);
+  }));
+  document.querySelectorAll("[data-map-view]").forEach(btn => btn.addEventListener("click", () => {
+    state.mapView = btn.dataset.mapView;
+    render();
   }));
   document.querySelectorAll("[data-map-edge]").forEach(edge => edge.addEventListener("click", event => {
     event.stopPropagation();

@@ -73,15 +73,21 @@ test("service map view returns an empty state when no nodes exist", () => {
 });
 
 test("service map view renders lanes, links, topology actions, and sankey", () => {
-  const html = renderServiceMapView(deps());
+  const html = renderServiceMapView(deps({ state: { mapView: "insights" } }));
 
   assert.match(html, /service-map-workbench/);
   assert.match(html, /Processes/);
   assert.match(html, /Local sockets/);
   assert.match(html, /Peers/);
   assert.match(html, /data-topology-open/);
-  assert.match(html, /data-map-edge="edge-1"/);
-  assert.match(html, /data-hot-paths/);
   assert.match(html, /Flow Sankey/);
   assert.match(html, /data-sankey/);
+});
+
+test("service map view shows topology by default", () => {
+  const html = renderServiceMapView(deps());
+
+  assert.match(html, /data-map-edge="edge-1"/);
+  assert.match(html, /data-hot-paths/);
+  assert.doesNotMatch(html, /data-sankey/);
 });
