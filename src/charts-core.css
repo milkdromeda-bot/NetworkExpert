@@ -154,8 +154,9 @@
   align-items: center;
   justify-content: flex-start;
   min-height: 54px;
-  padding: var(--space-2);
+  padding: var(--space-2h) var(--space-2);
   border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
   text-align: left;
   white-space: normal;
