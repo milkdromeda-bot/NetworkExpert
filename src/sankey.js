@@ -76,8 +76,10 @@ export function renderSankeySvg(map, { width = 1000, height = 500, escapeHtml = 
   const rightLabelsHtml = rightLabels_.map(label => {
     const y = rightY.get(label);
     const count = peerPortCount.get(label) || 1;
+    const flow = visible.find(f => f.toLabel === label);
+    const bw = flow ? formatBw(flow.weight) : "";
     const suffix = count > 1 ? ` (${count})` : "";
-    return `<text x="${width - pad.r + 8}" y="${y + 4}" text-anchor="start" font-size="11" fill="#c4d0de">${escapeHtml(truncLabel(label))}${suffix}</text>`;
+    return `<text x="${width - pad.r + 8}" y="${y + 4}" text-anchor="start" font-size="11" fill="#c4d0de">${escapeHtml(truncLabel(label))}${suffix}</text>${bw ? `<text x="${width - pad.r + 8}" y="${y + 16}" text-anchor="start" font-size="9" fill="#8c9aab">${bw}</text>` : ""}`;
   }).join("\n");
 
   return `<svg viewBox="0 0 ${width} ${height}" class="sankey-chart" role="img" aria-label="Service flow Sankey diagram">
@@ -104,6 +106,13 @@ function nodeLabel(nodes, id) {
 
 function truncLabel(label) {
   return label.length > 28 ? label.slice(0, 26) + "…" : label;
+}
+
+function formatBw(weight) {
+  if (weight >= 1e9) return `${(weight / 1e9).toFixed(1)} GB`;
+  if (weight >= 1e6) return `${(weight / 1e6).toFixed(1)} MB`;
+  if (weight >= 1e3) return `${(weight / 1e3).toFixed(1)} KB`;
+  return `${Math.round(weight)} B`;
 }
 
 function extractHost(label) {
