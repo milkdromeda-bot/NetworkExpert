@@ -23,6 +23,8 @@ const css = [stylesCss, importPageCss, captureQualityCss, analysisGuideCss, anal
 const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
 const advancedCorrelationPanels = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
+const jvmChartDrawing = readFileSync(new URL("../../src/correlation/jvm-chart-drawing.js", import.meta.url), "utf8");
+const jvmPanelModel = readFileSync(new URL("../../src/correlation/jvm-panel-model.js", import.meta.url), "utf8");
 const ingestView = readFileSync(new URL("../../src/views/ingest-view.js", import.meta.url), "utf8");
 const ingestActions = readFileSync(new URL("../../src/events/ingest-actions.js", import.meta.url), "utf8");
 const jvmGcView = readFileSync(new URL("../../src/views/jvm-gc-view.js", import.meta.url), "utf8");
@@ -574,13 +576,13 @@ test("JVM stall charts are promoted above the table with metric-like controls", 
   assert.match(main, /hiddenJvmSeries:\s*new Set\(\)/);
   assert.match(jvmGcView, /data-chart-zoom="zoomIn" data-jvm-zoom/);
   assert.match(jvmGcView, /<div class="jvm-chart-section">[\s\S]*data-jvm-chart="recvq"[\s\S]*renderJvmLegend\("timeline"\)[\s\S]*data-jvm-chart="scatter"[\s\S]*renderJvmLegend\("scatter"\)[\s\S]*<div class="jvm-gc-results">/);
-  assert.match(advancedCorrelationPanels, /function jvmLegendSeries\(kind\)/);
-  assert.match(advancedCorrelationPanels, /function renderJvmLegend\(kind\)/);
-  assert.match(advancedCorrelationPanels, /data-jvm-series-key="\$\{escapeHtml\(item\.key\)\}"/);
-  assert.match(advancedCorrelationPanels, /function drawJvmTimelineChartInteractive\(svg, results, history, deps = jvmDrawDependencies\(\)\)/);
-  assert.match(advancedCorrelationPanels, /function drawJvmScatterChartInteractive\(svg, results, deps = jvmDrawDependencies\(\)\)/);
-  assert.match(advancedCorrelationPanels, /function attachJvmTimelineInteractions\(svg, results, history[\s\S]*deps = jvmDrawDependencies\(\)\)/);
-  assert.match(advancedCorrelationPanels, /function attachJvmScatterInteractions\(svg, points[\s\S]*deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmPanelModel, /function jvmLegendSeries\(kind\)/);
+  assert.match(jvmPanelModel, /function renderJvmLegend\(kind\)/);
+  assert.match(jvmPanelModel, /data-jvm-series-key="\$\{escapeHtml\(item\.key\)\}"/);
+  assert.match(jvmChartDrawing, /function drawJvmTimelineChartInteractive\(svg, results, history, deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function drawJvmScatterChartInteractive\(svg, results, deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function attachJvmTimelineInteractions\(svg, results, history[\s\S]*deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function attachJvmScatterInteractions\(svg, points[\s\S]*deps = jvmDrawDependencies\(\)\)/);
   assert.match(main, /event\.currentTarget\.hasAttribute\("data-jvm-zoom"\)[\s\S]*appState\.jvmGc\.selectedEpoch = null;[\s\S]*drawJvm\(deps\);/);
   assert.match(main, /root\.querySelectorAll\("\[data-jvm-series-key\]"\)\.forEach/);
   assert.match(css, /\.jvm-chart-section\s*\{[^}]*margin:\s*10px 0 12px;/s);
@@ -591,16 +593,16 @@ test("JVM stall charts are promoted above the table with metric-like controls", 
 
 test("JVM stall table has precise timestamps nature sorting severity and pagination", () => {
   assert.match(main, /jvmTable:\s*\{ page:\s*1,\s*pageSize:\s*20,\s*sortKey:\s*"time",\s*sortDir:\s*"desc" \}/);
-  assert.match(advancedCorrelationPanels, /function jvmStallNature\(row\)/);
-  assert.match(advancedCorrelationPanels, /if \(row\.kind === "safepoint"\) return "Safepoint";/);
-  assert.match(advancedCorrelationPanels, /function preciseDateTimeLabel\(epochMs\)/);
-  assert.match(advancedCorrelationPanels, /padStart\(3,\s*"0"\)/);
-  assert.match(advancedCorrelationPanels, /function renderJvmSortHeader\(key, label\)/);
-  assert.match(advancedCorrelationPanels, /data-jvm-sort="\$\{escapeHtml\(key\)\}"/);
-  assert.match(advancedCorrelationPanels, /function renderJvmPagination\(total, totalPages, start\)/);
-  assert.match(advancedCorrelationPanels, /data-jvm-page-size/);
-  assert.match(advancedCorrelationPanels, /data-jvm-page="first"/);
-  assert.match(advancedCorrelationPanels, /data-jvm-page="last"/);
+  assert.match(jvmPanelModel, /function jvmStallNature\(row\)/);
+  assert.match(jvmPanelModel, /if \(row\.kind === "safepoint"\) return "Safepoint";/);
+  assert.match(jvmPanelModel, /function preciseDateTimeLabel\(epochMs\)/);
+  assert.match(jvmPanelModel, /padStart\(3,\s*"0"\)/);
+  assert.match(jvmPanelModel, /function renderJvmSortHeader\(key, label\)/);
+  assert.match(jvmPanelModel, /data-jvm-sort="\$\{escapeHtml\(key\)\}"/);
+  assert.match(jvmPanelModel, /function renderJvmPagination\(total, totalPages, start\)/);
+  assert.match(jvmPanelModel, /data-jvm-page-size/);
+  assert.match(jvmPanelModel, /data-jvm-page="first"/);
+  assert.match(jvmPanelModel, /data-jvm-page="last"/);
   assert.match(jvmGcView, /Correlated JVM stall events/);
   assert.match(jvmGcView, /renderJvmSortHeader\("time", "Timestamp"\)/);
   assert.match(jvmGcView, /renderJvmSortHeader\("nature", "Stall nature"\)/);

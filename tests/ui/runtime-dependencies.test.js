@@ -5,6 +5,7 @@ import { test } from "node:test";
 const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
 const advanced = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
 const fixDrawing = readFileSync(new URL("../../src/correlation/fix-chart-drawing.js", import.meta.url), "utf8");
+const jvmChartDrawing = readFileSync(new URL("../../src/correlation/jvm-chart-drawing.js", import.meta.url), "utf8");
 const metricCharts = readFileSync(new URL("../../src/charts/metric-chart-engine.js", import.meta.url), "utf8");
 const appRendering = readFileSync(new URL("../../src/rendering/app-rendering.js", import.meta.url), "utf8");
 const reportActions = readFileSync(new URL("../../src/reporting/report-actions.js", import.meta.url), "utf8");
@@ -44,12 +45,12 @@ test("chart draw functions accept injectable runtime dependencies", () => {
 test("JVM chart draw functions accept injectable runtime dependencies", () => {
   assert.match(main, /function drawJvmCharts\(\.\.\.args\) \{ return appRendering\.drawJvmCharts\(\.\.\.args\); \}/);
   assert.match(appRendering, /function drawJvmCharts\(deps\) \{ return advancedCorrelationPanels\.drawJvmCharts\(deps\); \}/);
-  assert.match(advanced, /function jvmDrawDependencies\(\)\s*\{/);
-  assert.match(advanced, /function drawJvmCharts\(deps = jvmDrawDependencies\(\)\)/);
-  assert.match(advanced, /function drawJvmTimelineChartInteractive\(svg, results, history, deps = jvmDrawDependencies\(\)\)/);
-  assert.match(advanced, /function drawJvmScatterChartInteractive\(svg, results, deps = jvmDrawDependencies\(\)\)/);
-  assert.match(advanced, /function attachJvmTimelineInteractions\(svg, results, history[\s\S]*deps = jvmDrawDependencies\(\)\)/);
-  assert.match(advanced, /function attachJvmScatterInteractions\(svg, points[\s\S]*deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function jvmDrawDependencies\(\)\s*\{/);
+  assert.match(jvmChartDrawing, /function drawJvmCharts\(deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function drawJvmTimelineChartInteractive\(svg, results, history, deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function drawJvmScatterChartInteractive\(svg, results, deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function attachJvmTimelineInteractions\(svg, results, history[\s\S]*deps = jvmDrawDependencies\(\)\)/);
+  assert.match(jvmChartDrawing, /function attachJvmScatterInteractions\(svg, points[\s\S]*deps = jvmDrawDependencies\(\)\)/);
 });
 
 test("FIX chart draw functions accept injectable runtime dependencies", () => {
@@ -132,11 +133,11 @@ test("chart event binders use injected root state and redraw callbacks", () => {
 });
 
 test("JVM chart interactions use injected DOM root and redraw callback", () => {
-  assert.match(advanced, /const \{ root = getDocument\(\), state: appState = state, drawJvmCharts: drawJvm = drawJvmCharts \} = deps;/);
-  assert.match(advanced, /root\.querySelector\("\[data-jvm-chart='scatter'\]"\)/);
-  assert.match(advanced, /root\.querySelector\("\[data-jvm-chart='recvq'\]"\)/);
-  assert.match(advanced, /drawJvm\(deps\);/);
-  assert.match(advanced, /const dom = root\.ownerDocument \|\| root;/);
+  assert.match(jvmChartDrawing, /const \{ root = getDocument\(\), state: appState = state, drawJvmCharts: drawJvm = drawJvmCharts \} = deps;/);
+  assert.match(jvmChartDrawing, /root\.querySelector\("\[data-jvm-chart='scatter'\]"\)/);
+  assert.match(jvmChartDrawing, /root\.querySelector\("\[data-jvm-chart='recvq'\]"\)/);
+  assert.match(jvmChartDrawing, /drawJvm\(deps\);/);
+  assert.match(jvmChartDrawing, /const dom = root\.ownerDocument \|\| root;/);
 });
 
 test("FIX chart draw orchestration uses injected root and chart callbacks", () => {
