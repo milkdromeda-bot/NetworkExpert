@@ -437,7 +437,7 @@ button.mega i {
 .hint { color: var(--muted); font-size: var(--font-size-base); line-height: 1.45; }
 .import-status {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
   gap: 4px 8px;
   flex: 1 1 320px;

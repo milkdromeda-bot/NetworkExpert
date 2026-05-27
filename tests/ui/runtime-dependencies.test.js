@@ -3,20 +3,21 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
+const advanced = readFileSync(new URL("../../src/advanced-correlation-panels.js", import.meta.url), "utf8");
 
-function functionBlock(name) {
-  const start = main.indexOf(`function ${name}(`);
+function functionBlock(name, source = main) {
+  const start = source.indexOf(`function ${name}(`);
   assert.notEqual(start, -1, `${name} should exist`);
   let depth = 0;
   let started = false;
-  for (let index = start; index < main.length; index += 1) {
-    const char = main[index];
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
     if (char === "{") {
       depth += 1;
       started = true;
     } else if (char === "}") {
       depth -= 1;
-      if (started && depth === 0) return main.slice(start, index + 1);
+      if (started && depth === 0) return source.slice(start, index + 1);
     }
   }
   throw new Error(`${name} function block was not closed`);
@@ -33,22 +34,24 @@ test("chart draw functions accept injectable runtime dependencies", () => {
 });
 
 test("JVM chart draw functions accept injectable runtime dependencies", () => {
-  assert.match(main, /function jvmDrawDependencies\(\)\s*\{/);
-  assert.match(main, /function drawJvmCharts\(deps = jvmDrawDependencies\(\)\)/);
-  assert.match(main, /function drawJvmTimelineChartInteractive\(svg, results, history, deps = jvmDrawDependencies\(\)\)/);
-  assert.match(main, /function drawJvmScatterChartInteractive\(svg, results, deps = jvmDrawDependencies\(\)\)/);
-  assert.match(main, /function attachJvmTimelineInteractions\(svg, results, history[\s\S]*deps = jvmDrawDependencies\(\)\)/);
-  assert.match(main, /function attachJvmScatterInteractions\(svg, points[\s\S]*deps = jvmDrawDependencies\(\)\)/);
+  assert.match(main, /function drawJvmCharts\(deps\) \{ return advancedCorrelationPanels\.drawJvmCharts\(deps\); \}/);
+  assert.match(advanced, /function jvmDrawDependencies\(\)\s*\{/);
+  assert.match(advanced, /function drawJvmCharts\(deps = jvmDrawDependencies\(\)\)/);
+  assert.match(advanced, /function drawJvmTimelineChartInteractive\(svg, results, history, deps = jvmDrawDependencies\(\)\)/);
+  assert.match(advanced, /function drawJvmScatterChartInteractive\(svg, results, deps = jvmDrawDependencies\(\)\)/);
+  assert.match(advanced, /function attachJvmTimelineInteractions\(svg, results, history[\s\S]*deps = jvmDrawDependencies\(\)\)/);
+  assert.match(advanced, /function attachJvmScatterInteractions\(svg, points[\s\S]*deps = jvmDrawDependencies\(\)\)/);
 });
 
 test("FIX chart draw functions accept injectable runtime dependencies", () => {
-  assert.match(main, /function fixDrawDependencies\(\)\s*\{/);
-  assert.match(main, /function drawFixCharts\(deps = fixDrawDependencies\(\)\)/);
-  assert.match(main, /function drawFixHeatmap\(canvas, results, fullT0, fullT1, deps = fixDrawDependencies\(\)\)/);
-  assert.match(main, /function drawFixTimelineChart\(svg, results, history, gcPauses = null, gcWindowMs = 200, deps = fixDrawDependencies\(\)\)/);
-  assert.match(main, /function drawFixScatterChart\(svg, results, deps = fixDrawDependencies\(\)\)/);
-  assert.match(main, /function drawFixVmstatChart\(svg, vmsamples, fixResults, cpuCores = 0, deps = fixDrawDependencies\(\)\)/);
-  assert.match(main, /function drawFixNstatChart\(svg, nsamples, fixResults, deps = fixDrawDependencies\(\)\)/);
+  assert.match(main, /function drawFixCharts\(deps\) \{ return advancedCorrelationPanels\.drawFixCharts\(deps\); \}/);
+  assert.match(advanced, /function fixDrawDependencies\(\)\s*\{/);
+  assert.match(advanced, /function drawFixCharts\(deps = fixDrawDependencies\(\)\)/);
+  assert.match(advanced, /function drawFixHeatmap\(canvas, results, fullT0, fullT1, deps = fixDrawDependencies\(\)\)/);
+  assert.match(advanced, /function drawFixTimelineChart\(svg, results, history, gcPauses = null, gcWindowMs = 200, deps = fixDrawDependencies\(\)\)/);
+  assert.match(advanced, /function drawFixScatterChart\(svg, results, deps = fixDrawDependencies\(\)\)/);
+  assert.match(advanced, /function drawFixVmstatChart\(svg, vmsamples, fixResults, cpuCores = 0, deps = fixDrawDependencies\(\)\)/);
+  assert.match(advanced, /function drawFixNstatChart\(svg, nsamples, fixResults, deps = fixDrawDependencies\(\)\)/);
 });
 
 test("chart draw dependencies isolate DOM and mutable app state", () => {
@@ -84,7 +87,7 @@ test("bindEvents is split into dependency-injected chart binders", () => {
 test("event dependency factory keeps render callback executable", () => {
   const appDeps = functionBlock("appEventDependencies");
   const chromeBinder = functionBlock("bindChartChromeEvents");
-  assert.match(appDeps, /\n\s*render,\n/);
+  assert.match(appDeps, /\r?\n\s*render,\r?\n/);
   assert.doesNotMatch(appDeps, /render:\s*renderView\s*=\s*render/);
   assert.match(chromeBinder, /render:\s*renderView\s*=\s*render/);
   assert.match(chromeBinder, /renderView\(\);/);
@@ -102,19 +105,19 @@ test("chart event binders use injected root state and redraw callbacks", () => {
 });
 
 test("JVM chart interactions use injected DOM root and redraw callback", () => {
-  assert.match(main, /const \{ root = document, state: appState = state, drawJvmCharts: drawJvm = drawJvmCharts \} = deps;/);
-  assert.match(main, /root\.querySelector\("\[data-jvm-chart='scatter'\]"\)/);
-  assert.match(main, /root\.querySelector\("\[data-jvm-chart='recvq'\]"\)/);
-  assert.match(main, /drawJvm\(deps\);/);
-  assert.match(main, /const dom = root\.ownerDocument \|\| root;/);
+  assert.match(advanced, /const \{ root = getDocument\(\), state: appState = state, drawJvmCharts: drawJvm = drawJvmCharts \} = deps;/);
+  assert.match(advanced, /root\.querySelector\("\[data-jvm-chart='scatter'\]"\)/);
+  assert.match(advanced, /root\.querySelector\("\[data-jvm-chart='recvq'\]"\)/);
+  assert.match(advanced, /drawJvm\(deps\);/);
+  assert.match(advanced, /const dom = root\.ownerDocument \|\| root;/);
 });
 
 test("FIX chart draw orchestration uses injected root and chart callbacks", () => {
-  assert.match(main, /const \{[\s\S]*root = document,[\s\S]*drawFixTimelineChart: drawTimeline = drawFixTimelineChart[\s\S]*drawFixHeatmap: drawHeatmap = drawFixHeatmap[\s\S]*\} = deps;/);
-  assert.match(main, /root\.querySelector\("\[data-fix-chart='timeline'\]"\)/);
-  assert.match(main, /root\.querySelector\("\[data-fix-chart='scatter'\]"\)/);
-  assert.match(main, /root\.querySelector\("\[data-fix-chart='vmstat'\]"\)/);
-  assert.match(main, /root\.querySelector\("\[data-fix-chart='nstat'\]"\)/);
-  assert.match(main, /root\.querySelectorAll\("\[data-fix-heatmap\]"\)/);
-  assert.match(main, /drawHeatmap\(c, results, tMin, tMax, deps\)/);
+  assert.match(advanced, /const \{[\s\S]*root = getDocument\(\),[\s\S]*drawFixTimelineChart: drawTimeline = drawFixTimelineChart[\s\S]*drawFixHeatmap: drawHeatmap = drawFixHeatmap[\s\S]*\} = deps;/);
+  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='timeline'\]"\)/);
+  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='scatter'\]"\)/);
+  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='vmstat'\]"\)/);
+  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='nstat'\]"\)/);
+  assert.match(advanced, /root\.querySelectorAll\("\[data-fix-heatmap\]"\)/);
+  assert.match(advanced, /drawHeatmap\(c, results, tMin, tMax, deps\)/);
 });
