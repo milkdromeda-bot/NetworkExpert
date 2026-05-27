@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { applyContextAction, setActiveInvestigation } from '../../src/navigation.js';
-import { ACCESS_ROLES, COMMON_TIME_ZONES, EXPERT_DEFAULT_THRESHOLDS, INGEST_RAW_EAGER_LIMIT, LINUX_PROFILES, UBUNTU_PROFILES, cloneThresholds } from '../../src/expert-config.js';
+import { applyContextAction, setActiveInvestigation } from '../../src/core/navigation.js';
+import { ACCESS_ROLES, COMMON_TIME_ZONES, EXPERT_DEFAULT_THRESHOLDS, INGEST_RAW_EAGER_LIMIT, LINUX_PROFILES, UBUNTU_PROFILES, cloneThresholds } from '../../src/config/expert-config.js';
 
 // --- applyContextAction tests ---
 

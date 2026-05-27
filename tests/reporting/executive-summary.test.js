@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildExecutiveSummary, pickExecutiveFocusSocket } from "../../src/executive-summary.js";
+import { buildExecutiveSummary, pickExecutiveFocusSocket } from "../../src/reporting/executive-summary.js";
 
 test("pickExecutiveFocusSocket prefers explicit selection", () => {
   const selected = { id: "selected", risk: "low", sendQ: 0, recvQ: 0 };

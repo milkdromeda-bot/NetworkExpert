@@ -10,8 +10,8 @@ import {
   tableColumnControlModels,
   tableFilterCacheKey,
   tableSettingsMenuLayout
-} from "../../src/table-state.js";
-import { applyTableColumnSearchFilter, renderTableSettingsContent } from "../../src/table-settings-view.js";
+} from "../../src/views/table-state.js";
+import { applyTableColumnSearchFilter, renderTableSettingsContent } from "../../src/views/table-settings-view.js";
 
 const columns = [
   { key: "risk", label: "Risk" },
@@ -135,11 +135,11 @@ const cases = [
     assert.match(html, /<script src="\.\/vendor\/jszip\.min\.js"><\/script>\s+<script src="\.\/vendor\/pdf-lib\.min\.js"><\/script>/);
   }],
   ["expert config exports the eager raw import limit used at startup", async () => {
-    const source = await readFile(new URL("../../src/expert-config.js", import.meta.url), "utf8");
+    const source = await readFile(new URL("../../src/config/expert-config.js", import.meta.url), "utf8");
     assert.match(source, /export const INGEST_RAW_EAGER_LIMIT = 200000;/);
   }],
   ["main imports the eager raw import limit instead of relying on a global", async () => {
-    const source = await readFile(new URL("../../src/main.js", import.meta.url), "utf8");
+    const source = await readFile(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
     assert.match(source, /INGEST_RAW_EAGER_LIMIT/);
     assert.match(source, /from "\.\/expert-config\.js"/);
   }],

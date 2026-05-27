@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from '../../src/gc-log-parser.js';
+import { parseGcLog, classifyPause, g1Recommendations, RECOMMENDED_JVM_LOGGING } from '../../src/parsing/gc-log-parser.js';
 
 // --- parseGcLog: timestamps ---
 

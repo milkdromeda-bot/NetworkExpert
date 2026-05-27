@@ -2,7 +2,7 @@
  * JVM Stall / GC Correlation Engine
  * Correlates GC pauses with TCP symptoms from ss snapshots.
  */
-import { classifyPause, g1Recommendations } from "./gc-log-parser.js";
+import { classifyPause, g1Recommendations } from "../parsing/gc-log-parser.js";
 
 const DEFAULT_WINDOWS = { beforeMs: 500, afterShortMs: 500, afterLongMs: 5000 };
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inferApplicationService, applicationServiceLabel, applicationServiceSortKey, knownApplicationServices, serviceInferenceKey } from "../../src/services.js";
-import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource, deleteEndpointAlias, endpointAliasKey, normalizeAliasStore, upsertEndpointAlias } from "../../src/aliases.js";
+import { inferApplicationService, applicationServiceLabel, applicationServiceSortKey, knownApplicationServices, serviceInferenceKey } from "../../src/services/services.js";
+import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource, deleteEndpointAlias, endpointAliasKey, normalizeAliasStore, upsertEndpointAlias } from "../../src/services/aliases.js";
 
 function socket({ family = "tcp", state = "ESTAB", local = "10.0.0.10:50000", peer = "10.0.0.20:443" } = {}) {
   const parse = ep => { const i = ep.lastIndexOf(":"); return { host: ep.slice(0, i), port: ep.slice(i + 1) }; };

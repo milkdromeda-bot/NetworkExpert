@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { buildPrintableIncidentReportHtml } from "../../src/printable-incident-report.js";
+import { buildPrintableIncidentReportHtml } from "../../src/reporting/printable-incident-report.js";
 
 function deps(overrides = {}) {
   const state = {
@@ -61,7 +61,7 @@ test("printable incident report renders the current workspace frame", () => {
 });
 
 test("main delegates printable incident report rendering to the extracted module", () => {
-  const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
 
   assert.match(main, /import \{ buildPrintableIncidentReportHtml \} from "\.\/printable-incident-report\.js";/);
   assert.match(main, /function printableIncidentReportDependencies\(\)/);

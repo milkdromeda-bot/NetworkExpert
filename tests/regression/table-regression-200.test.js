@@ -14,7 +14,7 @@ import {
   tableSettingsMenuLayout,
   toggleTableColumnPin,
   toggleTableColumnVisibility
-} from "../../src/table-state.js";
+} from "../../src/views/table-state.js";
 
 const columns = [
   { key: "risk", label: "Risk" },

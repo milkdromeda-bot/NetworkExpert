@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectMicroburstWindow } from "../../src/microburst.js";
+import { detectMicroburstWindow } from "../../src/analysis/microburst.js";
 
 const thresholds = {
   recvQ: { warn: 131072, danger: 524288 },

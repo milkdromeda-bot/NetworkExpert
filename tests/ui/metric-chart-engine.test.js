@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createMetricChartEngine } from "../../src/metric-chart-engine.js";
+import { createMetricChartEngine } from "../../src/charts/metric-chart-engine.js";
 
 function engine(overrides = {}) {
   const state = {

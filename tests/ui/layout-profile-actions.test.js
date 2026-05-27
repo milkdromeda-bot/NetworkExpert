@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { handleLayoutProfileAction } from "../../src/layout-profile-actions.js";
+import { handleLayoutProfileAction } from "../../src/events/layout-profile-actions.js";
 
 function fakeDocument(values = {}) {
   return {

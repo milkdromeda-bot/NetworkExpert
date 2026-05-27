@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bindSocketInteractionEvents } from "../../src/socket-interaction-events.js";
+import { bindSocketInteractionEvents } from "../../src/events/socket-interaction-events.js";
 
 function node(dataset = {}) {
   const listeners = new Map();

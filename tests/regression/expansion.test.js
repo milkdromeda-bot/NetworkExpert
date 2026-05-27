@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { SS_OPTIONS, FIELD_DOCS, generateMicroburstSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "../../src/data.js";
-import { analyzeSocket, riskForSocket } from "../../src/analysis.js";
-import { DASHBOARD_PRESETS, dashboardSnapshot, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../../src/profiles.js";
-import { parseSs, metricValue } from "../../src/parser.js";
-import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/search.js";
-import { buildSsCollectionCommand, commandCoverage, extractSsSegment, toggleCommandOption } from "../../src/ss-command.js";
-import { validateIntervalSeconds, validateIpAddress, validateSsCommandConfig, validateTcpUdpPort } from "../../src/ss-command-validation.js";
-import { withStableSocketIds } from "../../src/timeline.js";
+import { SS_OPTIONS, FIELD_DOCS, generateMicroburstSample, generateTailLatencySample, generateTenMinuteSample, prefsDefault } from "../../src/core/data.js";
+import { analyzeSocket, riskForSocket } from "../../src/analysis/analysis.js";
+import { DASHBOARD_PRESETS, dashboardSnapshot, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../../src/config/profiles.js";
+import { parseSs, metricValue } from "../../src/parsing/parser.js";
+import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/config/search.js";
+import { buildSsCollectionCommand, commandCoverage, extractSsSegment, toggleCommandOption } from "../../src/parsing/ss-command.js";
+import { validateIntervalSeconds, validateIpAddress, validateSsCommandConfig, validateTcpUdpPort } from "../../src/parsing/ss-command-validation.js";
+import { withStableSocketIds } from "../../src/timeline/timeline.js";
 
 function socketFrom(line, bandwidth = {}) {
   return withStableSocketIds(parseSs(line)).map(socket => ({ ...socket, bandwidth }))[0];

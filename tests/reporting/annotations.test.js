@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { annotationDefaultLabel, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations, resolveAnnotationEpoch } from "../../src/annotations.js";
+import { annotationDefaultLabel, annotationsForContext, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations, resolveAnnotationEpoch } from "../../src/timeline/annotations.js";
 
 test("annotation draft uses default label for selected kind", () => {
   const draft = buildAnnotationDraft({ sourceName: "sample", socketId: "socket-1", metric: "rtt", kind: "failover" });

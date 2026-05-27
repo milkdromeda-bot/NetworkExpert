@@ -1,4 +1,4 @@
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 
 const LOW_RCV_SPACE_BYTES = 8 * 1024;
 const RECEIVE_MEMORY_PRESSURE_RATIO = 0.85;

@@ -190,7 +190,7 @@ export function bindSourceFileEvents(deps) {
     const file = event.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    const { parseSs } = await import("./parser.js");
+    const { parseSs } = await import("../parsing/parser.js");
     const sockets = parseSs(text);
     state.peerCapture = { raw: text, sockets, sourceName: file.name };
     const correlations = [];

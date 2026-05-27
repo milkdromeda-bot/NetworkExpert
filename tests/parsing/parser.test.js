@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inferFamily, metricValue, parseAddress, parseDuration, parseNumber, parseSs, parseTimestampLine } from "../../src/parser.js";
+import { inferFamily, metricValue, parseAddress, parseDuration, parseNumber, parseSs, parseTimestampLine } from "../../src/parsing/parser.js";
 
 test("parseNumber handles bandwidth units consistently", () => {
   assert.equal(parseNumber("328kbps"), 328000);

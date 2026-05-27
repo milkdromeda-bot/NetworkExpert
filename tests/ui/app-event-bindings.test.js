@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createAppEventBindings } from "../../src/app-event-bindings.js";
+import { createAppEventBindings } from "../../src/events/app-event-bindings.js";
 
 function classListRecorder() {
   return {

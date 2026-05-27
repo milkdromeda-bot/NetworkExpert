@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { PLAYBOOKS, playbookForHypothesis, resolvePlaybook } from "../../src/playbooks.js";
+import { PLAYBOOKS, playbookForHypothesis, resolvePlaybook } from "../../src/timeline/playbooks.js";
 
 test("playbooks covers all major hypothesis families", () => {
   const ids = PLAYBOOKS.map(pb => pb.id);

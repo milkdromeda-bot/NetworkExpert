@@ -1,4 +1,4 @@
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 
 const ROOT_CAUSES = [
   {

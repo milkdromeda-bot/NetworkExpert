@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { analyzeWscaleContext, estimateWscaleBdpBytes } from "../../src/wscale-analysis.js";
-import { parseSs } from "../../src/parser.js";
-import { withStableSocketIds } from "../../src/timeline.js";
+import { analyzeWscaleContext, estimateWscaleBdpBytes } from "../../src/analysis/wscale-analysis.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { withStableSocketIds } from "../../src/timeline/timeline.js";
 
 function socketFrom(line) {
   return withStableSocketIds(parseSs(line))[0];

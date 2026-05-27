@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSs } from "../../src/parser.js";
-import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots, socketIdentityKey, socketKey, timestampBlocks } from "../../src/timeline.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, buildSocketHistoryFromSnapshots, parsedTimestampSnapshots, socketIdentityKey, socketKey, timestampBlocks } from "../../src/timeline/timeline.js";
 
 function generateLightSample() {
   const socketRows = Array.from({ length: 10 }, (_, index) => {

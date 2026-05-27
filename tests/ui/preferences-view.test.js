@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { renderPrefsView } from "../../src/preferences-view.js";
-import { escapeHtml, html } from "../../src/utils.js";
+import { renderPrefsView } from "../../src/views/preferences-view.js";
+import { escapeHtml, html } from "../../src/core/utils.js";
 
 const basePrefs = {
   numberLocale: "fr-FR",

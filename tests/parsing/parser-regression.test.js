@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inferFamily, metricValue, parseAddress, parseDuration, parseNumber, parseDetails, parseSs, parseTimestampLine, stripAnsi } from "../../src/parser.js";
+import { inferFamily, metricValue, parseAddress, parseDuration, parseNumber, parseDetails, parseSs, parseTimestampLine, stripAnsi } from "../../src/parsing/parser.js";
 
 // parseAddress edge cases
 test("parseAddress handles IPv6 loopback with port", () => {

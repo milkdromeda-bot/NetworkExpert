@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseAddress, parseDuration, parseNumber, parseSs, parseTimestampLine, metricValue, inferFamily, stripAnsi } from "../../src/parser.js";
-import { analyzeSocket, applyRisks, riskForSocket } from "../../src/analysis.js";
-import { socketKey, stableSocketId, withStableSocketIds, timestampBlocks, aggregateParsedSocketsByKey } from "../../src/timeline.js";
-import { endpointMatchesPattern, topologyGroupForEndpoint, topologyScopeKey } from "../../src/topology.js";
-import { inferApplicationService } from "../../src/services.js";
-import { endpointAliasKey, normalizeAliasStore, upsertEndpointAlias, aliasForEndpoint } from "../../src/aliases.js";
-import { clampZoomRange, nextZoomRange } from "../../src/chart-zoom.js";
+import { parseAddress, parseDuration, parseNumber, parseSs, parseTimestampLine, metricValue, inferFamily, stripAnsi } from "../../src/parsing/parser.js";
+import { analyzeSocket, applyRisks, riskForSocket } from "../../src/analysis/analysis.js";
+import { socketKey, stableSocketId, withStableSocketIds, timestampBlocks, aggregateParsedSocketsByKey } from "../../src/timeline/timeline.js";
+import { endpointMatchesPattern, topologyGroupForEndpoint, topologyScopeKey } from "../../src/config/topology.js";
+import { inferApplicationService } from "../../src/services/services.js";
+import { endpointAliasKey, normalizeAliasStore, upsertEndpointAlias, aliasForEndpoint } from "../../src/services/aliases.js";
+import { clampZoomRange, nextZoomRange } from "../../src/charts/chart-zoom.js";
 
 function socketFrom(line) {
   return withStableSocketIds(parseSs(line))[0];

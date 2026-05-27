@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderJvmGcPanelView } from "../../src/jvm-gc-view.js";
+import { renderJvmGcPanelView } from "../../src/views/jvm-gc-view.js";
 
 const icons = {
   zoomIn: "+",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { detectMultiSocketCorrelation, SYMPTOMS } from "../../src/multi-socket-correlation.js";
+import { detectMultiSocketCorrelation, SYMPTOMS } from "../../src/analysis/multi-socket-correlation.js";
 
 function socket(local, peer, overrides = {}) {
   return `tcp ESTAB ${overrides.recvQ || 0} ${overrides.sendQ || 0} ${local} ${peer} users:(("${overrides.process || "java"}",pid=${overrides.pid || 42},fd=7)) ${overrides.timer || ""} ino:${overrides.ino || Math.random().toString(36).slice(2)} sk:${overrides.sk || Math.random().toString(36).slice(2)} skmem:(r${overrides.skmemR || 0},rb4225792,t0,tb870400,f0,w0,o0,bl0,d${overrides.skmemD || 0}) rto:201 rtt:0.1/0.01 cwnd:10${overrides.backoff ? ` backoff:${overrides.backoff}` : ""}${overrides.rwndLimited ? ` rwnd_limited:500ms(${overrides.rwndLimited}%)` : ""}`;

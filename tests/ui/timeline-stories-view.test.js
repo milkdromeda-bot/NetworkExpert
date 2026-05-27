@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderTimelineStoriesViewModel } from "../../src/timeline-stories-view.js";
+import { renderTimelineStoriesViewModel } from "../../src/views/timeline-stories-view.js";
 
 function escapeHtml(value) {
   return String(value ?? "")

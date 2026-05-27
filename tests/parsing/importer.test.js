@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { importSocketFile } from "../../src/importer.js";
+import { importSocketFile } from "../../src/parsing/importer.js";
 
 function textFile(name, text) {
   const file = new Blob([text], { type: "text/plain" });

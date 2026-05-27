@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyChartZoomOperation, clampZoomRange, nextZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "../../src/chart-zoom.js";
+import { applyChartZoomOperation, clampZoomRange, nextZoomRange, zoomForMetric, zoomRangeFromDragSelection } from "../../src/charts/chart-zoom.js";
 
 const actions = ["zoomIn", "zoomOut", "panLeft", "panRight", "resetZoom"];
 const seeds = Array.from({ length: 40 }, (_, index) => {

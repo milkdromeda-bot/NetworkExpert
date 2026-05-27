@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "../../src/evidence-pack.js";
+import { buildAnomaliesCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "../../src/reporting/evidence-pack.js";
 
 test("safe evidence filenames normalize mixed input", () => {
   assert.equal(safeEvidenceFileName("My Capture 01 / Paris"), "my-capture-01-paris");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { handleServiceConfigAction } from "../../src/service-config-actions.js";
+import { handleServiceConfigAction } from "../../src/services/service-config-actions.js";
 
 function fakeDocument(values = {}) {
   return {

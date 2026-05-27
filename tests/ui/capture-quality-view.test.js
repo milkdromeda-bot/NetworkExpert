@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { formatQualityDuration, renderCaptureQualityReportView } from "../../src/capture-quality-view.js";
-import { escapeHtml } from "../../src/utils.js";
+import { formatQualityDuration, renderCaptureQualityReportView } from "../../src/views/capture-quality-view.js";
+import { escapeHtml } from "../../src/core/utils.js";
 
 const formatNumber = value => new Intl.NumberFormat("en-US").format(value);
 const numberFormatterWith = (min, max) => new Intl.NumberFormat("en-US", {

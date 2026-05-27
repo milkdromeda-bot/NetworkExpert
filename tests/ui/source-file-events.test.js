@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bindSourceFileEvents } from "../../src/source-file-events.js";
+import { bindSourceFileEvents } from "../../src/events/source-file-events.js";
 
 function inputNode(initialValue = "") {
   const listeners = new Map();

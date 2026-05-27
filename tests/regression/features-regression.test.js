@@ -1,9 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseSs, parseTimestampLine } from "../../src/parser.js";
-import { correlateFixLatency } from "../../src/fix-correlation.js";
-import { parseVmstat, parseNstatTimestamped } from "../../src/vmstat-parser.js";
-import { detectTimelineStories } from "../../src/timeline-stories.js";
+import { parseSs, parseTimestampLine } from "../../src/parsing/parser.js";
+import { correlateFixLatency } from "../../src/correlation/fix-correlation.js";
+import { parseVmstat, parseNstatTimestamped } from "../../src/parsing/vmstat-parser.js";
+import { detectTimelineStories } from "../../src/timeline/timeline-stories.js";
 
 describe("parse-worker logic (unit)", () => {
   it("parseSs handles large input without crashing", () => {

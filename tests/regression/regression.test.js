@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aliasDisplay, aliasForEndpoint, normalizeAliasStore, upsertEndpointAlias } from "../../src/aliases.js";
-import { applyRisks } from "../../src/analysis.js";
-import { defaultAlertRules, evaluateAlertRules } from "../../src/alerts.js";
-import { buildComparison, createBaseline } from "../../src/compare.js";
-import { applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../../src/profiles.js";
-import { inferFamily, metricValue, parseAddress, parseDetails, parseNumber, parseSs, parseTimestampLine } from "../../src/parser.js";
-import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/search.js";
-import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, socketKey, stableSocketId, timestampBlocks, withStableSocketIds } from "../../src/timeline.js";
-import { endpointMatchesPattern, normalizeTopologyProfile, topologyGroupForEndpoint, upsertTopologyGroup } from "../../src/topology.js";
+import { aliasDisplay, aliasForEndpoint, normalizeAliasStore, upsertEndpointAlias } from "../../src/services/aliases.js";
+import { applyRisks } from "../../src/analysis/analysis.js";
+import { defaultAlertRules, evaluateAlertRules } from "../../src/config/alerts.js";
+import { buildComparison, createBaseline } from "../../src/analysis/compare.js";
+import { applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile } from "../../src/config/profiles.js";
+import { inferFamily, metricValue, parseAddress, parseDetails, parseNumber, parseSs, parseTimestampLine } from "../../src/parsing/parser.js";
+import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/config/search.js";
+import { aggregateParsedSocketsByKey, aggregateTimestampedSockets, socketKey, stableSocketId, timestampBlocks, withStableSocketIds } from "../../src/timeline/timeline.js";
+import { endpointMatchesPattern, normalizeTopologyProfile, topologyGroupForEndpoint, upsertTopologyGroup } from "../../src/config/topology.js";
 
 const riskRank = severity => ({ low: 1, medium: 2, high: 3, critical: 4 }[severity] || 0);
 const socketBandwidth = (socket, metric) => socket.bandwidth?.[metric] || 0;

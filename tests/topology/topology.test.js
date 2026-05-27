@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deleteTopologyGroup, endpointHost, endpointMatchesPattern, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "../../src/topology.js";
+import { deleteTopologyGroup, endpointHost, endpointMatchesPattern, layoutTopologyLanePositions, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey, upsertTopologyGroup } from "../../src/config/topology.js";
 
 test("topologyScopeKey scopes profiles by recording source name", () => {
   assert.equal(topologyScopeKey(" LPLALO-light.log "), "lplalo-light.log");

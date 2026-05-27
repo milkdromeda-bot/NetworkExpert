@@ -10,8 +10,8 @@ import {
   ssOptionIntel,
   ssOptionKey,
   ssOptionObject
-} from "../../src/ss-command-view.js";
-import { escapeHtml } from "../../src/utils.js";
+} from "../../src/views/ss-command-view.js";
+import { escapeHtml } from "../../src/core/utils.js";
 
 const intelMap = {
   "-i": {

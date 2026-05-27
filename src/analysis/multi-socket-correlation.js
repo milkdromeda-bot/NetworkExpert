@@ -1,5 +1,5 @@
-import { metricValue } from "./parser.js";
-import { parsedTimestampSnapshots, socketIdentityKey } from "./timeline.js";
+import { metricValue } from "../parsing/parser.js";
+import { parsedTimestampSnapshots, socketIdentityKey } from "../timeline/timeline.js";
 
 const SYMPTOMS = [
   { id: "persist", label: "persist timer", test: (s) => String(s.details?.timer?.name || "").toLowerCase() === "persist" },

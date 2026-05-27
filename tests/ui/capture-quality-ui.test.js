@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
-const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
-const captureQuality = readFileSync(new URL("../../src/capture-quality.js", import.meta.url), "utf8");
-const captureQualityView = readFileSync(new URL("../../src/capture-quality-view.js", import.meta.url), "utf8");
+const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+const css = readFileSync(new URL("../../src/styles/styles.css", import.meta.url), "utf8");
+const captureQuality = readFileSync(new URL("../../src/analysis/capture-quality.js", import.meta.url), "utf8");
+const captureQualityView = readFileSync(new URL("../../src/views/capture-quality-view.js", import.meta.url), "utf8");
 
 test("capture quality report renders diagnostic readiness and socket coverage", () => {
   assert.match(main, /renderCaptureQualityReportView/);

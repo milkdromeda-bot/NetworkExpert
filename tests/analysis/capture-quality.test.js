@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { analyzeCaptureQuality, captureQualityGrade } from "../../src/capture-quality.js";
+import { analyzeCaptureQuality, captureQualityGrade } from "../../src/analysis/capture-quality.js";
 
 const FULL_COMMAND = "while true; do date --iso-8601=ns; ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all; sleep 1; done | tee -a '/tmp/networkexpert_ss_20260515_143152.log'";
 

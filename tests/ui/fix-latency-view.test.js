@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderFixLatencyPanelView } from "../../src/fix-latency-view.js";
+import { renderFixLatencyPanelView } from "../../src/views/fix-latency-view.js";
 
 const icons = {
   zoomIn: "+",

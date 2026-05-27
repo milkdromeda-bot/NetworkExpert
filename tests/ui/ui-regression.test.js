@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyContextAction, clearConversationScopeFilters, setActiveInvestigation } from "../../src/navigation.js";
-import { defaultVisibleColumns, normalizeTableState, tableColumnKeys, tableColumnMetadata } from "../../src/table-state.js";
+import { applyContextAction, clearConversationScopeFilters, setActiveInvestigation } from "../../src/core/navigation.js";
+import { defaultVisibleColumns, normalizeTableState, tableColumnKeys, tableColumnMetadata } from "../../src/views/table-state.js";
 
 const columns = [
   { key: "risk", label: "Risk" },

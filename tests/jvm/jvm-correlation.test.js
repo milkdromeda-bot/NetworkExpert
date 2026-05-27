@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { correlateJvmStalls, alignTimestamps, DEFAULT_WINDOWS } from '../../src/jvm-correlation.js';
+import { correlateJvmStalls, alignTimestamps, DEFAULT_WINDOWS } from '../../src/correlation/jvm-correlation.js';
 
 // === alignTimestamps tests ===
 

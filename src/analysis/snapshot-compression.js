@@ -1,4 +1,4 @@
-import { socketIdentityKey } from "./timeline.js";
+import { socketIdentityKey } from "../timeline/timeline.js";
 
 /**
  * Delta-encode a series of timestamp snapshots.

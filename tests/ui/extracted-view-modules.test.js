@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { renderAdvisorGlobalSummary } from "../../src/advisor-summary-view.js";
-import { renderChartsGlobalToolbar } from "../../src/charts-toolbar-view.js";
-import { renderMetricsStatsTable } from "../../src/stats-table-view.js";
-import { escapeHtml } from "../../src/utils.js";
+import { renderAdvisorGlobalSummary } from "../../src/views/advisor-summary-view.js";
+import { renderChartsGlobalToolbar } from "../../src/views/charts-toolbar-view.js";
+import { renderMetricsStatsTable } from "../../src/views/stats-table-view.js";
+import { escapeHtml } from "../../src/core/utils.js";
 
 const formatNumber = value => new Intl.NumberFormat("en-US").format(value);
 const metricValue = (socket, key) => socket[key];

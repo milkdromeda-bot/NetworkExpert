@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { renderColumnTooltip } from "../../src/column-help-view.js";
-import { EXPERT_DEFAULT_THRESHOLDS } from "../../src/expert-config.js";
-import { createGuideView } from "../../src/guide-view.js";
-import { createModalView } from "../../src/modal-view.js";
-import { renderSocketTableView, renderTableHeader } from "../../src/socket-table-view.js";
-import { createTableColumns } from "../../src/table-columns.js";
-import { renderTableSettingsContent } from "../../src/table-settings-view.js";
+import { renderColumnTooltip } from "../../src/views/column-help-view.js";
+import { EXPERT_DEFAULT_THRESHOLDS } from "../../src/config/expert-config.js";
+import { createGuideView } from "../../src/views/guide-view.js";
+import { createModalView } from "../../src/views/modal-view.js";
+import { renderSocketTableView, renderTableHeader } from "../../src/views/socket-table-view.js";
+import { createTableColumns } from "../../src/views/table-columns.js";
+import { renderTableSettingsContent } from "../../src/views/table-settings-view.js";
 
 const icons = {
   settings: "<i>settings</i>",

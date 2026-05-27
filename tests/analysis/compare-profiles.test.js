@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { buildComparison, createBaseline } from '../../src/compare.js';
-import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile, dashboardSnapshot } from '../../src/profiles.js';
+import { buildComparison, createBaseline } from '../../src/analysis/compare.js';
+import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate, applyDashboardPreset, applyDashboardProfile, dashboardSnapshot } from '../../src/config/profiles.js';
 
 // createBaseline tests
 test('createBaseline returns an object', () => {

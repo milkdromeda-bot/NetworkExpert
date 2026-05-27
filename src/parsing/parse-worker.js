@@ -3,10 +3,10 @@
  * Supports progressive parsing with intermediate progress reports.
  */
 import { parseSs, parseTimestampLine } from "./parser.js";
-import { analyzeAll, applyRisks } from "./analysis.js";
-import { correlateFixLatency } from "./fix-correlation.js";
-import { buildDiagnosticHypotheses } from "./diagnostics.js";
-import { detectTimelineStories } from "./timeline-stories.js";
+import { analyzeAll, applyRisks } from "../analysis/analysis.js";
+import { correlateFixLatency } from "../correlation/fix-correlation.js";
+import { buildDiagnosticHypotheses } from "../analysis/diagnostics.js";
+import { detectTimelineStories } from "../timeline/timeline-stories.js";
 
 const BATCH_SIZE = 2000;
 

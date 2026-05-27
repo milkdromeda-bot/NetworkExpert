@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseFixLine, parseFixLog, parseLogTime, parseSendingTime, extractTag, computeFixStats, extractEndpoints } from "../../src/fix-log-parser.js";
-import { correlateFixLatency } from "../../src/fix-correlation.js";
-import { parseVmstat, parseNstatTimestamped, vmstatSummary } from "../../src/vmstat-parser.js";
+import { parseFixLine, parseFixLog, parseLogTime, parseSendingTime, extractTag, computeFixStats, extractEndpoints } from "../../src/parsing/fix-log-parser.js";
+import { correlateFixLatency } from "../../src/correlation/fix-correlation.js";
+import { parseVmstat, parseNstatTimestamped, vmstatSummary } from "../../src/parsing/vmstat-parser.js";
 
 describe("fix-log-parser", () => {
   const TRADING_LINE = '260506-08:50:41.227 TRACE app_connector [ca_ctb_colo-fixInitiator--3][message](FIXTcpConnection [/10.20.30.40:20867]) IN 8=FIX.4.4|9=273|35=8|49=BROKER-A|56=CLIENT-B|34=1450|50=FXSPOT|52=20260506-08:50:41.212|1=107000222|6=0|11=ORDER123|15=XAU|14=0|17=EXEC001|150=A|151=100|37=ORD001|38=100|39=A|40=D|54=2|55=XAUUSD|59=4|60=20260506-08:50:41.212|10=107|';

@@ -2,46 +2,46 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const stylesCss = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
-const importPageCss = readFileSync(new URL("../../src/import-page.css", import.meta.url), "utf8");
-const captureQualityCss = readFileSync(new URL("../../src/capture-quality.css", import.meta.url), "utf8");
-const analysisGuideCss = readFileSync(new URL("../../src/analysis-guide.css", import.meta.url), "utf8");
-const analysisWorkbenchCss = readFileSync(new URL("../../src/analysis-workbench.css", import.meta.url), "utf8");
-const analysisTableCss = readFileSync(new URL("../../src/analysis-table.css", import.meta.url), "utf8");
-const metricIntelligenceCss = readFileSync(new URL("../../src/metric-intelligence.css", import.meta.url), "utf8");
-const socketIndicatorsCss = readFileSync(new URL("../../src/socket-indicators.css", import.meta.url), "utf8");
-const advisorDiagnosisCss = readFileSync(new URL("../../src/advisor-diagnosis.css", import.meta.url), "utf8");
-const serviceMapCss = readFileSync(new URL("../../src/service-map.css", import.meta.url), "utf8");
-const alertsTemplatesCompareCss = readFileSync(new URL("../../src/alerts-templates-compare.css", import.meta.url), "utf8");
-const chartsCoreCss = readFileSync(new URL("../../src/charts-core.css", import.meta.url), "utf8");
-const chartsAdvancedCss = readFileSync(new URL("../../src/charts-advanced.css", import.meta.url), "utf8");
-const designSystemCss = readFileSync(new URL("../../src/design-system.css", import.meta.url), "utf8");
-const guideCss = readFileSync(new URL("../../src/guide.css", import.meta.url), "utf8");
-const lightModeCss = readFileSync(new URL("../../src/light-mode.css", import.meta.url), "utf8");
-const uiEnhancementsCss = readFileSync(new URL("../../src/ui-enhancements.css", import.meta.url), "utf8");
+const stylesCss = readFileSync(new URL("../../src/styles/styles.css", import.meta.url), "utf8");
+const importPageCss = readFileSync(new URL("../../src/styles/import-page.css", import.meta.url), "utf8");
+const captureQualityCss = readFileSync(new URL("../../src/styles/capture-quality.css", import.meta.url), "utf8");
+const analysisGuideCss = readFileSync(new URL("../../src/styles/analysis-guide.css", import.meta.url), "utf8");
+const analysisWorkbenchCss = readFileSync(new URL("../../src/styles/analysis-workbench.css", import.meta.url), "utf8");
+const analysisTableCss = readFileSync(new URL("../../src/styles/analysis-table.css", import.meta.url), "utf8");
+const metricIntelligenceCss = readFileSync(new URL("../../src/styles/metric-intelligence.css", import.meta.url), "utf8");
+const socketIndicatorsCss = readFileSync(new URL("../../src/styles/socket-indicators.css", import.meta.url), "utf8");
+const advisorDiagnosisCss = readFileSync(new URL("../../src/styles/advisor-diagnosis.css", import.meta.url), "utf8");
+const serviceMapCss = readFileSync(new URL("../../src/styles/service-map.css", import.meta.url), "utf8");
+const alertsTemplatesCompareCss = readFileSync(new URL("../../src/styles/alerts-templates-compare.css", import.meta.url), "utf8");
+const chartsCoreCss = readFileSync(new URL("../../src/styles/charts-core.css", import.meta.url), "utf8");
+const chartsAdvancedCss = readFileSync(new URL("../../src/styles/charts-advanced.css", import.meta.url), "utf8");
+const designSystemCss = readFileSync(new URL("../../src/styles/design-system.css", import.meta.url), "utf8");
+const guideCss = readFileSync(new URL("../../src/styles/guide.css", import.meta.url), "utf8");
+const lightModeCss = readFileSync(new URL("../../src/styles/light-mode.css", import.meta.url), "utf8");
+const uiEnhancementsCss = readFileSync(new URL("../../src/styles/ui-enhancements.css", import.meta.url), "utf8");
 const css = [stylesCss, importPageCss, captureQualityCss, analysisGuideCss, analysisWorkbenchCss, analysisTableCss, metricIntelligenceCss, socketIndicatorsCss, advisorDiagnosisCss, serviceMapCss, alertsTemplatesCompareCss, chartsCoreCss, chartsAdvancedCss, designSystemCss, guideCss, lightModeCss, uiEnhancementsCss].join("\n");
 const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
-const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
-const advancedCorrelationPanels = readFileSync(new URL("../../src/advanced-correlation-panels.js", import.meta.url), "utf8");
-const ingestView = readFileSync(new URL("../../src/ingest-view.js", import.meta.url), "utf8");
-const ingestActions = readFileSync(new URL("../../src/ingest-actions.js", import.meta.url), "utf8");
-const jvmGcView = readFileSync(new URL("../../src/jvm-gc-view.js", import.meta.url), "utf8");
-const serviceMapView = readFileSync(new URL("../../src/service-map-view.js", import.meta.url), "utf8");
-const modalView = readFileSync(new URL("../../src/modal-view.js", import.meta.url), "utf8");
-const ssCommandView = readFileSync(new URL("../../src/ss-command-view.js", import.meta.url), "utf8");
-const captureQualityView = readFileSync(new URL("../../src/capture-quality-view.js", import.meta.url), "utf8");
-const chartsToolbarView = readFileSync(new URL("../../src/charts-toolbar-view.js", import.meta.url), "utf8");
-const dashboardView = readFileSync(new URL("../../src/dashboard-view.js", import.meta.url), "utf8");
-const preferencesView = readFileSync(new URL("../../src/preferences-view.js", import.meta.url), "utf8");
-const analysisShellView = readFileSync(new URL("../../src/analysis-shell-view.js", import.meta.url), "utf8");
-const metricIntelligence = readFileSync(new URL("../../src/metric-intelligence.js", import.meta.url), "utf8");
-const constants = readFileSync(new URL("../../src/constants.js", import.meta.url), "utf8");
-const data = readFileSync(new URL("../../src/data.js", import.meta.url), "utf8");
-const profiles = readFileSync(new URL("../../src/profiles.js", import.meta.url), "utf8");
-const tableColumns = readFileSync(new URL("../../src/table-columns.js", import.meta.url), "utf8");
+const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+const advancedCorrelationPanels = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
+const ingestView = readFileSync(new URL("../../src/views/ingest-view.js", import.meta.url), "utf8");
+const ingestActions = readFileSync(new URL("../../src/events/ingest-actions.js", import.meta.url), "utf8");
+const jvmGcView = readFileSync(new URL("../../src/views/jvm-gc-view.js", import.meta.url), "utf8");
+const serviceMapView = readFileSync(new URL("../../src/views/service-map-view.js", import.meta.url), "utf8");
+const modalView = readFileSync(new URL("../../src/views/modal-view.js", import.meta.url), "utf8");
+const ssCommandView = readFileSync(new URL("../../src/views/ss-command-view.js", import.meta.url), "utf8");
+const captureQualityView = readFileSync(new URL("../../src/views/capture-quality-view.js", import.meta.url), "utf8");
+const chartsToolbarView = readFileSync(new URL("../../src/views/charts-toolbar-view.js", import.meta.url), "utf8");
+const dashboardView = readFileSync(new URL("../../src/views/dashboard-view.js", import.meta.url), "utf8");
+const preferencesView = readFileSync(new URL("../../src/views/preferences-view.js", import.meta.url), "utf8");
+const analysisShellView = readFileSync(new URL("../../src/views/analysis-shell-view.js", import.meta.url), "utf8");
+const metricIntelligence = readFileSync(new URL("../../src/analysis/metric-intelligence.js", import.meta.url), "utf8");
+const constants = readFileSync(new URL("../../src/core/constants.js", import.meta.url), "utf8");
+const data = readFileSync(new URL("../../src/core/data.js", import.meta.url), "utf8");
+const profiles = readFileSync(new URL("../../src/config/profiles.js", import.meta.url), "utf8");
+const tableColumns = readFileSync(new URL("../../src/views/table-columns.js", import.meta.url), "utf8");
 
 test("import page and ss command builder styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/import-page\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/import-page\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.ss-command-warning\s*\{/);
   assert.doesNotMatch(stylesCss, /\.ingest-source-panel\.ss-editor-theme-ocean\s*\{/);
   assert.match(importPageCss, /\.ingest-hero\s*\{/);
@@ -50,42 +50,42 @@ test("import page and ss command builder styles are isolated from the global she
 });
 
 test("capture quality report keeps its stylesheet out of the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/capture-quality\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/capture-quality\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.capture-quality-shell\s*\{/);
   assert.match(captureQualityCss, /\.capture-quality-shell\s*\{/);
   assert.match(captureQualityCss, /Quality metrics Grafana-style colors/);
 });
 
 test("analysis guide keeps modal documentation styles out of the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/analysis-guide\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/analysis-guide\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.analysis-view-guide-modal\s*\{/);
   assert.match(analysisGuideCss, /\.analysis-view-guide-modal\s*\{/);
   assert.match(analysisGuideCss, /\.analysis-view-guide-button\s*\{/);
 });
 
 test("advanced chart styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/charts-advanced\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/charts-advanced\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.bdp-window-panel\s*\{/);
   assert.match(chartsAdvancedCss, /\.bdp-window-panel\s*\{/);
   assert.match(chartsAdvancedCss, /\.jvm-chart-section\s*\{/);
 });
 
 test("guide view styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/guide\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/guide\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.guide-v2\s*\{/);
   assert.match(guideCss, /\.guide-v2\s*\{/);
   assert.match(guideCss, /\.guide-monitoring-shell\s*\{/);
 });
 
 test("late UI enhancements keep their end-of-cascade stylesheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/ui-enhancements\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/ui-enhancements\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /Neon theme - fluorescent on dark/);
   assert.match(uiEnhancementsCss, /Late UI enhancements and interaction polish/);
   assert.match(uiEnhancementsCss, /Reduced motion/);
 });
 
 test("design system and light mode layers are explicit stylesheets", () => {
-  assert.match(indexHtml, /href="\.\/src\/design-system\.css\?v=20260525-1"[\s\S]*href="\.\/src\/guide\.css\?v=20260525-1"[\s\S]*href="\.\/src\/light-mode\.css\?v=20260525-1"[\s\S]*href="\.\/src\/ui-enhancements\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/design-system\.css\?v=20260525-1"[\s\S]*href="\.\/src\/styles\/guide\.css\?v=20260525-1"[\s\S]*href="\.\/src\/styles\/light-mode\.css\?v=20260525-1"[\s\S]*href="\.\/src\/styles\/ui-enhancements\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /SmartTrade design-system inspired skin/);
   assert.doesNotMatch(stylesCss, /LIGHT MODE/);
   assert.match(designSystemCss, /SmartTrade design-system inspired skin/);
@@ -93,7 +93,7 @@ test("design system and light mode layers are explicit stylesheets", () => {
 });
 
 test("analysis workbench components are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/analysis-workbench\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/analysis-workbench\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /Root Cause Matrix/);
   assert.match(analysisWorkbenchCss, /Root Cause Matrix/);
   assert.match(analysisWorkbenchCss, /\.timeline-stories\s*\{/);
@@ -101,7 +101,7 @@ test("analysis workbench components are isolated from the global sheet", () => {
 });
 
 test("analysis table shell styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/analysis-table\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/analysis-table\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.table-settings-head\s*,/);
   assert.doesNotMatch(stylesCss, /\.column-tooltip\s*\{/);
   assert.match(analysisTableCss, /\.analysis-layout\s*\{/);
@@ -110,7 +110,7 @@ test("analysis table shell styles are isolated from the global sheet", () => {
 });
 
 test("metric intelligence styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/metric-intelligence\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/metric-intelligence\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.metric-help-detail\s*\{/);
   assert.match(metricIntelligenceCss, /\.metric-help-detail\s*\{/);
   assert.match(metricIntelligenceCss, /\.metric-help-thresholds\s*,/);
@@ -118,7 +118,7 @@ test("metric intelligence styles are isolated from the global sheet", () => {
 });
 
 test("socket indicators and anomaly list styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/socket-indicators\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/socket-indicators\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.app-service-chip\s*\{/);
   assert.doesNotMatch(stylesCss, /\.anomaly-workbench\s*\{/);
   assert.match(socketIndicatorsCss, /\.risk\.critical\s*\{/);
@@ -127,7 +127,7 @@ test("socket indicators and anomaly list styles are isolated from the global she
 });
 
 test("diagnosis advisor card styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/advisor-diagnosis\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/advisor-diagnosis\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.advisor-shell\s*\{/);
   assert.doesNotMatch(stylesCss, /\.diagnosis-learn-more\s*\{/);
   assert.match(advisorDiagnosisCss, /\.advisor-shell\s*\{/);
@@ -136,7 +136,7 @@ test("diagnosis advisor card styles are isolated from the global sheet", () => {
 });
 
 test("service map and related modals are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/service-map\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/service-map\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.service-map-workbench\s*\{/);
   assert.doesNotMatch(stylesCss, /\.topology-modal\s*\{/);
   assert.match(serviceMapCss, /\.service-map-workbench\s*\{/);
@@ -145,7 +145,7 @@ test("service map and related modals are isolated from the global sheet", () => 
 });
 
 test("alerts templates and compare views are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/alerts-templates-compare\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/alerts-templates-compare\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.alert-workbench\s*\{/);
   assert.doesNotMatch(stylesCss, /\.compare-workbench\s*\{/);
   assert.match(alertsTemplatesCompareCss, /\.alert-workbench\s*\{/);
@@ -154,7 +154,7 @@ test("alerts templates and compare views are isolated from the global sheet", ()
 });
 
 test("core chart shell styles are isolated from the global sheet", () => {
-  assert.match(indexHtml, /href="\.\/src\/charts-core\.css\?v=20260525-1"/);
+  assert.match(indexHtml, /href="\.\/src\/styles\/charts-core\.css\?v=20260525-1"/);
   assert.doesNotMatch(stylesCss, /\.metric-token\s*\{/);
   assert.doesNotMatch(stylesCss, /\.metric-picks\s*\{/);
   assert.match(chartsCoreCss, /\.chart-toolbar\s*\{/);
@@ -636,7 +636,7 @@ test("dashboard preset selection keeps the picker responsive", () => {
 });
 
 test("analysis exposes a dedicated capture quality report tab", () => {
-  const captureQuality = readFileSync(new URL("../../src/capture-quality.js", import.meta.url), "utf8");
+  const captureQuality = readFileSync(new URL("../../src/analysis/capture-quality.js", import.meta.url), "utf8");
 
   assert.match(main, /import \{ analyzeCaptureQuality \} from "\.\/capture-quality\.js";/);
   assert.match(constants, /id:\s*"quality"[\s\S]*label:\s*"quality"[\s\S]*Capture Quality Report/);

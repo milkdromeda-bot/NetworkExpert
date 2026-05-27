@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { analysisTabGuide, renderAnalysisPageView, renderAnalysisTabsView } from "../../src/analysis-shell-view.js";
-import { escapeHtml, html } from "../../src/utils.js";
+import { analysisTabGuide, renderAnalysisPageView, renderAnalysisTabsView } from "../../src/views/analysis-shell-view.js";
+import { escapeHtml, html } from "../../src/core/utils.js";
 
 const tabs = [
   { id: "diagnosis", label: "diagnosis", short: "Prioritized hypotheses." },

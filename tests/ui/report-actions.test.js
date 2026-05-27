@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createReportActions } from "../../src/report-actions.js";
+import { createReportActions } from "../../src/reporting/report-actions.js";
 
 test("report actions keep filter token generation isolated from main.js", () => {
   const actions = createReportActions(() => ({

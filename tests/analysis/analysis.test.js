@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyzeAll, analyzeSocket, applyRisks, riskForSocket } from "../../src/analysis.js";
-import { parseSs } from "../../src/parser.js";
-import { withStableSocketIds } from "../../src/timeline.js";
+import { analyzeAll, analyzeSocket, applyRisks, riskForSocket } from "../../src/analysis/analysis.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { withStableSocketIds } from "../../src/timeline/timeline.js";
 
 function socketFrom(line) {
   return withStableSocketIds(parseSs(line))[0];

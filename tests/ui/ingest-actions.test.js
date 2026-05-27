@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { handleIngestAction } from "../../src/ingest-actions.js";
+import { handleIngestAction } from "../../src/events/ingest-actions.js";
 
 function createDeps(overrides = {}) {
   const calls = [];

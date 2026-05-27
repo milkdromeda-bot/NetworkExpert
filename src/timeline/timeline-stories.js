@@ -1,4 +1,4 @@
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 import { socketIdentityKey, parsedTimestampSnapshots } from "./timeline.js";
 
 const STORY_PATTERNS = [

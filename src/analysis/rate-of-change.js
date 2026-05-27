@@ -1,5 +1,5 @@
-import { parsedTimestampSnapshots, socketIdentityKey } from "./timeline.js";
-import { metricValue } from "./parser.js";
+import { parsedTimestampSnapshots, socketIdentityKey } from "../timeline/timeline.js";
+import { metricValue } from "../parsing/parser.js";
 
 const RATE_METRICS = [
   { key: "recvQ", label: "Recv-Q", unit: "bytes", dangerRate: 200000 },

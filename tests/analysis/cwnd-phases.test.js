@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectCwndPhases } from "../../src/cwnd-phases.js";
+import { detectCwndPhases } from "../../src/analysis/cwnd-phases.js";
 
 test("empty history returns empty phases", () => {
   const { phases, summary } = detectCwndPhases([]);

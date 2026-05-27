@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { drawPdfSection, drawPdfTextBlock, wrapPdfLines } from "../../src/report-utils.js";
+import { drawPdfSection, drawPdfTextBlock, wrapPdfLines } from "../../src/reporting/report-utils.js";
 
 const mockFont = {
   widthOfTextAtSize(text, size) {

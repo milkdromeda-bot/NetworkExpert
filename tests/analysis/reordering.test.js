@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectReordering } from "../../src/reordering.js";
-import { parseSs } from "../../src/parser.js";
-import { withStableSocketIds } from "../../src/timeline.js";
+import { detectReordering } from "../../src/analysis/reordering.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { withStableSocketIds } from "../../src/timeline/timeline.js";
 
 function socketsFrom(lines) { return withStableSocketIds(parseSs(lines)); }
 

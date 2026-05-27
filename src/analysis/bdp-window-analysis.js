@@ -1,4 +1,4 @@
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 
 const TCP_WINDOW_NO_SCALE_BYTES = 65535;
 const LOW_RCV_SPACE_BYTES = 8 * 1024;

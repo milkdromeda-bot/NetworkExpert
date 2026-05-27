@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildBaselineNarrative } from "../../src/compare.js";
+import { buildBaselineNarrative } from "../../src/analysis/compare.js";
 
 function makeComparison({ rows = [], summary = {} } = {}) {
   return {

@@ -1,4 +1,4 @@
-import { COLUMN_HELP, EXPERT_DEFAULT_THRESHOLDS } from "./expert-config.js";
+import { COLUMN_HELP, EXPERT_DEFAULT_THRESHOLDS } from "../config/expert-config.js";
 
 export function columnMetric(key) {
   return {

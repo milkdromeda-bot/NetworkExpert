@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { detectRateOfChange, RATE_METRICS } from "../../src/rate-of-change.js";
+import { detectRateOfChange, RATE_METRICS } from "../../src/analysis/rate-of-change.js";
 
 function snap(timestamp, sockets) {
   return [timestamp, ...sockets].join("\n");

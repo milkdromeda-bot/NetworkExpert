@@ -1,4 +1,4 @@
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 
 const UNSCALED_WINDOW_LIMIT_BYTES = 64 * 1024;
 const LOW_RECEIVE_SPACE_BYTES = 8 * 1024;

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { parseSs } from "../src/parser.js";
+import { parseSs } from "../../src/parsing/parser.js";
 
 function randomString(maxLen = 200) {
   const len = Math.floor(Math.random() * maxLen);

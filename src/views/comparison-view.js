@@ -1,4 +1,4 @@
-import { buildBaselineNarrative } from "./compare.js";
+import { buildBaselineNarrative } from "../analysis/compare.js";
 
 export function renderBaselineNarrative(ctx, comparison) {
   const { state, escapeHtml } = ctx;

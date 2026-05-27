@@ -1,5 +1,5 @@
-import { metricValue, parseSs } from "./parser.js";
-import { parsedTimestampSnapshots, socketIdentityKey, timestampBlocks } from "./timeline.js";
+import { metricValue, parseSs } from "../parsing/parser.js";
+import { parsedTimestampSnapshots, socketIdentityKey, timestampBlocks } from "../timeline/timeline.js";
 
 const REQUIRED_FEATURES = [
   { key: "timestamps", label: "Timestamped snapshots", weight: 16 },

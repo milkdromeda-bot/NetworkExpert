@@ -1,4 +1,4 @@
-import { applyRisks } from "./analysis.js";
+import { applyRisks } from "../analysis/analysis.js";
 import { parseSs, parseTimestampLine } from "./parser.js";
 
 export async function importSocketFile(file, { formatNumber, onProgress, preFilter = null }) {

@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const mainSource = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
-const jvmSource = readFileSync(new URL('../../src/jvm-correlation.js', import.meta.url), 'utf8');
+const mainSource = readFileSync(new URL('../../src/rendering/main.js', import.meta.url), 'utf8');
+const jvmSource = readFileSync(new URL('../../src/correlation/jvm-correlation.js', import.meta.url), 'utf8');
 
 test('JVM GC correlation UI is local receiver only', () => {
   assert.doesNotMatch(mainSource, /jvmCorrelationMode/);

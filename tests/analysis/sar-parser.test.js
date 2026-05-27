@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSar, correlateSarWithTcp } from "../../src/sar-parser.js";
+import { parseSar, correlateSarWithTcp } from "../../src/parsing/sar-parser.js";
 
 const SAR_CPU = `Linux 5.15.0-91-generic (prod-server) 	05/25/2026 	_x86_64_	(8 CPU)
 

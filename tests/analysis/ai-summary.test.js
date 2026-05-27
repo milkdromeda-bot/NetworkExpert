@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAiSummary } from "../../src/ai-summary.js";
+import { buildAiSummary } from "../../src/reporting/ai-summary.js";
 
 test("ai-summary returns default message when no data", () => {
   const result = buildAiSummary({});

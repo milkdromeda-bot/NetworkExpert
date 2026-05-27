@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectTailLatencyLens } from "../../src/tail-latency.js";
+import { detectTailLatencyLens } from "../../src/analysis/tail-latency.js";
 
 const thresholds = {
   rtt: { warn: 150, danger: 300 },

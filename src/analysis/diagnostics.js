@@ -1,4 +1,4 @@
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 import { analyzeBdpWindowLimit } from "./bdp-window-analysis.js";
 import { analyzeRcvSsthreshTrend } from "./rcv-ssthresh-analysis.js";
 import { analyzeWscaleContext } from "./wscale-analysis.js";

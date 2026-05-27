@@ -1,4 +1,4 @@
-import { ACCESS_ROLES, LINUX_PROFILES } from "./expert-config.js";
+import { ACCESS_ROLES, LINUX_PROFILES } from "../config/expert-config.js";
 
 export function createGuideView(context) {
   const { state, html, icons, escapeHtml, isAnalystRole, isLxcProfile, envCommand, linuxProfileLabel, accessRoleLabel, ubuntuProfileLabel, renderFields, commandForPeer, analysisTabGuide, analysisTabDocs = [] } = context;

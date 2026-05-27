@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { analyzeAll } from "../../src/analysis.js";
-import { buildDiagnosticHypotheses } from "../../src/diagnostics.js";
-import { parseSs } from "../../src/parser.js";
-import { withStableSocketIds } from "../../src/timeline.js";
+import { analyzeAll } from "../../src/analysis/analysis.js";
+import { buildDiagnosticHypotheses } from "../../src/analysis/diagnostics.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { withStableSocketIds } from "../../src/timeline/timeline.js";
 
 const thresholds = {
   sendQ: { warn: 262144, danger: 1048576 },

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildIncidentReportPdf } from "../../src/incident-report-pdf.js";
+import { buildIncidentReportPdf } from "../../src/reporting/incident-report-pdf.js";
 
 function fakePdfLib() {
   const page = {

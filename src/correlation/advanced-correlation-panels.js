@@ -697,7 +697,7 @@ function runFixCorrelation(callback) {
   };
   if (fix.records.length > 10000 && WorkerCtor()) {
     const WorkerClass = WorkerCtor();
-    const worker = new WorkerClass(new URL("./parse-worker.js", import.meta.url), { type: "module" });
+    const worker = new WorkerClass(new URL("../parsing/parse-worker.js", import.meta.url), { type: "module" });
     worker.postMessage({ type: "correlateFixLatency", payload: params });
     worker.onmessage = msg => {
       worker.terminate();

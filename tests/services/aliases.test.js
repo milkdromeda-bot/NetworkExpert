@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource, deleteEndpointAlias, endpointAliasKey, normalizeAliasStore, upsertEndpointAlias } from "../../src/aliases.js";
+import { aliasCountForSource, aliasDisplay, aliasForEndpoint, aliasListForSource, deleteEndpointAlias, endpointAliasKey, normalizeAliasStore, upsertEndpointAlias } from "../../src/services/aliases.js";
 
 test("endpoint alias keys are stable across spaces and case", () => {
   assert.equal(endpointAliasKey(" [::FFFF:10.0.0.1]:9100 "), "endpoint:[::ffff:10.0.0.1]:9100");

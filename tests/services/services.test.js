@@ -6,7 +6,7 @@ import {
   inferApplicationService,
   knownApplicationServices,
   serviceInferenceKey
-} from "../../src/services.js";
+} from "../../src/services/services.js";
 
 function socket({ family = "tcp", state = "ESTAB", local = "10.0.0.10:50000", peer = "10.0.0.20:443" } = {}) {
   const parse = endpoint => {

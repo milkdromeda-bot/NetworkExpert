@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { commandCoverage, toggleCommandOption } from '../../src/ss-command.js';
+import { commandCoverage, toggleCommandOption } from '../../src/parsing/ss-command.js';
 import {
   validateIpv4Address,
   validateIpv6Address,
@@ -8,7 +8,7 @@ import {
   validateTcpUdpPort,
   validateIntervalSeconds,
   validateSsCommandConfig
-} from '../../src/ss-command-validation.js';
+} from '../../src/parsing/ss-command-validation.js';
 
 const opts = (shorts) => shorts.map(s => [s, '', '', '']);
 const longOpts = (longs) => longs.map(l => ['', l, '', '']);

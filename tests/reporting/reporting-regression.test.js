@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations, resolveAnnotationEpoch } from "../../src/annotations.js";
-import { buildAnomaliesCsv, buildCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "../../src/evidence-pack.js";
-import { buildExecutiveSummary, pickExecutiveFocusSocket } from "../../src/executive-summary.js";
+import { annotationDefaultLabel, annotationTypeLabel, annotationTypeList, buildAnnotationAnchorOptions, buildAnnotationDraft, normalizeAnnotations, resolveAnnotationEpoch } from "../../src/timeline/annotations.js";
+import { buildAnomaliesCsv, buildCsv, buildEvidenceManifest, buildTimelinePayload, buildTopSocketsCsv, safeEvidenceFileName } from "../../src/reporting/evidence-pack.js";
+import { buildExecutiveSummary, pickExecutiveFocusSocket } from "../../src/reporting/executive-summary.js";
 
 // annotationTypeList
 test("annotationTypeList returns at least 4 types", () => {

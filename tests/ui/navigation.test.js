@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyContextAction, openTopologyModal, setActiveInvestigation } from "../../src/navigation.js";
+import { applyContextAction, openTopologyModal, setActiveInvestigation } from "../../src/core/navigation.js";
 
 function baseState() {
   return {

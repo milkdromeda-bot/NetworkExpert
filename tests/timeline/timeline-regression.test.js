@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSs } from "../../src/parser.js";
-import { socketKey, stableSocketId, withStableSocketIds, timestampBlocks, parsedTimestampSnapshots, aggregateParsedSocketsByKey } from "../../src/timeline.js";
-import { applyChartZoomOperation, clampZoomRange, nextZoomRange, zoomForMetric, zoomRangeFromDragSelection, DEFAULT_ZOOM, MIN_ZOOM_SPAN } from "../../src/chart-zoom.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { socketKey, stableSocketId, withStableSocketIds, timestampBlocks, parsedTimestampSnapshots, aggregateParsedSocketsByKey } from "../../src/timeline/timeline.js";
+import { applyChartZoomOperation, clampZoomRange, nextZoomRange, zoomForMetric, zoomRangeFromDragSelection, DEFAULT_ZOOM, MIN_ZOOM_SPAN } from "../../src/charts/chart-zoom.js";
 
 // socketKey
 test("socketKey includes all three components", () => {

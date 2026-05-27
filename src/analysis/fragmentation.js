@@ -2,7 +2,7 @@
  * IP fragmentation and MTU/MSS mismatch detection.
  * Analyzes sockets for path MTU issues, MSS clamping, and fragmentation indicators.
  */
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 
 const ETHERNET_MTU = 1500;
 const JUMBO_MTU = 9000;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildServiceMapData, buildServiceMapRoutes, serviceMapConnectivityOrder } from "../../src/service-map-model.js";
+import { buildServiceMapData, buildServiceMapRoutes, serviceMapConnectivityOrder } from "../../src/services/service-map-model.js";
 
 const riskRank = risk => ({ low: 1, medium: 2, high: 3, critical: 4 }[risk] || 0);
 

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectFragmentation } from "../../src/fragmentation.js";
-import { parseSs } from "../../src/parser.js";
-import { withStableSocketIds } from "../../src/timeline.js";
+import { detectFragmentation } from "../../src/analysis/fragmentation.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { withStableSocketIds } from "../../src/timeline/timeline.js";
 
 function socketsFrom(lines) { return withStableSocketIds(parseSs(lines)); }
 

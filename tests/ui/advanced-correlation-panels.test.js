@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createAdvancedCorrelationPanels } from "../../src/advanced-correlation-panels.js";
+import { createAdvancedCorrelationPanels } from "../../src/correlation/advanced-correlation-panels.js";
 
 function baseState() {
   return {

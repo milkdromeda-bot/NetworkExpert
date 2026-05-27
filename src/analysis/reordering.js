@@ -2,7 +2,7 @@
  * Packet reordering detection via TCP counters.
  * Uses reord_seen, dsack_dups, and retrans to identify reordering vs real loss.
  */
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 
 /**
  * @typedef {{ socket: object, severity: "high"|"medium"|"low", reordSeen: number, dsackDups: number, retrans: number, detail: string }} ReorderFinding

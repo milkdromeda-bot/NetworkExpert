@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inferApplicationService } from "../../src/services.js";
+import { inferApplicationService } from "../../src/services/services.js";
 import {
   applyServiceOverride,
   deleteServiceOverride,
   normalizeServiceOverrideStore,
   serviceOverrideForSocket,
   upsertServiceOverride
-} from "../../src/service-overrides.js";
+} from "../../src/services/service-overrides.js";
 
 function socket({ family = "tcp", state = "ESTAB", local = "10.0.0.10:50000", peer = "10.0.0.20:9200" } = {}) {
   const parse = endpoint => {

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseAddress, parseDuration, parseDetails, parseNumber, parseSs, parseTimestampLine, stripAnsi, inferFamily, metricValue } from "../../src/parser.js";
-import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/search.js";
-import { normalizeAnnotations, annotationSummary, annotationTypeList, annotationTypeLabel, resolveAnnotationEpoch, buildAnnotationAnchorOptions } from "../../src/annotations.js";
-import { defaultAlertRules, evaluateAlertRules } from "../../src/alerts.js";
-import { clearConversationScopeFilters, setActiveInvestigation, applyContextAction } from "../../src/navigation.js";
-import { socketKey, stableSocketId, withStableSocketIds, timestampBlocks, parsedTimestampSnapshots } from "../../src/timeline.js";
-import { endpointHost, endpointMatchesPattern, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey } from "../../src/topology.js";
-import { inferApplicationService, applicationServiceLabel, serviceInferenceKey } from "../../src/services.js";
+import { parseAddress, parseDuration, parseDetails, parseNumber, parseSs, parseTimestampLine, stripAnsi, inferFamily, metricValue } from "../../src/parsing/parser.js";
+import { parseAdvancedSearch, socketMatchesAdvancedQuery } from "../../src/config/search.js";
+import { normalizeAnnotations, annotationSummary, annotationTypeList, annotationTypeLabel, resolveAnnotationEpoch, buildAnnotationAnchorOptions } from "../../src/timeline/annotations.js";
+import { defaultAlertRules, evaluateAlertRules } from "../../src/config/alerts.js";
+import { clearConversationScopeFilters, setActiveInvestigation, applyContextAction } from "../../src/core/navigation.js";
+import { socketKey, stableSocketId, withStableSocketIds, timestampBlocks, parsedTimestampSnapshots } from "../../src/timeline/timeline.js";
+import { endpointHost, endpointMatchesPattern, normalizeTopologyProfile, topologyGroupForEndpoint, topologyScopeKey } from "../../src/config/topology.js";
+import { inferApplicationService, applicationServiceLabel, serviceInferenceKey } from "../../src/services/services.js";
 
 function socketFrom(line) {
   return withStableSocketIds(parseSs(line))[0];

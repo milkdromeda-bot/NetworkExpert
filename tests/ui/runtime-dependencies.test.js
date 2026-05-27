@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
-const advanced = readFileSync(new URL("../../src/advanced-correlation-panels.js", import.meta.url), "utf8");
-const metricCharts = readFileSync(new URL("../../src/metric-chart-engine.js", import.meta.url), "utf8");
-const appRendering = readFileSync(new URL("../../src/app-rendering.js", import.meta.url), "utf8");
-const reportActions = readFileSync(new URL("../../src/report-actions.js", import.meta.url), "utf8");
-const appEvents = readFileSync(new URL("../../src/app-event-bindings.js", import.meta.url), "utf8");
+const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+const advanced = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
+const metricCharts = readFileSync(new URL("../../src/charts/metric-chart-engine.js", import.meta.url), "utf8");
+const appRendering = readFileSync(new URL("../../src/rendering/app-rendering.js", import.meta.url), "utf8");
+const reportActions = readFileSync(new URL("../../src/reporting/report-actions.js", import.meta.url), "utf8");
+const appEvents = readFileSync(new URL("../../src/events/app-event-bindings.js", import.meta.url), "utf8");
 
 function functionBlock(name, source = main) {
   const start = source.indexOf(`function ${name}(`);

@@ -7,7 +7,7 @@ import {
   metricInterpretation,
   metricReliabilityProfile,
   metricSource
-} from "../../src/metric-intelligence.js";
+} from "../../src/analysis/metric-intelligence.js";
 
 test("metric source describes direct ss fields and derived rates", () => {
   assert.equal(metricSource("rtt"), "ss -i field rtt:<avg>/<var>");

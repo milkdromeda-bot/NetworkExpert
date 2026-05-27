@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { analyzeRcvSsthreshTrend, calculateRcvSsthreshChange, rcvSsthreshTechnicalNotes } from "../../src/rcv-ssthresh-analysis.js";
-import { parseSs } from "../../src/parser.js";
-import { withStableSocketIds } from "../../src/timeline.js";
+import { analyzeRcvSsthreshTrend, calculateRcvSsthreshChange, rcvSsthreshTechnicalNotes } from "../../src/analysis/rcv-ssthresh-analysis.js";
+import { parseSs } from "../../src/parsing/parser.js";
+import { withStableSocketIds } from "../../src/timeline/timeline.js";
 
 function socketFrom(line) {
   return withStableSocketIds(parseSs(line))[0];

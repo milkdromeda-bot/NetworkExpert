@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../../src/snapshot-compression.js";
+import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../../src/analysis/snapshot-compression.js";
 
 const base = [
   { local: "10.0.0.1:1000", peer: "10.0.0.2:443", state: "ESTAB", sendQ: 0, recvQ: 0, family: "tcp", details: { values: { rtt: { avg: 5, var: 1 }, cwnd: 10 }, skmem: { r: 0, rb: 100000, t: 0, tb: 100000, d: 0 }, timer: null } }

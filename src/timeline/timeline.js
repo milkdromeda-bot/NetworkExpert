@@ -1,4 +1,4 @@
-import { metricValue, parseSs, parseTimestampLine } from "./parser.js";
+import { metricValue, parseSs, parseTimestampLine } from "../parsing/parser.js";
 
 export function socketKey(socket) {
   return `${socket.local}|${socket.peer}|${socket.state}`;

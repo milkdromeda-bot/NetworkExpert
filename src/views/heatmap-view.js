@@ -1,4 +1,4 @@
-import { socketIdentityKey } from "./timeline.js";
+import { socketIdentityKey } from "../timeline/timeline.js";
 
 /**
  * @param {import('./app-context.js').AppContext} ctx

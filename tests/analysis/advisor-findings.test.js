@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { buildAdvisorFindings } from "../../src/advisor-findings.js";
+import { buildAdvisorFindings } from "../../src/analysis/advisor-findings.js";
 
 function baseDeps(overrides = {}) {
   const socket = {
@@ -67,7 +67,7 @@ test("advisor findings module detects Send-Q pressure", () => {
 });
 
 test("main delegates advisor logic to the extracted model", () => {
-  const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
 
   assert.match(main, /import \{ buildAdvisorFindings as buildAdvisorFindingsModel \} from "\.\/advisor-findings\.js";/);
   assert.match(main, /function advisorFindingDependencies\(\)/);

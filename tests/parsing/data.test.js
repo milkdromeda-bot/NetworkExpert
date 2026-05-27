@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { FIELD_DOCS, FIELD_GUIDANCE } from "../../src/data.js";
+import { FIELD_DOCS, FIELD_GUIDANCE } from "../../src/core/data.js";
 
 test("field guidance only references documented fields", () => {
   for (const key of Object.keys(FIELD_GUIDANCE)) {

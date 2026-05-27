@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { buildJiraReport } from "../../src/jira-report.js";
+import { buildJiraReport } from "../../src/reporting/jira-report.js";
 
 test("buildJiraReport renders hypotheses anomalies sockets and validation commands", () => {
   const report = buildJiraReport({
@@ -46,7 +46,7 @@ test("buildJiraReport renders hypotheses anomalies sockets and validation comman
 });
 
 test("main delegates Jira rendering to the extracted reporting module", () => {
-  const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
   assert.match(main, /import \{ buildJiraReport as buildJiraReportModel \} from "\.\/jira-report\.js";/);
   assert.match(main, /function jiraReportDependencies\(\)/);
   assert.match(main, /return buildJiraReportModel\(jiraReportDependencies\(\)\);/);

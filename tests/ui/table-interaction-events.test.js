@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bindTableInteractionEvents } from "../../src/table-interaction-events.js";
+import { bindTableInteractionEvents } from "../../src/events/table-interaction-events.js";
 
 function node(dataset = {}, value = "") {
   const listeners = new Map();

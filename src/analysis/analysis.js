@@ -1,4 +1,4 @@
-import { metricValue } from "./parser.js";
+import { metricValue } from "../parsing/parser.js";
 
 /** @param {import('./types.js').Anomaly[]} list @param {import('./types.js').Socket} socket @param {"critical"|"high"|"medium"|"low"} severity @param {string} title @param {string} detail @param {string} metric */
 export function addAnomaly(list, socket, severity, title, detail, metric) {

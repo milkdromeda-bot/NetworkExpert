@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildRootCauseMatrix, ROOT_CAUSES } from "../../src/root-cause-matrix.js";
+import { buildRootCauseMatrix, ROOT_CAUSES } from "../../src/analysis/root-cause-matrix.js";
 
 function makeSocket(overrides = {}) {
   return {

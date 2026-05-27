@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildGuidedChecklistItems } from "../../src/guided-checklist.js";
+import { buildGuidedChecklistItems } from "../../src/views/guided-checklist.js";
 
 const thresholds = {
   recvQ: { warn: 100, danger: 500 },

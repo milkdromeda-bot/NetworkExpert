@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildIncidentReportHtml } from "../../src/incident-report.js";
+import { buildIncidentReportHtml } from "../../src/reporting/incident-report.js";
 
 test("incident report generates valid HTML with doctype", () => {
   const html = buildIncidentReportHtml({ sourceName: "test.log" });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderServiceMapView } from "../../src/service-map-view.js";
+import { renderServiceMapView } from "../../src/views/service-map-view.js";
 
 function escapeHtml(value) {
   return String(value ?? "")

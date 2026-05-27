@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { detectTimelineStories, STORY_PATTERNS } from "../../src/timeline-stories.js";
+import { detectTimelineStories, STORY_PATTERNS } from "../../src/timeline/timeline-stories.js";
 
 function snap(timestamp, socketOverrides = {}) {
   const base = `${timestamp}

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { defaultAlertRules, evaluateAlertRules } from '../../src/alerts.js';
-import { socketMatchesAdvancedQuery } from '../../src/search.js';
+import { defaultAlertRules, evaluateAlertRules } from '../../src/config/alerts.js';
+import { socketMatchesAdvancedQuery } from '../../src/config/search.js';
 
 // --- defaultAlertRules tests ---
 
