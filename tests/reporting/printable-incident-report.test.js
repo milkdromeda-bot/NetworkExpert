@@ -62,9 +62,13 @@ test("printable incident report renders the current workspace frame", () => {
 
 test("main delegates printable incident report rendering to the extracted module", () => {
   const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+  const report = readFileSync(new URL("../../src/reporting/printable-incident-report.js", import.meta.url), "utf8");
+  const reportActions = readFileSync(new URL("../../src/reporting/report-data-actions.js", import.meta.url), "utf8");
 
-  assert.match(main, /import \{ buildPrintableIncidentReportHtml \} from "\.\/printable-incident-report\.js";/);
-  assert.match(main, /function printableIncidentReportDependencies\(\)/);
-  assert.match(main, /return buildPrintableIncidentReportHtml\(printableIncidentReportDependencies\(\), chartCaptures\);/);
+  assert.match(main, /import \{ buildPrintableIncidentReportHtml \} from "\.\.\/reporting\/printable-incident-report\.js";/);
+  assert.match(reportActions, /function printableIncidentReportDependencies\(\)/);
+  assert.match(reportActions, /return buildPrintableIncidentReportHtml\(printableIncidentReportDependencies\(\), chartCaptures\);/);
   assert.doesNotMatch(main, /const reportCss = `[\s\S]*NetworkExpert Incident Report/);
+  assert.match(report, /printableIncidentReportStyles/);
+  assert.doesNotMatch(report, /const reportCss = `[\s\S]*@media print/);
 });

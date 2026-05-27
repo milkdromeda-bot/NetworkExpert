@@ -8,6 +8,9 @@ const fixDrawing = readFileSync(new URL("../../src/correlation/fix-chart-drawing
 const metricCharts = readFileSync(new URL("../../src/charts/metric-chart-engine.js", import.meta.url), "utf8");
 const appRendering = readFileSync(new URL("../../src/rendering/app-rendering.js", import.meta.url), "utf8");
 const reportActions = readFileSync(new URL("../../src/reporting/report-actions.js", import.meta.url), "utf8");
+const reportChartActions = readFileSync(new URL("../../src/reporting/report-chart-actions.js", import.meta.url), "utf8");
+const reportDataActions = readFileSync(new URL("../../src/reporting/report-data-actions.js", import.meta.url), "utf8");
+const reportExportActions = readFileSync(new URL("../../src/reporting/report-export-actions.js", import.meta.url), "utf8");
 const appEvents = readFileSync(new URL("../../src/events/app-event-bindings.js", import.meta.url), "utf8");
 
 function functionBlock(name, source = main) {
@@ -101,8 +104,11 @@ test("large rendering and report actions stay behind small dependency factories"
   assert.match(main, /const reportActions = createReportActions\(reportActionDependencies\);/);
   assert.match(main, /function reportActionDependencies\(\)\s*\{/);
   assert.match(reportActions, /export function createReportActions\(getDeps\)/);
-  assert.match(reportActions, /async function exportEvidencePack\(\)/);
-  assert.match(reportActions, /function openIncidentReport\(\)/);
+  assert.match(reportActions, /createReportActionRuntime\(getDeps\)/);
+  assert.match(reportChartActions, /function captureIncidentReportCharts\(limit = 5\)/);
+  assert.match(reportDataActions, /function reportFilterTokens\(\)/);
+  assert.match(reportExportActions, /async function exportEvidencePack\(\)/);
+  assert.match(reportExportActions, /function openIncidentReport\(\)/);
 });
 
 test("event dependency factory keeps render callback executable", () => {
