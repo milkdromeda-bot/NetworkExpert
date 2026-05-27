@@ -2324,7 +2324,7 @@ function _renderSync() {
           </div>
         </div>
       </header>
-      <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.activeTab} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu">${["quality","diagnosis","advisor","templates","map","conversations","expert","timeline","alerts","compare","sockets","groups","anomalies","fields"].map(t => `<button data-tab="${t}" class="${t === state.activeTab ? "active" : ""}">${t}</button>`).join("")}</div>` : ""}` : state.view === "charts" ? `Monitoring → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : "Advisor"} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu"><button data-charts-tab="charts">Metrics</button><button data-charts-tab="bdp">BDP</button><button data-charts-tab="jvm">JVM Stall</button><button data-charts-tab="fix">FIX Latency</button></div>` : ""}` : "Guide"}</nav>
+      <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.activeTab} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu">${["quality","diagnosis","advisor","templates","map","conversations","expert","timeline","alerts","compare","sockets","groups","anomalies","fields"].map(t => `<button data-tab="${t}" class="${t === state.activeTab ? "active" : ""}">${t}</button>`).join("")}</div>` : ""}` : state.view === "charts" ? `Monitoring → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : state.chartsTab === "focus" ? "Focus" : "Advisor"} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu"><button data-charts-tab="charts">Metrics</button><button data-charts-tab="bdp">BDP</button><button data-charts-tab="jvm">JVM Stall</button><button data-charts-tab="fix">FIX Latency</button></div>` : ""}` : "Guide"}</nav>
       ${state.view !== "charts" ? renderInvestigationContext() : ""}
       ${state.view === "ingest" ? `<main id="main-content" class="workspace wide" role="main">${renderIngestPage()}</main>` : ""}
       ${state.view === "analysis" ? `<main id="main-content" class="workspace wide" role="main">${renderAnalysisPage()}</main>` : ""}
@@ -2335,6 +2335,7 @@ function _renderSync() {
           ${state.jvmGc.pauses.length ? `<button class="charts-sub-tab ${state.chartsTab === "jvm" ? "active" : ""}" data-charts-tab="jvm" role="tab" aria-selected="${state.chartsTab === "jvm"}">JVM Stall / GC</button>` : ""}
           ${state.fixLatency.records.length ? `<button class="charts-sub-tab ${state.chartsTab === "fix" ? "active" : ""}" data-charts-tab="fix" role="tab" aria-selected="${state.chartsTab === "fix"}">FIX Latency</button>` : ""}
           <button class="charts-sub-tab ${state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="advisor" role="tab" aria-selected="${state.chartsTab === "advisor"}">Advisor</button>
+          ${state.selectedId ? `<button class="charts-sub-tab ${state.chartsTab === "focus" ? "active" : ""}" data-charts-tab="focus" role="tab" aria-selected="${state.chartsTab === "focus"}"><i class="ri-focus-3-line"></i> Focus</button>` : ""}
           ${state.chartsTab === "charts" ? renderDashboardStudioInline() : ""}
         </nav>
         ${state.chartsTab === "charts" ? renderChartsGlobalToolbar() : ""}
@@ -2342,6 +2343,7 @@ function _renderSync() {
         ${state.chartsTab === "bdp" ? renderBdpWindowPanel() : ""}
         ${state.chartsTab === "jvm" ? renderJvmGcPanel() : ""}
         ${state.chartsTab === "fix" ? renderFixLatencyPanel() : ""}
+        ${state.chartsTab === "focus" ? renderFocusView() : ""}
         ${state.chartsTab === "advisor" ? renderChartsPage() : ""}
       </main>` : ""}
       ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
@@ -2438,6 +2440,7 @@ function renderInvestigationContext() {
     <div class="investigation-actions">
       <button data-context-action="details">${icons.activity} Details</button>
       <button data-context-action="charts">${icons.chart} Charts</button>
+      <button data-context-action="focus"><i class="ri-focus-3-line"></i> Focus</button>
       <button data-context-action="anomalies" class="${socketAnomalies.length ? "hot-action" : ""}">${icons.alert} Anomalies</button>
       <button data-context-action="conversations"><i class="ri-chat-3-line"></i> Conversations</button>
       <button class="icon" data-context-action="clear" title="Clear active context" aria-label="Clear active context">${icons.x}</button>
@@ -2890,6 +2893,37 @@ function renderChartsGlobalToolbar(...args) { return appRendering.renderChartsGl
 function renderAdvisorGlobalSummary(...args) { return appRendering.renderAdvisorGlobalSummary(...args); }
 function renderMetricsStatsTable(...args) { return appRendering.renderMetricsStatsTable(...args); }
 function renderChartsPage(...args) { return appRendering.renderChartsPage(...args); }
+function renderFocusView() {
+  const selected = socketsById().get(state.selectedId);
+  if (!selected) return `<section class="panel"><div class="panel-body"><p class="empty">Select a socket from the table to enter focus mode.</p></div></section>`;
+  const history = visibleHistory();
+  const allMetrics = chartMetricList();
+  const activeMetrics = allMetrics.filter(m => {
+    return history.some(row => { const v = Number(row?.[m]); return Number.isFinite(v) && v !== 0; });
+  });
+  if (!activeMetrics.length) return `<section class="panel"><div class="panel-body"><p class="empty">No metric data available for this socket.</p></div></section>`;
+  const layout = state.prefs.chartLayout;
+  return `<section class="panel focus-panel">
+    <div class="panel-head">
+      <div class="panel-title"><i class="ri-focus-3-line"></i> Focus — ${escapeHtml(selected.local)} → ${escapeHtml(selected.peer)}</div>
+      <div class="col-tools">
+        <button class="mini" data-chart-zoom="zoomIn" title="Zoom in">${icons.zoomIn}</button>
+        <button class="mini" data-chart-zoom="zoomOut" title="Zoom out">${icons.zoomOut}</button>
+        <button class="mini" data-chart-zoom="resetZoom" title="Reset zoom">${icons.reset}</button>
+        <button class="mini" data-chart-zoom="panLeft" title="Pan left">${icons.arrowLeft}</button>
+        <button class="mini" data-chart-zoom="panRight" title="Pan right">${icons.arrowRight}</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="focus-grid">
+        ${activeMetrics.map(m => `<div class="focus-chart-card chart-card" data-chart-card="${m}">
+          <div class="focus-chart-label">${escapeHtml(metricLabel(m))}</div>
+          <svg class="chart small-chart focus-chart" data-mini-chart="${m}" tabindex="0" role="img" aria-label="${escapeHtml(metricLabel(m))}"></svg>
+        </div>`).join("")}
+      </div>
+    </div>
+  </section>`;
+}
 function renderDashboardPresetPicker(...args) { return appRendering.renderDashboardPresetPicker(...args); }
 function renderDashboardStudioInline(...args) { return appRendering.renderDashboardStudioInline(...args); }
 function renderDashboardStudio(...args) { return appRendering.renderDashboardStudio(...args); }
@@ -3436,6 +3470,7 @@ function appEventDependencies() {
     savePrefs,
     normalizeBdpDirection,
     syncSsCommandFromBuilder,
+    syncFromCodeMirror,
     toggleCommandOption,
     normalizeSsEditorTheme,
     applySsEditorThemePreview,

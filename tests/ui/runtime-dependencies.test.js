@@ -5,6 +5,7 @@ import { test } from "node:test";
 const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
 const advanced = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
 const fixDrawing = readFileSync(new URL("../../src/correlation/fix-chart-drawing.js", import.meta.url), "utf8");
+const fixHeatmapDrawing = readFileSync(new URL("../../src/correlation/fix-heatmap-drawing.js", import.meta.url), "utf8");
 const jvmChartDrawing = readFileSync(new URL("../../src/correlation/jvm-chart-drawing.js", import.meta.url), "utf8");
 const metricCharts = readFileSync(new URL("../../src/charts/metric-chart-engine.js", import.meta.url), "utf8");
 const appRendering = readFileSync(new URL("../../src/rendering/app-rendering.js", import.meta.url), "utf8");
@@ -13,6 +14,8 @@ const reportChartActions = readFileSync(new URL("../../src/reporting/report-char
 const reportDataActions = readFileSync(new URL("../../src/reporting/report-data-actions.js", import.meta.url), "utf8");
 const reportExportActions = readFileSync(new URL("../../src/reporting/report-export-actions.js", import.meta.url), "utf8");
 const appEvents = readFileSync(new URL("../../src/events/app-event-bindings.js", import.meta.url), "utf8");
+const chartEvents = readFileSync(new URL("../../src/events/chart-event-bindings.js", import.meta.url), "utf8");
+const actionEvents = readFileSync(new URL("../../src/events/action-button-events.js", import.meta.url), "utf8");
 
 function functionBlock(name, source = main) {
   const start = source.indexOf(`function ${name}(`);
@@ -58,7 +61,8 @@ test("FIX chart draw functions accept injectable runtime dependencies", () => {
   assert.match(appRendering, /function drawFixCharts\(deps\) \{ return advancedCorrelationPanels\.drawFixCharts\(deps\); \}/);
   assert.match(fixDrawing, /function fixDrawDependencies\(\)\s*\{/);
   assert.match(fixDrawing, /function drawFixCharts\(deps = fixDrawDependencies\(\)\)/);
-  assert.match(fixDrawing, /function drawFixHeatmap\(canvas, results, fullT0, fullT1, deps = fixDrawDependencies\(\)\)/);
+  assert.match(fixDrawing, /createFixHeatmapDrawing\(\{ getDocument, fixTimeLabel, syncFixCrosshairs \}\)/);
+  assert.match(fixHeatmapDrawing, /function drawFixHeatmap\(canvas, results, fullT0, fullT1\)/);
   assert.match(fixDrawing, /function drawFixTimelineChart\(svg, results, history, gcPauses = null, gcWindowMs = 200, deps = fixDrawDependencies\(\)\)/);
   assert.match(fixDrawing, /function drawFixScatterChart\(svg, results, deps = fixDrawDependencies\(\)\)/);
   assert.match(fixDrawing, /function drawFixVmstatChart\(svg, vmsamples, fixResults, cpuCores = 0, deps = fixDrawDependencies\(\)\)/);
@@ -86,10 +90,10 @@ test("bindEvents is split into dependency-injected chart binders", () => {
   assert.match(main, /function bindChartChromeEvents\(deps = appEventDependencies\(\)\)/);
   assert.match(main, /function bindChartSeriesEvents\(deps = appEventDependencies\(\)\)/);
   assert.match(appEvents, /bindSourceFileEvents\(sourceFileEventDependencies\(\)\);/);
-  assert.match(appEvents, /handleServiceConfigAction\(action, event, serviceConfigActionDependencies\(\)\)/);
+  assert.match(actionEvents, /handleServiceConfigAction\(action, event, serviceConfigActionDependencies\(\)\)/);
   assert.match(appEvents, /bindTableInteractionEvents\(tableInteractionDependencies\(\)\);/);
   assert.match(appEvents, /bindSocketInteractionEvents\(socketInteractionDependencies\(\)\);/);
-  assert.match(appEvents, /handleLayoutProfileAction\(action, event, layoutProfileActionDependencies\(\)\)/);
+  assert.match(actionEvents, /handleLayoutProfileAction\(action, event, layoutProfileActionDependencies\(\)\)/);
   assert.match(appEvents, /bindChartMinimapEvents\(deps\);/);
   assert.match(appEvents, /bindChartChromeEvents\(deps\);/);
   assert.match(appEvents, /bindChartSeriesEvents\(deps\);/);
@@ -114,22 +118,22 @@ test("large rendering and report actions stay behind small dependency factories"
 
 test("event dependency factory keeps render callback executable", () => {
   const appDeps = functionBlock("appEventDependencies");
-  const chromeBinder = functionBlock("bindChartChromeEvents", appEvents);
+  const chromeBinder = functionBlock("bindChartChromeEvents", chartEvents);
   assert.match(appDeps, /\r?\n\s*render,\r?\n/);
   assert.doesNotMatch(appDeps, /render:\s*renderView\s*=\s*render/);
-  assert.match(chromeBinder, /render:\s*renderView\s*=\s*render/);
+  assert.match(chromeBinder, /render:\s*renderView/);
   assert.match(chromeBinder, /renderView\(\);/);
 });
 
 test("chart event binders use injected root state and redraw callbacks", () => {
-  assert.match(appEvents, /root\.querySelectorAll\("\[data-chart-zoom\]"\)\.forEach/);
-  assert.match(appEvents, /applyZoom\(action, metric\);/);
-  assert.match(appEvents, /drawBdp\(deps\);/);
-  assert.match(appEvents, /drawJvm\(deps\);/);
-  assert.match(appEvents, /drawFix\(deps\);/);
-  assert.match(appEvents, /root\.querySelectorAll\("\[data-chart-series-toggle\]"\)\.forEach/);
-  assert.match(appEvents, /root\.querySelectorAll\("\[data-jvm-series-key\]"\)\.forEach/);
-  assert.match(appEvents, /redrawMetric\(metric, `series:\$\{key\}`, deps\)/);
+  assert.match(chartEvents, /root\?\.querySelectorAll\("\[data-chart-zoom\]"\)\.forEach/);
+  assert.match(chartEvents, /applyZoom\(action, metric\);/);
+  assert.match(chartEvents, /drawBdp\(deps\);/);
+  assert.match(chartEvents, /drawJvm\(deps\);/);
+  assert.match(chartEvents, /drawFix\(deps\);/);
+  assert.match(chartEvents, /root\?\.querySelectorAll\("\[data-chart-series-toggle\]"\)\.forEach/);
+  assert.match(chartEvents, /root\?\.querySelectorAll\("\[data-jvm-series-key\]"\)\.forEach/);
+  assert.match(chartEvents, /redrawMetric\(metric, `series:\$\{key\}`, deps\)/);
 });
 
 test("JVM chart interactions use injected DOM root and redraw callback", () => {
