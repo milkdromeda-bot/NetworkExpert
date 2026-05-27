@@ -5,6 +5,8 @@ import { test } from "node:test";
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
 const advanced = readFileSync(new URL("../../src/advanced-correlation-panels.js", import.meta.url), "utf8");
 const metricCharts = readFileSync(new URL("../../src/metric-chart-engine.js", import.meta.url), "utf8");
+const appRendering = readFileSync(new URL("../../src/app-rendering.js", import.meta.url), "utf8");
+const reportActions = readFileSync(new URL("../../src/report-actions.js", import.meta.url), "utf8");
 const appEvents = readFileSync(new URL("../../src/app-event-bindings.js", import.meta.url), "utf8");
 
 function functionBlock(name, source = main) {
@@ -36,7 +38,8 @@ test("chart draw functions accept injectable runtime dependencies", () => {
 });
 
 test("JVM chart draw functions accept injectable runtime dependencies", () => {
-  assert.match(main, /function drawJvmCharts\(deps\) \{ return advancedCorrelationPanels\.drawJvmCharts\(deps\); \}/);
+  assert.match(main, /function drawJvmCharts\(\.\.\.args\) \{ return appRendering\.drawJvmCharts\(\.\.\.args\); \}/);
+  assert.match(appRendering, /function drawJvmCharts\(deps\) \{ return advancedCorrelationPanels\.drawJvmCharts\(deps\); \}/);
   assert.match(advanced, /function jvmDrawDependencies\(\)\s*\{/);
   assert.match(advanced, /function drawJvmCharts\(deps = jvmDrawDependencies\(\)\)/);
   assert.match(advanced, /function drawJvmTimelineChartInteractive\(svg, results, history, deps = jvmDrawDependencies\(\)\)/);
@@ -46,7 +49,8 @@ test("JVM chart draw functions accept injectable runtime dependencies", () => {
 });
 
 test("FIX chart draw functions accept injectable runtime dependencies", () => {
-  assert.match(main, /function drawFixCharts\(deps\) \{ return advancedCorrelationPanels\.drawFixCharts\(deps\); \}/);
+  assert.match(main, /function drawFixCharts\(\.\.\.args\) \{ return appRendering\.drawFixCharts\(\.\.\.args\); \}/);
+  assert.match(appRendering, /function drawFixCharts\(deps\) \{ return advancedCorrelationPanels\.drawFixCharts\(deps\); \}/);
   assert.match(advanced, /function fixDrawDependencies\(\)\s*\{/);
   assert.match(advanced, /function drawFixCharts\(deps = fixDrawDependencies\(\)\)/);
   assert.match(advanced, /function drawFixHeatmap\(canvas, results, fullT0, fullT1, deps = fixDrawDependencies\(\)\)/);
@@ -84,6 +88,20 @@ test("bindEvents is split into dependency-injected chart binders", () => {
   assert.match(appEvents, /bindChartMinimapEvents\(deps\);/);
   assert.match(appEvents, /bindChartChromeEvents\(deps\);/);
   assert.match(appEvents, /bindChartSeriesEvents\(deps\);/);
+});
+
+test("large rendering and report actions stay behind small dependency factories", () => {
+  assert.match(main, /const appRendering = createAppRendering\(appRenderingDependencies\);/);
+  assert.match(main, /function appRenderingDependencies\(\)\s*\{/);
+  assert.match(appRendering, /export function createAppRendering\(getDeps\)/);
+  assert.match(appRendering, /function renderChartsPage\(\)/);
+  assert.match(appRendering, /function renderSocketTable\(\)/);
+
+  assert.match(main, /const reportActions = createReportActions\(reportActionDependencies\);/);
+  assert.match(main, /function reportActionDependencies\(\)\s*\{/);
+  assert.match(reportActions, /export function createReportActions\(getDeps\)/);
+  assert.match(reportActions, /async function exportEvidencePack\(\)/);
+  assert.match(reportActions, /function openIncidentReport\(\)/);
 });
 
 test("event dependency factory keeps render callback executable", () => {
