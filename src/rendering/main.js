@@ -3,7 +3,8 @@ import { metricValue, parseTimestampLine } from "../parsing/parser.js";
 import { analyzeAll, applyRisks } from "../analysis/analysis.js";
 import { importSocketFile } from "../parsing/importer.js?v=20260425-2";
 import { socketMatchesAdvancedQuery } from "../config/search.js";
-import { defaultAlertRules, evaluateAlertRules as evaluateAlertRuleEvents, loadAlertAcks, loadAlertRules, saveAlertAcks as persistAlertAcks, saveAlertRules as persistAlertRules } from "../config/alerts.js";
+import { defaultAlertRules, evaluateAlertRules as evaluateAlertRuleEvents } from "../config/alerts.js";
+import { loadAlertRules, loadAlertAcks, saveAlertRules as saveAlertRulesRaw, saveAlertAcks as saveAlertAcksRaw, loadFilterHistory, saveFilterHistory as saveFilterHistoryRaw, loadTableProfiles, saveTableProfiles as saveTableProfilesRaw, loadDashboardProfiles, saveDashboardProfiles as saveDashboardProfilesRaw, loadServiceAliases, saveServiceAliases as saveServiceAliasesRaw, loadServiceOverrides, saveServiceOverrides as saveServiceOverridesRaw, loadTopologyProfiles, loadTopologyForSource, saveTopologyProfiles, loadAnnotations, saveAnnotations as saveAnnotationsRaw, loadPrefsRaw, savePrefsRaw, loadTableStateRaw, saveTableStateRaw } from "./persistence.js";
 import { ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, applyAnalysisTemplate as applyTemplateProfile, applyDashboardPreset as applyDashboardPresetProfile, applyDashboardProfile as applySavedDashboardProfile, dashboardSnapshot as createDashboardSnapshot } from "../config/profiles.js";
 import { buildComparison as buildBaselineComparison, createBaseline as createBaselineSnapshot, buildBaselineNarrative } from "../analysis/compare.js";
 import { ipIntelDetail, ipIntelSummary, publicPeerIps } from "../services/ip-intel.js";
@@ -493,24 +494,20 @@ function savePrefs() {
   state.prefs.ssEditorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
   state.prefs.bdpDirection = normalizeBdpDirection(state.prefs.bdpDirection);
   state.prefs.configuredLinkCapacityMbps = configuredLinkCapacityMbps() || "";
-  localStorage.setItem("networkExpertPrefs", JSON.stringify(state.prefs));
+  savePrefsRaw(state.prefs);
 }
 
 function loadTableState(pageSize = prefsDefault.defaultPageSize) {
   const defaults = defaultTableState(pageSize);
   try {
-    return normalizeTableState({
-      ...defaults,
-      ...JSON.parse(localStorage.getItem(TABLE_STATE_STORAGE_KEY) || "{}")
-    }, TABLE_COLUMNS, defaults);
+    return normalizeTableState({ ...defaults, ...loadTableStateRaw() }, TABLE_COLUMNS, defaults);
   } catch {
     return normalizeTableState(defaults, TABLE_COLUMNS, defaults);
   }
 }
 
 function saveTableState() {
-  state.table = normalizeTableState(state.table, TABLE_COLUMNS, tableDefaults());
-  localStorage.setItem(TABLE_STATE_STORAGE_KEY, JSON.stringify(tableStateSnapshot(state.table)));
+  state.table = saveTableStateRaw(state.table, TABLE_COLUMNS, tableDefaults());
 }
 
 function clearVisibleHistoryCache() {
@@ -520,17 +517,8 @@ function clearVisibleHistoryCache() {
   state.cache.visibleHistoryRowsByKey?.clear();
 }
 
-function loadAnnotations() {
-  try {
-    return normalizeAnnotations(JSON.parse(localStorage.getItem("networkExpertAnnotations") || "[]"));
-  } catch {
-    return [];
-  }
-}
-
 function saveAnnotations() {
-  state.annotations = normalizeAnnotations(state.annotations);
-  localStorage.setItem("networkExpertAnnotations", JSON.stringify(state.annotations));
+  state.annotations = saveAnnotationsRaw(state.annotations);
 }
 
 function annotationSocketId() {
@@ -610,78 +598,7 @@ function openAnnotationModal(metric = "*", context = null) {
   render();
 }
 
-function loadFilterHistory() {
-  try {
-    return JSON.parse(localStorage.getItem("networkExpertFilterHistory") || "[]");
-  } catch {
-    return [];
-  }
-}
 
-function saveFilterHistory() {
-  localStorage.setItem("networkExpertFilterHistory", JSON.stringify(state.filterHistory.slice(0, 40)));
-}
-
-function loadTableProfiles() {
-  try {
-    return JSON.parse(localStorage.getItem("networkExpertTableProfiles") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveTableProfiles() {
-  localStorage.setItem("networkExpertTableProfiles", JSON.stringify(state.tableProfiles.slice(0, 30)));
-}
-
-function loadDashboardProfiles() {
-  try {
-    return JSON.parse(localStorage.getItem("networkExpertDashboardProfiles") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveDashboardProfiles() {
-  localStorage.setItem("networkExpertDashboardProfiles", JSON.stringify(state.dashboardProfiles.slice(0, 24)));
-}
-
-function loadServiceAliases() {
-  try {
-    return normalizeAliasStore(JSON.parse(localStorage.getItem("networkExpertServiceAliases") || "{}"));
-  } catch {
-    return {};
-  }
-}
-
-function saveServiceAliases() {
-  localStorage.setItem("networkExpertServiceAliases", JSON.stringify(normalizeAliasStore(state.serviceAliases)));
-}
-
-function loadServiceOverrides() {
-  try {
-    return normalizeServiceOverrideStore(JSON.parse(localStorage.getItem("networkExpertServiceOverrides") || "{}"));
-  } catch {
-    return normalizeServiceOverrideStore({});
-  }
-}
-
-function saveServiceOverrides() {
-  localStorage.setItem("networkExpertServiceOverrides", JSON.stringify(normalizeServiceOverrideStore(state.serviceOverrides)));
-}
-
-function loadTopologyProfiles() {
-  try {
-    const saved = JSON.parse(localStorage.getItem("networkExpertTopologyProfiles") || "{}");
-    return Object.fromEntries(Object.entries(saved).map(([scope, profile]) => [scope, normalizeTopologyProfile(profile)]));
-  } catch {
-    return {};
-  }
-}
-
-function loadTopologyForSource(sourceName) {
-  return normalizeTopologyProfile(loadTopologyProfiles()[topologyScopeKey(sourceName)]);
-}
 
 function setSourceName(sourceName) {
   state.sourceName = sourceName;
@@ -694,16 +611,10 @@ function saveCurrentTopology() {
   const scope = topologyScopeKey(state.sourceName);
   state.topology = normalizeTopologyProfile(state.topology);
   state.topologyProfiles = { ...state.topologyProfiles, [scope]: state.topology };
-  localStorage.setItem("networkExpertTopologyProfiles", JSON.stringify(state.topologyProfiles));
+  saveTopologyProfiles(state.topologyProfiles);
 }
 
-function saveAlertRules() {
-  persistAlertRules(state.alertRules);
-}
 
-function saveAlertAcks() {
-  persistAlertAcks(state.alertAcks);
-}
 
 function ssOptionIntel(short, long, desc, group) {
   return ssOptionIntelView(SS_OPTION_INTEL, short, long, desc, group);
@@ -3308,7 +3219,7 @@ function rememberFilterHistory(filters) {
     other.srcPort === item.srcPort &&
     other.dstPort === item.dstPort
   )).slice(0, 40);
-  saveFilterHistory();
+  saveFilterHistoryRaw(state.filterHistory);
 }
 
 function toast(title, text, type = "") {
@@ -3507,11 +3418,11 @@ function appEventDependencies() {
     closeDashboardPresetMenu,
     commitDashboardPresetChoice,
     applyDashboardProfile,
-    saveDashboardProfiles,
-    saveAlertAcks,
+    saveDashboardProfiles: () => saveDashboardProfilesRaw(state.dashboardProfiles),
+    saveAlertAcks: () => saveAlertAcksRaw(state.alertAcks),
     defaultAlertRules,
-    saveAlertRules,
-    saveFilterHistory,
+    saveAlertRules: () => saveAlertRulesRaw(state.alertRules),
+    saveFilterHistory: () => saveFilterHistoryRaw(state.filterHistory),
     hasPreImportFilterValue,
     emptyPreImportFilters,
     importFile,
@@ -3621,10 +3532,10 @@ function serviceConfigActionDependencies() {
     currentAliasDisplay,
     upsertEndpointAlias,
     deleteEndpointAlias,
-    saveServiceAliases,
+    saveServiceAliases: () => saveServiceAliasesRaw(state.serviceAliases),
     upsertServiceOverride,
     deleteServiceOverride,
-    saveServiceOverrides,
+    saveServiceOverrides: () => saveServiceOverridesRaw(state.serviceOverrides),
     upsertTopologyGroup,
     deleteTopologyGroup,
     saveCurrentTopology,
@@ -3648,7 +3559,7 @@ function tableInteractionDependencies() {
     toggleTableColumnVisibility,
     saveTableState,
     applyTableLayout,
-    saveTableProfiles,
+    saveTableProfiles: () => saveTableProfilesRaw(state.tableProfiles),
     moveTableColumn,
     toast,
     renderKeepingWorkspacePosition,
@@ -3696,9 +3607,9 @@ function layoutProfileActionDependencies() {
     defaultTableColumns,
     saveTableState,
     tableLayoutSnapshot,
-    saveTableProfiles,
+    saveTableProfiles: () => saveTableProfilesRaw(state.tableProfiles),
     applyDashboardProfile,
-    saveDashboardProfiles,
+    saveDashboardProfiles: () => saveDashboardProfilesRaw(state.dashboardProfiles),
     dashboardSnapshot,
     dashboardPresetIdOrDefault,
     savePrefs,

@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
 const advanced = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
+const fixDrawing = readFileSync(new URL("../../src/correlation/fix-chart-drawing.js", import.meta.url), "utf8");
 const metricCharts = readFileSync(new URL("../../src/charts/metric-chart-engine.js", import.meta.url), "utf8");
 const appRendering = readFileSync(new URL("../../src/rendering/app-rendering.js", import.meta.url), "utf8");
 const reportActions = readFileSync(new URL("../../src/reporting/report-actions.js", import.meta.url), "utf8");
@@ -51,13 +52,13 @@ test("JVM chart draw functions accept injectable runtime dependencies", () => {
 test("FIX chart draw functions accept injectable runtime dependencies", () => {
   assert.match(main, /function drawFixCharts\(\.\.\.args\) \{ return appRendering\.drawFixCharts\(\.\.\.args\); \}/);
   assert.match(appRendering, /function drawFixCharts\(deps\) \{ return advancedCorrelationPanels\.drawFixCharts\(deps\); \}/);
-  assert.match(advanced, /function fixDrawDependencies\(\)\s*\{/);
-  assert.match(advanced, /function drawFixCharts\(deps = fixDrawDependencies\(\)\)/);
-  assert.match(advanced, /function drawFixHeatmap\(canvas, results, fullT0, fullT1, deps = fixDrawDependencies\(\)\)/);
-  assert.match(advanced, /function drawFixTimelineChart\(svg, results, history, gcPauses = null, gcWindowMs = 200, deps = fixDrawDependencies\(\)\)/);
-  assert.match(advanced, /function drawFixScatterChart\(svg, results, deps = fixDrawDependencies\(\)\)/);
-  assert.match(advanced, /function drawFixVmstatChart\(svg, vmsamples, fixResults, cpuCores = 0, deps = fixDrawDependencies\(\)\)/);
-  assert.match(advanced, /function drawFixNstatChart\(svg, nsamples, fixResults, deps = fixDrawDependencies\(\)\)/);
+  assert.match(fixDrawing, /function fixDrawDependencies\(\)\s*\{/);
+  assert.match(fixDrawing, /function drawFixCharts\(deps = fixDrawDependencies\(\)\)/);
+  assert.match(fixDrawing, /function drawFixHeatmap\(canvas, results, fullT0, fullT1, deps = fixDrawDependencies\(\)\)/);
+  assert.match(fixDrawing, /function drawFixTimelineChart\(svg, results, history, gcPauses = null, gcWindowMs = 200, deps = fixDrawDependencies\(\)\)/);
+  assert.match(fixDrawing, /function drawFixScatterChart\(svg, results, deps = fixDrawDependencies\(\)\)/);
+  assert.match(fixDrawing, /function drawFixVmstatChart\(svg, vmsamples, fixResults, cpuCores = 0, deps = fixDrawDependencies\(\)\)/);
+  assert.match(fixDrawing, /function drawFixNstatChart\(svg, nsamples, fixResults, deps = fixDrawDependencies\(\)\)/);
 });
 
 test("chart draw dependencies isolate DOM and mutable app state", () => {
@@ -133,11 +134,11 @@ test("JVM chart interactions use injected DOM root and redraw callback", () => {
 });
 
 test("FIX chart draw orchestration uses injected root and chart callbacks", () => {
-  assert.match(advanced, /const \{[\s\S]*root = getDocument\(\),[\s\S]*drawFixTimelineChart: drawTimeline = drawFixTimelineChart[\s\S]*drawFixHeatmap: drawHeatmap = drawFixHeatmap[\s\S]*\} = deps;/);
-  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='timeline'\]"\)/);
-  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='scatter'\]"\)/);
-  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='vmstat'\]"\)/);
-  assert.match(advanced, /root\.querySelector\("\[data-fix-chart='nstat'\]"\)/);
-  assert.match(advanced, /root\.querySelectorAll\("\[data-fix-heatmap\]"\)/);
-  assert.match(advanced, /drawHeatmap\(c, results, tMin, tMax, deps\)/);
+  assert.match(fixDrawing, /const \{[\s\S]*root = getDocument\(\),[\s\S]*drawFixTimelineChart: drawTimeline = drawFixTimelineChart[\s\S]*drawFixHeatmap: drawHeatmap = drawFixHeatmap[\s\S]*\} = deps;/);
+  assert.match(fixDrawing, /root\.querySelector\("\[data-fix-chart='timeline'\]"\)/);
+  assert.match(fixDrawing, /root\.querySelector\("\[data-fix-chart='scatter'\]"\)/);
+  assert.match(fixDrawing, /root\.querySelector\("\[data-fix-chart='vmstat'\]"\)/);
+  assert.match(fixDrawing, /root\.querySelector\("\[data-fix-chart='nstat'\]"\)/);
+  assert.match(fixDrawing, /root\.querySelectorAll\("\[data-fix-heatmap\]"\)/);
+  assert.match(fixDrawing, /drawHeatmap\(c, results, tMin, tMax, deps\)/);
 });
