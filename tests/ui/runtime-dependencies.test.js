@@ -4,6 +4,8 @@ import { test } from "node:test";
 
 const main = readFileSync(new URL("../../src/main.js", import.meta.url), "utf8");
 const advanced = readFileSync(new URL("../../src/advanced-correlation-panels.js", import.meta.url), "utf8");
+const metricCharts = readFileSync(new URL("../../src/metric-chart-engine.js", import.meta.url), "utf8");
+const appEvents = readFileSync(new URL("../../src/app-event-bindings.js", import.meta.url), "utf8");
 
 function functionBlock(name, source = main) {
   const start = source.indexOf(`function ${name}(`);
@@ -55,12 +57,12 @@ test("FIX chart draw functions accept injectable runtime dependencies", () => {
 });
 
 test("chart draw dependencies isolate DOM and mutable app state", () => {
-  assert.match(main, /const \{ root = document, state: appState = state, drawChartInto: drawInto = drawChartInto \} = deps;/);
-  assert.match(main, /const \{ state: appState = state, attachChartInteractions: attachInteractions = attachChartInteractions \} = deps;/);
-  assert.match(main, /root\.querySelectorAll\("\[data-mini-chart\]"\)/);
-  assert.match(main, /root\.querySelectorAll\("\[data-minimap\]"\)/);
-  assert.match(main, /appState\.prefs\.chartLayout\.showThresholds/);
-  assert.match(main, /attachInteractions\(svg, deps\)/);
+  assert.match(metricCharts, /const \{ root = document, state: appState = state, drawChartInto: drawInto = drawChartInto \} = deps;/);
+  assert.match(metricCharts, /const \{ state: appState = state, attachChartInteractions: attachInteractions = attachChartInteractions \} = deps;/);
+  assert.match(metricCharts, /root\.querySelectorAll\("\[data-mini-chart\]"\)/);
+  assert.match(metricCharts, /root\.querySelectorAll\("\[data-minimap\]"\)/);
+  assert.match(metricCharts, /appState\.prefs\.chartLayout\.showThresholds/);
+  assert.match(metricCharts, /attachInteractions\(svg, deps\)/);
 });
 
 test("bindEvents is split into dependency-injected chart binders", () => {
@@ -74,19 +76,19 @@ test("bindEvents is split into dependency-injected chart binders", () => {
   assert.match(main, /function bindChartMinimapEvents\(deps = appEventDependencies\(\)\)/);
   assert.match(main, /function bindChartChromeEvents\(deps = appEventDependencies\(\)\)/);
   assert.match(main, /function bindChartSeriesEvents\(deps = appEventDependencies\(\)\)/);
-  assert.match(main, /bindSourceFileEvents\(sourceFileEventDependencies\(\)\);/);
-  assert.match(main, /handleServiceConfigAction\(action, event, serviceConfigActionDependencies\(\)\)/);
-  assert.match(main, /bindTableInteractionEvents\(tableInteractionDependencies\(\)\);/);
-  assert.match(main, /bindSocketInteractionEvents\(socketInteractionDependencies\(\)\);/);
-  assert.match(main, /handleLayoutProfileAction\(action, event, layoutProfileActionDependencies\(\)\)/);
-  assert.match(main, /bindChartMinimapEvents\(deps\);/);
-  assert.match(main, /bindChartChromeEvents\(deps\);/);
-  assert.match(main, /bindChartSeriesEvents\(deps\);/);
+  assert.match(appEvents, /bindSourceFileEvents\(sourceFileEventDependencies\(\)\);/);
+  assert.match(appEvents, /handleServiceConfigAction\(action, event, serviceConfigActionDependencies\(\)\)/);
+  assert.match(appEvents, /bindTableInteractionEvents\(tableInteractionDependencies\(\)\);/);
+  assert.match(appEvents, /bindSocketInteractionEvents\(socketInteractionDependencies\(\)\);/);
+  assert.match(appEvents, /handleLayoutProfileAction\(action, event, layoutProfileActionDependencies\(\)\)/);
+  assert.match(appEvents, /bindChartMinimapEvents\(deps\);/);
+  assert.match(appEvents, /bindChartChromeEvents\(deps\);/);
+  assert.match(appEvents, /bindChartSeriesEvents\(deps\);/);
 });
 
 test("event dependency factory keeps render callback executable", () => {
   const appDeps = functionBlock("appEventDependencies");
-  const chromeBinder = functionBlock("bindChartChromeEvents");
+  const chromeBinder = functionBlock("bindChartChromeEvents", appEvents);
   assert.match(appDeps, /\r?\n\s*render,\r?\n/);
   assert.doesNotMatch(appDeps, /render:\s*renderView\s*=\s*render/);
   assert.match(chromeBinder, /render:\s*renderView\s*=\s*render/);
@@ -94,14 +96,14 @@ test("event dependency factory keeps render callback executable", () => {
 });
 
 test("chart event binders use injected root state and redraw callbacks", () => {
-  assert.match(main, /root\.querySelectorAll\("\[data-chart-zoom\]"\)\.forEach/);
-  assert.match(main, /applyZoom\(action, metric\);/);
-  assert.match(main, /drawBdp\(deps\);/);
-  assert.match(main, /drawJvm\(deps\);/);
-  assert.match(main, /drawFix\(deps\);/);
-  assert.match(main, /root\.querySelectorAll\("\[data-chart-series-toggle\]"\)\.forEach/);
-  assert.match(main, /root\.querySelectorAll\("\[data-jvm-series-key\]"\)\.forEach/);
-  assert.match(main, /redrawMetric\(metric, `series:\$\{key\}`, deps\)/);
+  assert.match(appEvents, /root\.querySelectorAll\("\[data-chart-zoom\]"\)\.forEach/);
+  assert.match(appEvents, /applyZoom\(action, metric\);/);
+  assert.match(appEvents, /drawBdp\(deps\);/);
+  assert.match(appEvents, /drawJvm\(deps\);/);
+  assert.match(appEvents, /drawFix\(deps\);/);
+  assert.match(appEvents, /root\.querySelectorAll\("\[data-chart-series-toggle\]"\)\.forEach/);
+  assert.match(appEvents, /root\.querySelectorAll\("\[data-jvm-series-key\]"\)\.forEach/);
+  assert.match(appEvents, /redrawMetric\(metric, `series:\$\{key\}`, deps\)/);
 });
 
 test("JVM chart interactions use injected DOM root and redraw callback", () => {
