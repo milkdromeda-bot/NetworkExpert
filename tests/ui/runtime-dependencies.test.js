@@ -9,6 +9,8 @@ const fixHeatmapDrawing = readFileSync(new URL("../../src/correlation/fix-heatma
 const jvmChartDrawing = readFileSync(new URL("../../src/correlation/jvm-chart-drawing.js", import.meta.url), "utf8");
 const metricCharts = readFileSync(new URL("../../src/charts/metric-chart-engine.js", import.meta.url), "utf8");
 const appRendering = readFileSync(new URL("../../src/rendering/app-rendering.js", import.meta.url), "utf8");
+const chartsPageRendering = readFileSync(new URL("../../src/views/charts-page-rendering.js", import.meta.url), "utf8");
+const socketTableRendering = readFileSync(new URL("../../src/views/socket-table-rendering.js", import.meta.url), "utf8");
 const reportActions = readFileSync(new URL("../../src/reporting/report-actions.js", import.meta.url), "utf8");
 const reportChartActions = readFileSync(new URL("../../src/reporting/report-chart-actions.js", import.meta.url), "utf8");
 const reportDataActions = readFileSync(new URL("../../src/reporting/report-data-actions.js", import.meta.url), "utf8");
@@ -103,8 +105,10 @@ test("large rendering and report actions stay behind small dependency factories"
   assert.match(main, /const appRendering = createAppRendering\(appRenderingDependencies\);/);
   assert.match(main, /function appRenderingDependencies\(\)\s*\{/);
   assert.match(appRendering, /export function createAppRendering\(getDeps\)/);
-  assert.match(appRendering, /function renderChartsPage\(\)/);
-  assert.match(appRendering, /function renderSocketTable\(\)/);
+  assert.match(appRendering, /function renderChartsPage\(\.\.\.args\) \{ return chartsPageRendering\.renderChartsPage\(\.\.\.args\); \}/);
+  assert.match(chartsPageRendering, /function renderChartsPage\(\)/);
+  assert.match(appRendering, /function renderSocketTable\(\.\.\.args\) \{ return socketTableRendering\.renderSocketTable\(\.\.\.args\); \}/);
+  assert.match(socketTableRendering, /function renderSocketTable\(\)/);
 
   assert.match(main, /const reportActions = createReportActions\(reportActionDependencies\);/);
   assert.match(main, /function reportActionDependencies\(\)\s*\{/);
