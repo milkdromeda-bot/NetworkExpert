@@ -319,7 +319,10 @@
   border-radius: var(--radius-md);
   padding: var(--space-2h);
 }
-.anomaly { border-left: 4px solid var(--yellow); }
+.anomaly { border-left: 4px solid var(--yellow); max-height: 80px; overflow: hidden; position: relative; transition: max-height .2s; }
+.anomaly:hover, .anomaly:focus-within { max-height: 600px; }
+.anomaly::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 24px; background: linear-gradient(transparent, #080d14); pointer-events: none; }
+.anomaly:hover::after, .anomaly:focus-within::after { display: none; }
 .anomaly.critical { border-left-color: var(--color-danger); }
 .anomaly.high { border-left-color: var(--orange); }
 .anomaly.medium { border-left-color: var(--color-warning); }

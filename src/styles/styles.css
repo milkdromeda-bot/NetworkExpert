@@ -894,6 +894,7 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   align-items: center;
   min-width: 0;
   color: var(--text);
+  font-size: 13px;
 }
 .investigation-flow strong {
   overflow: hidden;

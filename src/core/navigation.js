@@ -47,6 +47,11 @@ export function applyContextAction(state, action, socket, { chartMetrics = [], s
     }
   }
 
+  if (action === "focus") {
+    state.view = "charts";
+    state.chartsTab = "focus";
+  }
+
   if (action === "anomalies") {
     state.view = "analysis";
     state.activeTab = "anomalies";

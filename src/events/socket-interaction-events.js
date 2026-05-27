@@ -173,6 +173,11 @@ export function bindSocketInteractionEvents(deps) {
       state.view = "charts";
       toast("Chart context selected", `${socket.local} -> ${socket.peer}`);
     }
+    if (action === "focus") {
+      state.view = "charts";
+      state.chartsTab = "focus";
+      toast("Focus mode", `All metrics for ${socket.local} → ${socket.peer}`);
+    }
     if (action === "details") {
       state.drawer = "details";
     }

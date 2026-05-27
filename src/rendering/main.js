@@ -2773,6 +2773,7 @@ function appRenderingDependencies() {
     buildRootCauseMatrix,
     detectCwndPhases,
     buildSparklineIndex,
+    socketIdentityKey,
     anomaliesBySocketId,
     riskRank,
     resolvePlaybook,

@@ -129,6 +129,7 @@ export function createAppRendering(getDeps) {
   function buildRootCauseMatrix(...args) { return call("buildRootCauseMatrix", ...args); }
   function detectCwndPhases(...args) { return call("detectCwndPhases", ...args); }
   function buildSparklineIndex(...args) { return call("buildSparklineIndex", ...args); }
+  function socketIdentityKey(...args) { return call("socketIdentityKey", ...args); }
   function anomaliesBySocketId(...args) { return call("anomaliesBySocketId", ...args); }
   function riskRank(...args) { return call("riskRank", ...args); }
   function resolvePlaybook(...args) { return call("resolvePlaybook", ...args); }

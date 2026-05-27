@@ -42,6 +42,32 @@ test("timezone options use injected timezone helpers", () => {
   assert.match(html, /value="UTC"/);
 });
 
+test("sparkline index uses injected socket identity helper", () => {
+  const snapshots = [
+    { sockets: [{ id: "a", details: { tcp: { rtt: 1 } } }] },
+    { sockets: [{ id: "a", details: { tcp: { rtt: 2 } } }] },
+    { sockets: [{ id: "a", details: { tcp: { rtt: 3 } } }] }
+  ];
+  const state = { dataVersion: 1, sparklineIndex: null };
+  let receivedIdentity = null;
+  const rendering = createAppRendering(() => ({
+    state,
+    hasRealTimestampHistory: () => true,
+    parsedTimestampSnapshots: () => snapshots,
+    socketIdentityKey: socket => `socket:${socket.id}`,
+    metricValue: (socket, metric) => socket.details?.tcp?.[metric] ?? 0,
+    buildSparklineIndex: (_snapshots, identity, metricValue) => {
+      receivedIdentity = identity;
+      return new Map([[identity(_snapshots[0].sockets[0]), metricValue(_snapshots[0].sockets[0], "rtt")]]);
+    }
+  }));
+
+  const index = rendering.lazySparklineIndex();
+
+  assert.equal(typeof receivedIdentity, "function");
+  assert.equal(index.get("socket:a"), 1);
+});
+
 test("charts toolbar can render timezone options after extraction", () => {
   const rendering = createAppRendering(() => ({
     ctx: {
