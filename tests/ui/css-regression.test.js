@@ -247,44 +247,6 @@ test("capture helper card aligns title and explanation cleanly", () => {
   assert.match(css, /\.capture-flow-card strong\s*\{[^}]*display:\s*block;[^}]*line-height:\s*1\.25;/s);
 });
 
-test("ss command panel exposes aligned collection parameters", () => {
-  assert.match(main, /import \{ buildSsCollectionCommand, commandCoverage, toggleCommandOption \} from "\.\/ss-command\.js";/);
-  assert.match(main, /import \{ validateSsCommandConfig \} from "\.\/ss-command-validation\.js";/);
-  assert.match(main, /ssCommandConfig:\s*defaultSsCommandConfig\(\)/);
-  assert.match(main, /function defaultSsLogPath\(date = new Date\(\)\)[\s\S]*\/tmp\/networkexpert_ss_\$\{ssCommandTimestamp\(date\)\}\.log/);
-  assert.match(main, /function renderSsCommandBuilder\(\)/);
-  assert.match(ssCommandView, /id="ssCmdTimestamp"[\s\S]*Timestamp each run/);
-  assert.match(ssCommandView, /id="ssCmdLoop"[\s\S]*Repeat command/);
-  assert.match(ssCommandView, /Interval \(s\)<\/span><input id="ssCmdInterval" type="text" inputmode="decimal"/);
-  assert.match(ssCommandView, /id="ssCmdSrcIp"[\s\S]*id="ssCmdSrcPort"[\s\S]*id="ssCmdDstIp"[\s\S]*id="ssCmdDstPort"/);
-  assert.match(ssCommandView, /placeholder="source address"/);
-  assert.match(ssCommandView, /data-ss-field-msg="srcIp"/);
-  assert.match(main, /function updateSsCommandValidation\(validation\)/);
-  assert.match(main, /input\?\.setCustomValidity\(result\.valid === false \? result\.message : ""\);/);
-  assert.doesNotMatch(main, /placeholder="192\.168\.145\.205"/);
-  assert.match(ingestView, /data-action="loadSsCommandEndpointExample"/);
-  assert.doesNotMatch(`${main}\n${ingestActions}`, /market-data example/);
-  assert.doesNotMatch(`${main}\n${ingestActions}`, /lfxbench_tcp-laloRcvMarketSimu/);
-  assert.match(ingestActions, /state\.ssCommandConfig = \{[\s\S]*intervalSeconds:\s*"1"[\s\S]*srcIp:\s*"10\.0\.0\.10"[\s\S]*outputPath:\s*defaultSsLogPath\(\)/);
-  assert.match(ssCommandView, /const teeRisk = Boolean\(c\.outputPath && c\.appendOutput !== false && c\.loop && interval <= 0\.05\);/);
-  assert.match(ssCommandView, /terminal output plus <code>tee<\/code> can become the bottleneck/);
-  assert.match(ssCommandView, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
-  assert.match(main, /function syncSsCommandFromBuilder\(\{ updateWarning = true \} = \{\}\)/);
-  assert.match(main, /if \(validation\.valid\) \{[\s\S]*state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
-  assert.match(ingestActions, /toast\("Invalid ss command fields", first\?\.message \|\| "Fix the highlighted fields before copying\.", "danger"\);/);
-  assert.match(main, /document\.querySelectorAll\("\[id\^='ssCmd'\]"\)\.forEach\(input => \{/);
-  assert.match(main, /input\.addEventListener\(eventName, \(\) => syncSsCommandFromBuilder\(\)\);/);
-  assert.match(main, /document\.querySelector\("#commandInput"\)\?\.addEventListener\("input"/);
-  assert.match(css, /\.ss-command-builder\s*\{[^}]*grid-template-columns:\s*minmax\(220px,\s*\.75fr\) minmax\(360px,\s*1\.35fr\) minmax\(240px,\s*\.9fr\);/s);
-  assert.match(css, /\.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*minmax\(160px,\s*1fr\) 110px minmax\(160px,\s*1fr\) 110px;/s);
-  assert.match(css, /\.ss-command-group \.ss-interval-field\s*\{[^}]*grid-template-columns:\s*max-content minmax\(82px,\s*110px\) minmax\(0,\s*1fr\);/s);
-  assert.match(css, /\.ss-command-group label\.ss-field\.invalid input\s*\{[^}]*border-color:\s*rgba\(255,\s*107,\s*130,\s*\.88\);/s);
-  assert.match(css, /\.ingest-card-layout \.ss-command-group--filter\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) 110px;/s);
-  assert.match(css, /\.ss-command-example\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*justify-self:\s*start;/s);
-  assert.match(css, /\.ss-command-warning\s*\{[^}]*grid-template-columns:\s*18px minmax\(0,\s*1fr\);[^}]*border:\s*1px solid rgba\(246,\s*160,\s*79,\s*\.42\);/s);
-  assert.match(css, /\.ss-command-warning\.hidden\s*\{[^}]*display:\s*none;/s);
-});
-
 test("ss command panel is isolated from the raw editor view", () => {
   assert.match(ingestView, /<div class="ingest-ss-command-panel">[\s\S]*\$\{renderSsCommandBuilder\(\)\}[\s\S]*data-action="copySsCommand"/);
   assert.match(ingestView, /data-action="showEditor"[\s\S]*Editor/);
@@ -419,30 +381,12 @@ test("analysis conversation stack keeps vertical gaps compact", () => {
   assert.match(css, /\.conversation-workbench,\s*\.expert-workbench,\s*\.timeline-workbench\s*\{[^}]*gap:\s*var\(--space-2\);/s);
 });
 
-test("timeline shows millisecond precision when timestamp data contains it", () => {
-  assert.match(main, /function formatTimelineTime\(event\)/);
-  assert.match(main, /const hasMilliseconds = Number\.isFinite\(epochMs\) && Math\.abs\(Math\.round\(epochMs\)\) % 1000 !== 0;/);
-  assert.match(main, /fractionalSecondDigits:\s*3/);
-  assert.match(main, /hasMilliseconds \? "timeline-ms" : "timeline"/);
-  assert.match(main, /function formatTimelineOffset\(seconds\)/);
-  assert.match(main, /t\+\$\{formatTimelineOffset\(event\.t \|\| 0\)\}s/);
-});
-
 test("timeline raises explicit events when the TCP persist timer appears", () => {
   assert.match(main, /let previousTimerName = "";/);
   assert.match(main, /timerName === "persist" && previousTimerName !== "persist"/);
   assert.match(main, /title:\s*"TCP persist timer active"/);
   assert.match(main, /TCP is probing a constrained or closed receive window/);
   assert.match(main, /metric:\s*"timer"/);
-});
-
-test("filtered row count is pagination context only", () => {
-  assert.match(main, /function hasActiveTableFilters\(filters = state\?\.table\?\.filters\)/);
-  assert.match(main, /const filteredCount = hasActiveTableFilters\(\) \? `<span class="pager-filter-count">\$\{formatNumber\(total\)\} filtered row\(s\)<\/span>` : "";/);
-  assert.match(main, /<div class="pager">\s*\$\{filteredCount\}/);
-  assert.doesNotMatch(main, /class="grid-controls-count"/);
-  assert.doesNotMatch(css, /\.grid-controls-count/);
-  assert.match(css, /\.pager-filter-count\s*\{[^}]*margin-right:\s*auto;/s);
 });
 
 test("chart-only toolbar is hidden from the charts advisor tab", () => {

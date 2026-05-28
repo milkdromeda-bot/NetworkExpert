@@ -46,6 +46,7 @@ import { applyChartZoomOperation, clampZoomRange, zoomForMetric, zoomRangeFromDr
 import { inferApplicationService } from "../services/services.js";
 import { applyServiceOverride, deleteServiceOverride, normalizeServiceOverrideStore, serviceOverrideForSocket, upsertServiceOverride } from "../services/service-overrides.js";
 import { TABLE_STATE_STORAGE_KEY, buildSocketOptionSets, buildVisibleColumnOrder, normalizeTableState, resetTableColumns, resetTableSort, setTableColumnVisibility, tableFilterCacheKey, tableStateSnapshot, toggleTableColumnPin, toggleTableColumnVisibility } from "../views/table-state.js";
+import { createTableDefaults, defaultTableFilters, hasNonDefaultTableFilters } from "../views/table-defaults.js";
 import { ACCESS_ROLES, COMMON_TIME_ZONES, EXPERT_DEFAULT_THRESHOLDS, INGEST_RAW_EAGER_LIMIT, LINUX_PROFILES, UBUNTU_PROFILES, cloneThresholds } from "../config/expert-config.js";
 import { applyTableColumnSearchFilter, renderTableSettingsDrawer as renderTableSettingsDrawerView, renderTableSettingsMenu as renderTableSettingsMenuView, renderTableSettingsTrigger as renderTableSettingsTriggerView, tableSettingsPlacement } from "../views/table-settings-view.js";
 import { columnHelp as columnHelpView, renderColumnTooltip as renderColumnTooltipView, renderThresholdSummary as renderThresholdSummaryView } from "../views/column-help-view.js";
@@ -53,6 +54,7 @@ import { createTableColumns } from "../views/table-columns.js";
 import { renderSocketTableView, renderTableHeader } from "../views/socket-table-view.js";
 import { createGuideView } from "../views/guide-view.js";
 import { createModalView } from "../views/modal-view.js";
+import { createLocaleFormatting } from "../core/locale-formatting.js";
 import { downloadBlob, drawPdfSection, drawPdfTextBlock, reportChartDataUrl, svgToPngBlob } from "../reporting/report-utils.js";
 import { buildAdvisorFindings as buildAdvisorFindingsModel } from "../analysis/advisor-findings.js";
 import { buildPrintableIncidentReportHtml } from "../reporting/printable-incident-report.js";
@@ -63,6 +65,7 @@ import { handleIngestAction } from "../events/ingest-actions.js";
 import { renderFixLatencyPanelView } from "../views/fix-latency-view.js";
 import { renderJvmGcPanelView } from "../views/jvm-gc-view.js";
 import { renderServiceMapView } from "../views/service-map-view.js";
+import { createServiceMapPresenter } from "../views/service-map-presenter.js";
 import { renderTimelineStoriesViewModel } from "../views/timeline-stories-view.js";
 import { bindSourceFileEvents } from "../events/source-file-events.js";
 import { handleServiceConfigAction } from "../services/service-config-actions.js";
@@ -77,6 +80,7 @@ import { createReportActions } from "../reporting/report-actions.js";
 import { createAppEventBindings } from "../events/app-event-bindings.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../analysis/snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "../parsing/shared-buffer.js";
+import { applySsEditorThemePreview as applySsEditorThemePreviewToDocument, defaultSsCommandConfig as createDefaultSsCommandConfig, defaultSsLogPath as createDefaultSsLogPath, normalizeSsEditorTheme as normalizeSsEditorThemeValue, parseUiIntervalSeconds as parseSsUiIntervalSeconds, readSsCommandConfig as readSsCommandConfigFromDocument, updateSsCommandValidation as updateSsCommandValidationInDocument } from "../parsing/ss-command-config.js";
 
 const TABLE_COLUMNS = createTableColumns({
   riskRank,
@@ -95,21 +99,14 @@ const TABLE_COLUMN_BY_KEY = new Map(TABLE_COLUMNS.map(column => [column.key, col
 const TABLE_SORT_COLLATOR = new Intl.Collator("fr", { numeric: true });
 const CONVERSATION_SORT_COLLATOR = new Intl.Collator("fr", { numeric: true, sensitivity: "base" });
 const SERVICE_MAP_SORT_COLLATOR = new Intl.Collator("en", { numeric: true });
-const DEFAULT_TABLE_VISIBLE_COLUMNS = TABLE_COLUMNS.filter(col => col.defaultVisible !== false).map(col => col.key);
-const DEFAULT_TABLE_ORDER = TABLE_COLUMNS.map(col => col.key);
-const tableDefaultsCache = new Map();
-const dateTimeFormatterCache = new Map();
-const numberFormatterCache = new Map();
-const numberSeparatorCache = new Map();
 const BROWSER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 const APP_VERSION = "1.0.0.0";
 const APP_SPLASH_IMAGE = "./images/ultimateNetworkExpert.png";
-function defaultTableColumns() {
-  return [...DEFAULT_TABLE_VISIBLE_COLUMNS];
-}
+const tableDefaultModel = createTableDefaults({ columns: TABLE_COLUMNS, prefsDefault, getPrefs: () => state?.prefs });
+const { DEFAULT_TABLE_ORDER, defaultTableColumns, defaultTableState, tableDefaults } = tableDefaultModel;
 
 function normalizeSsEditorTheme(value) {
-  return SS_EDITOR_THEMES.some(theme => theme.id === value) ? value : DEFAULT_SS_EDITOR_THEME;
+  return normalizeSsEditorThemeValue(value, SS_EDITOR_THEMES, DEFAULT_SS_EDITOR_THEME);
 }
 
 function normalizeBdpDirection(value) {
@@ -121,79 +118,28 @@ function configuredLinkCapacityMbps() {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function ssCommandTimestamp(date = new Date()) {
-  const pad = value => String(value).padStart(2, "0");
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
-}
-
 function defaultSsLogPath(date = new Date()) {
-  return `/tmp/networkexpert_ss_${ssCommandTimestamp(date)}.log`;
+  return createDefaultSsLogPath(date);
 }
 
-function defaultSsCommandConfig() {
-  return { timestamp: true, loop: false, intervalSeconds: "1", srcIp: "", srcPort: "", dstIp: "", dstPort: "", outputPath: defaultSsLogPath(), appendOutput: true };
+function defaultSsCommandConfig(date = new Date()) {
+  return createDefaultSsCommandConfig(date);
 }
 
 function parseUiIntervalSeconds(value) {
-  const number = Number(String(value || "1").trim().replace(",", "."));
-  return Number.isFinite(number) ? number : 1;
+  return parseSsUiIntervalSeconds(value);
 }
 
 function applySsEditorThemePreview(value) {
-  const theme = normalizeSsEditorTheme(value);
-  const panel = document.querySelector(".ingest-source-panel");
-  if (!panel) return;
-  SS_EDITOR_THEMES.forEach(item => panel.classList.remove(`ss-editor-theme-${item.id}`));
-  panel.classList.add(`ss-editor-theme-${theme}`);
+  applySsEditorThemePreviewToDocument({ documentRef: document, fallback: DEFAULT_SS_EDITOR_THEME, themes: SS_EDITOR_THEMES, value });
 }
 
 function resetSsEditorThemePreview() {
   applySsEditorThemePreview(state.prefs.ssEditorTheme);
 }
 
-function defaultTableFilters() {
-  return {
-    text: "",
-    risk: "all",
-    state: "all",
-    family: "all",
-    minRecvQ: "",
-    minSendQ: "",
-    minRtt: "",
-    srcIp: "",
-    dstIp: "",
-    srcPort: "",
-    dstPort: "",
-    process: "",
-    onlyAnomalies: false
-  };
-}
-
 function hasActiveTableFilters(filters = state?.table?.filters) {
-  const defaults = defaultTableFilters();
-  return Object.keys(defaults).some(key => {
-    if (key === "onlyAnomalies") return Boolean(filters?.onlyAnomalies);
-    return String(filters?.[key] ?? defaults[key] ?? "").trim() !== String(defaults[key] ?? "").trim();
-  });
-}
-
-function defaultTableState(pageSize = prefsDefault.defaultPageSize) {
-  return {
-    page: 1,
-    pageSize,
-    sortKey: "risk",
-    sortDir: "desc",
-    pinned: ["risk", "state", "local"],
-    visible: defaultTableColumns(),
-    order: [...DEFAULT_TABLE_ORDER],
-    filters: defaultTableFilters()
-  };
-}
-
-function tableDefaults() {
-  const pageSize = Number(state?.prefs?.defaultPageSize || prefsDefault.defaultPageSize);
-  if (!tableDefaultsCache.has(pageSize)) tableDefaultsCache.set(pageSize, defaultTableState(pageSize));
-  return tableDefaultsCache.get(pageSize);
+  return hasNonDefaultTableFilters(filters);
 }
 
 
@@ -355,6 +301,13 @@ import { metricCorrelations, metricDiagnosticGuidance, metricInterpretation, met
 import { buildGuidedChecklistItems } from "../views/guided-checklist.js";
 import { buildServiceMapData, buildServiceMapRoutes, serviceMapConnectivityOrder as orderServiceMapConnectivity } from "../services/service-map-model.js";
 
+const localeFormatting = createLocaleFormatting({
+  browserTimeZone: BROWSER_TIME_ZONE,
+  commonTimeZones: COMMON_TIME_ZONES,
+  getNavigator: () => globalThis.navigator,
+  getPrefs: () => state?.prefs
+});
+
 const metricChartEngine = createMetricChartEngine(metricChartDependencies);
 
 function metricChartDependencies() {
@@ -405,6 +358,7 @@ function metricChartDependencies() {
 
 const appEventBindings = createAppEventBindings(appEventDependencies);
 const advancedCorrelationPanels = createAdvancedCorrelationPanels(advancedCorrelationDependencies);
+const serviceMapPresenter = createServiceMapPresenter(serviceMapPresenterDependencies);
 
 function advancedCorrelationDependencies() {
   return {
@@ -439,6 +393,30 @@ function advancedCorrelationDependencies() {
     socketsById,
     timeLabel,
     visibleHistory
+  };
+}
+
+function serviceMapPresenterDependencies() {
+  return {
+    state,
+    icons,
+    SERVICE_MAP_SORT_COLLATOR,
+    aliasDisplay,
+    aliasForEndpoint,
+    anomaliesBySocketId,
+    buildServiceMapData,
+    escapeHtml,
+    formatMetricValue,
+    formatNumber,
+    metricLabel,
+    metricValue,
+    orderServiceMapConnectivity,
+    riskRank,
+    severityRank,
+    socketBandwidth,
+    sortedFilteredSockets,
+    thresholdSeverity,
+    topologyGroupForEndpoint
   };
 }
 
@@ -663,39 +641,11 @@ function renderSsCommandBuilder() {
 }
 
 function readSsCommandConfig() {
-  return {
-    timestamp: Boolean(document.querySelector("#ssCmdTimestamp")?.checked),
-    loop: Boolean(document.querySelector("#ssCmdLoop")?.checked),
-    intervalSeconds: document.querySelector("#ssCmdInterval")?.value.trim() || "1",
-    srcIp: document.querySelector("#ssCmdSrcIp")?.value.trim() || "",
-    srcPort: document.querySelector("#ssCmdSrcPort")?.value.trim() || "",
-    dstIp: document.querySelector("#ssCmdDstIp")?.value.trim() || "",
-    dstPort: document.querySelector("#ssCmdDstPort")?.value.trim() || "",
-    outputPath: document.querySelector("#ssCmdOutputPath")?.value.trim() || "",
-    appendOutput: Boolean(document.querySelector("#ssCmdAppend")?.checked)
-  };
+  return readSsCommandConfigFromDocument(document);
 }
 
 function updateSsCommandValidation(validation) {
-  const ids = {
-    intervalSeconds: "ssCmdInterval",
-    srcIp: "ssCmdSrcIp",
-    srcPort: "ssCmdSrcPort",
-    dstIp: "ssCmdDstIp",
-    dstPort: "ssCmdDstPort"
-  };
-  Object.entries(ids).forEach(([key, id]) => {
-    const result = validation.fields[key] || { valid: true, message: "" };
-    const input = document.querySelector(`#${id}`);
-    const label = input?.closest(".ss-field");
-    const message = document.querySelector(`[data-ss-field-msg="${key}"]`);
-    input?.setAttribute("aria-invalid", result.valid === false ? "true" : "false");
-    input?.setCustomValidity(result.valid === false ? result.message : "");
-    label?.classList.toggle("invalid", result.valid === false);
-    label?.classList.toggle("warning", result.valid !== false && result.level === "warning");
-    if (message) message.textContent = result.message || (key === "intervalSeconds" ? "e.g. 0.01" : "");
-  });
-  document.querySelector("#commandInput")?.classList.toggle("ss-command-stale", !validation.valid);
+  updateSsCommandValidationInDocument(validation, document);
 }
 
 function syncSsCommandFromBuilder({ updateWarning = true } = {}) {
@@ -1812,187 +1762,18 @@ function buildTimelineEvents() {
     .slice(0, 160);
 }
 
-function endpointPresentation(endpoint) {
-  const alias = currentAliasForEndpoint(endpoint);
-  return {
-    endpoint,
-    label: alias?.label || endpoint,
-    role: alias?.role || "",
-    note: alias?.note || "",
-    alias
-  };
-}
-
-function currentAliasForEndpoint(endpoint, options = {}) {
-  return aliasForEndpoint(state.serviceAliases, endpoint, state.sourceName, options);
-}
-
-function currentAliasDisplay(endpoint, options = {}) {
-  return aliasDisplay(endpoint, state.serviceAliases, state.sourceName, options);
-}
-
-function nodeLabel(node) {
-  return node.alias?.label || node.label;
-}
-
-function nodeSubtitle(node) {
-  if (node.kind === "process") return `${formatNumber(node.count)} socket(s)`;
-  return node.alias?.label ? node.endpoint : "";
-}
-
-function serviceMapGroupBands(lanes, positions) {
-  const bands = [];
-  for (const lane of lanes.filter(item => item.key !== "processes")) {
-    let run = null;
-    const closeRun = () => {
-      if (!run) return;
-      const ys = run.nodes.map(node => positions[node.id]?.y).filter(Number.isFinite);
-      if (ys.length) {
-        const top = Math.min(...ys) - 60;
-        const bottom = Math.max(...ys) + 42;
-        bands.push({
-          group: run.group,
-          x: lane.x - 166,
-          y: top,
-          width: 332,
-          height: bottom - top,
-          labelY: top + 26
-        });
-      }
-      run = null;
-    };
-    for (const node of lane.nodes) {
-      const group = node.topologyGroup;
-      if (!group) {
-        closeRun();
-        continue;
-      }
-      if (!run || run.group.id !== group.id) {
-        closeRun();
-        run = { group, nodes: [] };
-      }
-      run.nodes.push(node);
-    }
-    closeRun();
-  }
-  return bands;
-}
-
-function renderMapLegend() {
-  return `<div class="map-legend" aria-label="Map legend">
-    <span><i class="legend-line low"></i> normal</span>
-    <span><i class="legend-line high"></i> high risk</span>
-    <span><i class="legend-line critical"></i> critical</span>
-    <span><i class="legend-box"></i> topology group</span>
-    <span><i class="legend-dot"></i> editable endpoint</span>
-  </div>`;
-}
-
-function edgeAnomalies(edge) {
-  return state.anomalies
-    .filter(anomaly => anomaly.socketId === edge.socket.id)
-    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
-}
-
-function renderHotPaths(hotPaths) {
-  return `<aside class="map-side-panel hot-paths">
-    <strong>Hot paths</strong>
-    ${hotPaths.map(edge => {
-      const peerAlias = currentAliasForEndpoint(edge.socket.peer);
-      return `<article class="hot-path ${edge.risk}" data-socket="${escapeHtml(edge.socket.id)}">
-      <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
-      <p>${escapeHtml(edge.socket.details.process?.name || "unknown")} -> ${escapeHtml(currentAliasDisplay(edge.socket.peer))}</p>
-      ${peerAlias?.role ? `<em>${escapeHtml(peerAlias.role)}</em>` : ""}
-      <small>${formatNumber(edge.anomalies)} anomaly signal(s), Send-Q ${formatMetricValue("sendQ", edge.socket.sendQ)}, RTT ${formatMetricValue("rtt", metricValue(edge.socket, "rtt"))}</small>
-    </article>`;
-    }).join("")}
-  </aside>`;
-}
-
-function renderMapEdgeInsight(edge) {
-  const socket = edge.socket;
-  const anomalies = edgeAnomalies(edge);
-  const localGroup = topologyGroupForEndpoint(state.topology, socket.local);
-  const peerGroup = topologyGroupForEndpoint(state.topology, socket.peer);
-  const topMetric = [
-    ["TX", "tx_bps", socketBandwidth(socket, "tx_bps")],
-    ["RX", "rx_bps", socketBandwidth(socket, "rx_bps")],
-    ["Send-Q", "sendQ", socket.sendQ],
-    ["Recv-Q", "recvQ", socket.recvQ],
-    ["RTT", "rtt", metricValue(socket, "rtt")],
-    ["RTO", "rto", metricValue(socket, "rto")],
-    ["Drops", "skmem.d", metricValue(socket, "skmem.d")]
-  ];
-  return `<aside class="map-side-panel link-inspector ${edge.risk}">
-    <header>
-      <span class="tooltip-kicker">Link intelligence</span>
-      <button class="icon" data-map-edge-close title="Close link inspector">${icons.x}</button>
-    </header>
-    <h3>${escapeHtml(currentAliasDisplay(socket.local))} -> ${escapeHtml(currentAliasDisplay(socket.peer))}</h3>
-    <p class="link-endpoints">${escapeHtml(socket.local)} -> ${escapeHtml(socket.peer)}</p>
-    <div class="link-badges">
-      <span class="risk ${edge.risk}">${escapeHtml(edge.risk)}</span>
-      <span>${escapeHtml(socket.family)} / ${escapeHtml(socket.state)}</span>
-      <span>${formatNumber(anomalies.length)} anomalies</span>
-    </div>
-    <div class="link-groups">
-      ${localGroup ? `<span><b>Local group</b>${escapeHtml(localGroup.name)}</span>` : ""}
-      ${peerGroup ? `<span><b>Peer group</b>${escapeHtml(peerGroup.name)}</span>` : ""}
-      ${socket.details.process?.name ? `<span><b>Process</b>${escapeHtml(socket.details.process.name)}${socket.details.process.pid ? `:${escapeHtml(socket.details.process.pid)}` : ""}</span>` : ""}
-    </div>
-    <div class="link-metrics">
-      ${topMetric.map(([label, metric, value]) => `<article class="${thresholdSeverity(metric, Number(value || 0))}">
-        <span>${escapeHtml(label)}</span>
-        <strong>${formatMetricValue(metric, value)}</strong>
-      </article>`).join("")}
-    </div>
-    ${anomalies.length ? `<section class="link-anomalies">
-      <strong>Signals</strong>
-      ${anomalies.slice(0, 4).map(anomaly => `<article class="${escapeHtml(anomaly.severity)}">
-        <span class="risk ${escapeHtml(anomaly.severity)}">${escapeHtml(anomaly.severity)}</span>
-        <div><b>${escapeHtml(anomaly.title)}</b><p>${escapeHtml(anomaly.detail || metricLabel(anomaly.metric || "socket"))}</p></div>
-      </article>`).join("")}
-    </section>` : `<div class="empty compact">No anomaly attached to this link.</div>`}
-    <footer>
-      <button data-map-edge-action="details" data-socket-id="${escapeHtml(socket.id)}">${icons.activity} Details</button>
-      <button data-map-edge-action="chart" data-socket-id="${escapeHtml(socket.id)}">${icons.chart} Charts</button>
-      ${anomalies.length ? `<button data-map-edge-action="anomalies" data-socket-id="${escapeHtml(socket.id)}">${icons.alert} Anomalies</button>` : ""}
-    </footer>
-  </aside>`;
-}
-
-function mapNodeTitle(node) {
-  const lines = [];
-  if (node.endpoint) lines.push(`Endpoint: ${node.endpoint}`);
-  if (node.alias?.label) lines.push(`Label: ${node.alias.label}`);
-  if (node.alias?.role) lines.push(`Role: ${node.alias.role}`);
-  if (node.topologyGroup) {
-    lines.push(`Topology group: ${node.topologyGroup.name}`);
-    lines.push(`Match: ${node.topologyGroup.match}`);
-    if (node.topologyGroup.note) lines.push(`Note: ${node.topologyGroup.note}`);
-  }
-  lines.push(`Risk: ${node.risk}`);
-  lines.push(`Sockets: ${formatNumber(node.count)}`);
-  if (node.anomalies) lines.push(`Anomalies: ${formatNumber(node.anomalies)}`);
-  return lines.join("\n");
-}
-
-function buildServiceMap() {
-  return buildServiceMapData({
-    sockets: sortedFilteredSockets(),
-    anomalyMap: anomaliesBySocketId(),
-    topology: state.topology,
-    endpointPresentation,
-    topologyGroupForEndpoint,
-    riskRank,
-    socketBandwidth,
-    sortCollator: SERVICE_MAP_SORT_COLLATOR
-  });
-}
-
-function serviceMapConnectivityOrder(map) {
-  return orderServiceMapConnectivity(map, { riskRank });
-}
+function endpointPresentation(...args) { return serviceMapPresenter.endpointPresentation(...args); }
+function currentAliasForEndpoint(...args) { return serviceMapPresenter.currentAliasForEndpoint(...args); }
+function currentAliasDisplay(...args) { return serviceMapPresenter.currentAliasDisplay(...args); }
+function nodeLabel(...args) { return serviceMapPresenter.nodeLabel(...args); }
+function nodeSubtitle(...args) { return serviceMapPresenter.nodeSubtitle(...args); }
+function serviceMapGroupBands(...args) { return serviceMapPresenter.serviceMapGroupBands(...args); }
+function renderMapLegend(...args) { return serviceMapPresenter.renderMapLegend(...args); }
+function renderHotPaths(...args) { return serviceMapPresenter.renderHotPaths(...args); }
+function renderMapEdgeInsight(...args) { return serviceMapPresenter.renderMapEdgeInsight(...args); }
+function mapNodeTitle(...args) { return serviceMapPresenter.mapNodeTitle(...args); }
+function buildServiceMap(...args) { return serviceMapPresenter.buildServiceMap(...args); }
+function serviceMapConnectivityOrder(...args) { return serviceMapPresenter.serviceMapConnectivityOrder(...args); }
 
 function evaluateAlertRules() {
   state.alertEvents = evaluateAlertRuleEvents({
@@ -2969,91 +2750,16 @@ function renderTimeZoneOptions(...args) { return appRendering.renderTimeZoneOpti
 function renderGuide(...args) { return appRendering.renderGuide(...args); }
 function renderModal(...args) { return appRendering.renderModal(...args); }
 
-function resolvedNumberLocale() {
-  return state?.prefs?.numberLocale && state.prefs.numberLocale !== "auto"
-    ? state.prefs.numberLocale
-    : navigator.language || "en-US";
-}
-
-function resolvedTimeZone() {
-  return state?.prefs?.chartTimeZone && state.prefs.chartTimeZone !== "auto"
-    ? state.prefs.chartTimeZone
-    : BROWSER_TIME_ZONE;
-}
-
-function timeZoneOptions() {
-  const supported = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
-  return [...new Set([resolvedTimeZone(), ...COMMON_TIME_ZONES, ...supported])].filter(Boolean);
-}
-
-function rememberBounded(cache, key, create, limit = 32) {
-  if (cache.has(key)) return cache.get(key);
-  const value = create();
-  cache.set(key, value);
-  if (cache.size > limit) cache.delete(cache.keys().next().value);
-  return value;
-}
-
-function numberFormatterWith(minimumFractionDigits, maximumFractionDigits) {
-  const locale = resolvedNumberLocale();
-  const grouping = state?.prefs?.numberGrouping !== false;
-  const key = `${locale}|${grouping ? 1 : 0}|${minimumFractionDigits}|${maximumFractionDigits}`;
-  return rememberBounded(numberFormatterCache, key, () => new Intl.NumberFormat(locale, {
-    useGrouping: grouping,
-    minimumFractionDigits,
-    maximumFractionDigits
-  }));
-}
-
-function numberFormatter(maximumFractionDigits) {
-  return numberFormatterWith(0, maximumFractionDigits);
-}
-
-function numberSeparators() {
-  const locale = resolvedNumberLocale();
-  return rememberBounded(numberSeparatorCache, locale, () => {
-    const sample = new Intl.NumberFormat(locale).formatToParts(12345.6);
-    return {
-      group: sample.find(part => part.type === "group")?.value || ",",
-      decimal: sample.find(part => part.type === "decimal")?.value || "."
-    };
-  });
-}
-
-function dateTimeFormatter(locale, options, cacheId = "") {
-  const key = `${cacheId}|${locale}|${options.timeZone || ""}|${options.year || ""}|${options.month || ""}|${options.day || ""}|${options.hour || ""}|${options.minute || ""}|${options.second || ""}|${options.fractionalSecondDigits || ""}|${options.hour12 ?? ""}`;
-  return rememberBounded(dateTimeFormatterCache, key, () => new Intl.DateTimeFormat(locale, options));
-}
-
-function formatNumber(value) {
-  const numeric = Number(value || 0);
-  const decimals = Number.isInteger(numeric) ? 0 : 2;
-  return numberFormatter(decimals).format(numeric);
-}
-
-function formatTimelineTime(event) {
-  if (!event?.epochMs) return "snapshot";
-  const epochMs = Number(event.epochMs);
-  const hasMilliseconds = Number.isFinite(epochMs) && Math.abs(Math.round(epochMs)) % 1000 !== 0;
-  try {
-    return dateTimeFormatter(resolvedNumberLocale(), {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      ...(hasMilliseconds ? { fractionalSecondDigits: 3 } : {}),
-      timeZone: resolvedTimeZone()
-    }, hasMilliseconds ? "timeline-ms" : "timeline").format(new Date(epochMs));
-  } catch {
-    return "snapshot";
-  }
-}
-
-function formatTimelineOffset(seconds) {
-  const numeric = Number(seconds || 0);
-  if (!Number.isFinite(numeric)) return "0";
-  if (Math.abs(numeric % 1) > 0.0005) return numberFormatterWith(3, 3).format(numeric);
-  return formatNumber(numeric);
-}
+function resolvedNumberLocale(...args) { return localeFormatting.resolvedNumberLocale(...args); }
+function resolvedTimeZone(...args) { return localeFormatting.resolvedTimeZone(...args); }
+function timeZoneOptions(...args) { return localeFormatting.timeZoneOptions(...args); }
+function numberFormatterWith(...args) { return localeFormatting.numberFormatterWith(...args); }
+function numberFormatter(...args) { return localeFormatting.numberFormatter(...args); }
+function numberSeparators(...args) { return localeFormatting.numberSeparators(...args); }
+function dateTimeFormatter(...args) { return localeFormatting.dateTimeFormatter(...args); }
+function formatNumber(...args) { return localeFormatting.formatNumber(...args); }
+function formatTimelineTime(...args) { return localeFormatting.formatTimelineTime(...args); }
+function formatTimelineOffset(...args) { return localeFormatting.formatTimelineOffset(...args); }
 
 function metricUnit(metric) { return metricChartEngine.metricUnit(metric); }
 function metricFractionDigits(metric, value) { return metricChartEngine.metricFractionDigits(metric, value); }

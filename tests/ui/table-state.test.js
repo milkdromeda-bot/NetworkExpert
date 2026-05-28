@@ -11,6 +11,7 @@ import {
   toggleTableColumnPin,
   toggleTableColumnVisibility
 } from "../../src/views/table-state.js";
+import { createTableDefaults, hasNonDefaultTableFilters } from "../../src/views/table-defaults.js";
 
 const columns = [
   { key: "risk", label: "Risk" },
@@ -163,4 +164,21 @@ test("tableColumnControlModels exposes checked renderer state for visible column
       ["rtt", false, false]
     ]
   );
+});
+
+test("createTableDefaults derives order and visibility from columns", () => {
+  const prefs = { defaultPageSize: 50 };
+  const helpers = createTableDefaults({ columns, prefsDefault: { defaultPageSize: 20 }, getPrefs: () => prefs });
+
+  assert.deepEqual(helpers.DEFAULT_TABLE_ORDER, ["risk", "state", "local", "peer", "rtt"]);
+  assert.deepEqual(helpers.defaultTableColumns(), ["risk", "state", "local", "peer"]);
+  assert.equal(helpers.tableDefaults().pageSize, 50);
+  assert.deepEqual(helpers.tableDefaults().pinned, ["risk", "state", "local"]);
+});
+
+test("hasNonDefaultTableFilters detects only meaningful filters", () => {
+  assert.equal(hasNonDefaultTableFilters({}), false);
+  assert.equal(hasNonDefaultTableFilters({ risk: "all", onlyAnomalies: false }), false);
+  assert.equal(hasNonDefaultTableFilters({ risk: "critical" }), true);
+  assert.equal(hasNonDefaultTableFilters({ onlyAnomalies: true }), true);
 });

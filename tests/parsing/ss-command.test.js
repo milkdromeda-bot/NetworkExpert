@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { commandCoverage, toggleCommandOption } from '../../src/parsing/ss-command.js';
+import { defaultSsCommandConfig, defaultSsLogPath, normalizeSsEditorTheme, parseUiIntervalSeconds } from '../../src/parsing/ss-command-config.js';
 import {
   validateIpv4Address,
   validateIpv6Address,
@@ -12,6 +13,30 @@ import {
 
 const opts = (shorts) => shorts.map(s => [s, '', '', '']);
 const longOpts = (longs) => longs.map(l => ['', l, '', '']);
+
+test('default ss command config creates timestamped log paths', () => {
+  const date = new Date(2026, 4, 28, 9, 7, 5);
+  assert.strictEqual(defaultSsLogPath(date), '/tmp/networkexpert_ss_20260528_090705.log');
+  assert.deepStrictEqual(defaultSsCommandConfig(date), {
+    timestamp: true,
+    loop: false,
+    intervalSeconds: '1',
+    srcIp: '',
+    srcPort: '',
+    dstIp: '',
+    dstPort: '',
+    outputPath: '/tmp/networkexpert_ss_20260528_090705.log',
+    appendOutput: true
+  });
+});
+
+test('ss command ui helpers normalize editor and interval values', () => {
+  const themes = [{ id: 'dark' }, { id: 'paper' }];
+  assert.strictEqual(normalizeSsEditorTheme('paper', themes, 'dark'), 'paper');
+  assert.strictEqual(normalizeSsEditorTheme('missing', themes, 'dark'), 'dark');
+  assert.strictEqual(parseUiIntervalSeconds('0,05'), 0.05);
+  assert.strictEqual(parseUiIntervalSeconds('bad'), 1);
+});
 
 // commandCoverage — single short options
 test('commandCoverage detects -t', () => {
