@@ -352,7 +352,9 @@ function metricChartDependencies() {
     applyChartZoomOperation,
     clampZoomRange,
     zoomForMetric,
-    zoomRangeFromDragSelection
+    zoomRangeFromDragSelection,
+    savePrefs,
+    chartTooltipOpacity
   };
 }
 

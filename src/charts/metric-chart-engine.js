@@ -437,7 +437,7 @@ function redrawChartCardMetric(metric, action = state.activeChartAction, deps = 
   const _bdpDrawing = createBdpChartDrawing({
     state, document, chartDrawDependencies, chartBgColor,
     chartTooltipOpacity: (...a) => call("chartTooltipOpacity", ...a),
-    escapeHtml, formatNumber,
+    escapeHtml, formatNumber, numberFormatter,
     formatMetricValue, formatBitsPerSecond, formatBytesHuman, metricLabel, metricColor, thresholdFor,
     thresholdSeverity, thresholdColor, timeLabel, dateTimeFormatter, resolvedNumberLocale, resolvedTimeZone,
     bdpWindowAnalysis: (...a) => call("bdpWindowAnalysis", ...a),
