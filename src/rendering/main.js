@@ -103,6 +103,7 @@ import { createInvestigationSummaryController } from "./controllers/investigatio
 import { createUiMenuController } from "./controllers/ui-menu-controller.js";
 import { createUndoCacheController } from "./controllers/undo-cache-controller.js";
 import { createWorkspaceRenderController } from "./controllers/workspace-render-controller.js";
+import { createMainDependencyFactories } from "./dependencies/index.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../analysis/snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "../parsing/shared-buffer.js";
 import { applySsEditorThemePreview as applySsEditorThemePreviewToDocument, defaultSsCommandConfig as createDefaultSsCommandConfig, defaultSsLogPath as createDefaultSsLogPath, normalizeSsEditorTheme as normalizeSsEditorThemeValue, parseUiIntervalSeconds as parseSsUiIntervalSeconds, readSsCommandConfig as readSsCommandConfigFromDocument, updateSsCommandValidation as updateSsCommandValidationInDocument } from "../parsing/ss-command-config.js";
@@ -130,6 +131,174 @@ const APP_SPLASH_IMAGE = "./images/ultimateNetworkExpert.png";
 let state;
 const tableDefaultModel = createTableDefaults({ columns: TABLE_COLUMNS, prefsDefault, getPrefs: () => state?.prefs });
 const { DEFAULT_TABLE_ORDER, defaultTableColumns, defaultTableState, tableDefaults } = tableDefaultModel;
+const dependencyRegistry = {
+  ACCESS_ROLES: () => ACCESS_ROLES, ANALYSIS_TAB_GUIDE: () => ANALYSIS_TAB_GUIDE, ANALYSIS_TEMPLATES: () => ANALYSIS_TEMPLATES,
+  APP_SPLASH_IMAGE: () => APP_SPLASH_IMAGE, APP_VERSION: () => APP_VERSION, CONVERSATION_SORT_COLLATOR: () => CONVERSATION_SORT_COLLATOR,
+  CONVERSATION_SORT_LABELS: () => CONVERSATION_SORT_LABELS, DASHBOARD_PRESETS: () => DASHBOARD_PRESETS, DEFAULT_TABLE_ORDER: () => DEFAULT_TABLE_ORDER,
+  EXPERT_CORRELATIONS: () => EXPERT_CORRELATIONS, EXPERT_DEFAULT_THRESHOLDS: () => EXPERT_DEFAULT_THRESHOLDS, FIELD_DOCS: () => FIELD_DOCS,
+  FIELD_GUIDANCE: () => FIELD_GUIDANCE, INGEST_RAW_EAGER_LIMIT: () => INGEST_RAW_EAGER_LIMIT, IntersectionObserver: () => IntersectionObserver,
+  LINUX_PROFILES: () => LINUX_PROFILES, PRE_IMPORT_PRESETS: () => PRE_IMPORT_PRESETS, SAMPLE: () => SAMPLE,
+  SERVICE_MAP_SORT_COLLATOR: () => SERVICE_MAP_SORT_COLLATOR, SS_OPTION_INTEL: () => SS_OPTION_INTEL, TABLE_COLUMNS: () => TABLE_COLUMNS,
+  TABLE_COLUMN_BY_KEY: () => TABLE_COLUMN_BY_KEY, TABLE_SORT_COLLATOR: () => TABLE_SORT_COLLATOR, UBUNTU_PROFILES: () => UBUNTU_PROFILES,
+  _animateCounters: () => _animateCounters, _hideBusy: () => _hideBusy, _metricLabel: () => _metricLabel,
+  _positionTabIndicator: () => _positionTabIndicator, _positionTourCard: () => _positionTourCard, _redo: () => _redo,
+  _renderAdvisorGlobalSummary: () => _renderAdvisorGlobalSummary, _renderBaselineNarrative: () => _renderBaselineNarrative, _renderChartsGlobalToolbar: () => _renderChartsGlobalToolbar,
+  _renderDashboardPresetPicker: () => _renderDashboardPresetPicker, _renderDashboardStudio: () => _renderDashboardStudio, _renderDashboardStudioInline: () => _renderDashboardStudioInline,
+  _renderDelta: () => _renderDelta, _renderError: () => _renderError, _renderMetricsStatsTable: () => _renderMetricsStatsTable,
+  _renderSkeleton: () => _renderSkeleton, _showBusy: () => _showBusy, _staggerReveal: () => _staggerReveal,
+  _undo: () => _undo, _undoSnapshot: () => _undoSnapshot, accessRoleLabel: () => accessRoleLabel,
+  advancedCorrelationPanels: () => advancedCorrelationPanels, aggregateParsedSocketsByKey: () => aggregateParsedSocketsByKey, aggregateTimestampedSockets: () => aggregateTimestampedSockets,
+  aliasCountForSource: () => aliasCountForSource, aliasDisplay: () => aliasDisplay, aliasForEndpoint: () => aliasForEndpoint,
+  aliasListForSource: () => aliasListForSource, alignTimestamps: () => alignTimestamps, alphabeticalMetrics: () => alphabeticalMetrics,
+  analysisTabGuide: () => analysisTabGuide, analyzeAll: () => analyzeAll, analyzeBdpWindowLimit: () => analyzeBdpWindowLimit,
+  analyzeCaptureQuality: () => analyzeCaptureQuality, annotationAnchorOptions: () => annotationAnchorOptions, annotationColor: () => annotationColor,
+  annotationDefaultLabel: () => annotationDefaultLabel, annotationKindForChartContext: () => annotationKindForChartContext, annotationLabelForChartContext: () => annotationLabelForChartContext,
+  annotationMetricChoices: () => annotationMetricChoices, annotationSocketId: () => annotationSocketId, annotationTypeLabel: () => annotationTypeLabel,
+  annotationTypeList: () => annotationTypeList, annotationsForContext: () => annotationsForContext, anomaliesBySocketId: () => anomaliesBySocketId,
+  anomalyStatusClass: () => anomalyStatusClass, applyAnalysisTemplate: () => applyAnalysisTemplate, applyChartZoomAction: () => applyChartZoomAction,
+  applyChartZoomOperation: () => applyChartZoomOperation, applyContextAction: () => applyContextAction, applyDashboardPreset: () => applyDashboardPreset,
+  applyDashboardPresetProfile: () => applyDashboardPresetProfile, applyDashboardProfile: () => applyDashboardProfile, applyRisks: () => applyRisks,
+  applySavedDashboardProfile: () => applySavedDashboardProfile, applyServiceOverride: () => applyServiceOverride, applySsEditorThemePreview: () => applySsEditorThemePreview,
+  applyTableColumnSearchFilter: () => applyTableColumnSearchFilter, applyTableLayout: () => applyTableLayout, applyTemplateProfile: () => applyTemplateProfile,
+  baselineDeviations: () => baselineDeviations, bdpChartSeries: () => bdpChartSeries, bdpWindowAnalysis: () => bdpWindowAnalysis,
+  bindColumnHelpTooltips: () => bindColumnHelpTooltips, bindEvents: () => bindEvents, bindSmartChartTooltips: () => bindSmartChartTooltips,
+  bindSocketInteractionEvents: () => bindSocketInteractionEvents, bindSourceFileEvents: () => bindSourceFileEvents, bindTableInteractionEvents: () => bindTableInteractionEvents,
+  buildAiSummary: () => buildAiSummary, buildAnnotationAnchorOptions: () => buildAnnotationAnchorOptions, buildAnnotationDraft: () => buildAnnotationDraft,
+  buildAnomaliesCsv: () => buildAnomaliesCsv, buildBaselineComparison: () => buildBaselineComparison, buildBaselineNarrative: () => buildBaselineNarrative,
+  buildComparison: () => buildComparison, buildConversations: () => buildConversations, buildCorrelationMatrix: () => buildCorrelationMatrix,
+  buildDiagnosticHypotheses: () => buildDiagnosticHypotheses, buildEvidenceManifest: () => buildEvidenceManifest, buildExecutiveSummary: () => buildExecutiveSummary,
+  buildExpertInformation: () => buildExpertInformation, buildGeoMarkers: () => buildGeoMarkers, buildGuidedChecklistItems: () => buildGuidedChecklistItems,
+  buildHistory: () => buildHistory, buildIncidentReportPdfModel: () => buildIncidentReportPdfModel, buildJiraReport: () => buildJiraReport,
+  buildJiraReportModel: () => buildJiraReportModel, buildPrintableIncidentReportHtml: () => buildPrintableIncidentReportHtml, buildRootCauseMatrix: () => buildRootCauseMatrix,
+  buildServiceMap: () => buildServiceMap, buildServiceMapData: () => buildServiceMapData, buildServiceMapRoutes: () => buildServiceMapRoutes,
+  buildSocketBandwidthIndex: () => buildSocketBandwidthIndex, buildSocketHistoryFromSnapshots: () => buildSocketHistoryFromSnapshots, buildSocketOptionSets: () => buildSocketOptionSets,
+  buildSparklineIndex: () => buildSparklineIndex, buildSsCollectionCommand: () => buildSsCollectionCommand, buildTimelineEvents: () => buildTimelineEvents,
+  buildTimelinePayload: () => buildTimelinePayload, buildTopSocketsCsv: () => buildTopSocketsCsv, buildVisibleColumnOrder: () => buildVisibleColumnOrder,
+  cachedMultiSocket: () => cachedMultiSocket, cachedRateAlerts: () => cachedRateAlerts, cachedRootCauseMatrix: () => cachedRootCauseMatrix,
+  cachedStories: () => cachedStories, cancelAnimationFrame: () => cancelAnimationFrame, captureQualityReport: () => captureQualityReport,
+  chartAnnotationOverlay: () => chartAnnotationOverlay, chartBgColor: () => chartBgColor, chartDrawDependencies: () => chartDrawDependencies,
+  chartMetricList: () => chartMetricList, chartMicroburstBand: () => chartMicroburstBand, chartSeriesKey: () => chartSeriesKey,
+  chartStats: () => chartStats, chartTooltipOpacity: () => chartTooltipOpacity, chartZoomFor: () => chartZoomFor,
+  clampChartColumns: () => clampChartColumns, clampChartTooltipOpacity: () => clampChartTooltipOpacity, clampZoomRange: () => clampZoomRange,
+  clearPercentileTableCrosshair: () => clearPercentileTableCrosshair, clearVisibleHistoryCache: () => clearVisibleHistoryCache, cloneThresholds: () => cloneThresholds,
+  closeDashboardPresetMenu: () => closeDashboardPresetMenu, cmInstance: () => cmInstance, columnHelpView: () => columnHelpView,
+  commandForPeer: () => commandForPeer, commitDashboardPresetChoice: () => commitDashboardPresetChoice, compressSnapshots: () => compressSnapshots,
+  computeFixStats: () => computeFixStats, computeHealthScore: () => computeHealthScore, configuredLinkCapacityMbps: () => configuredLinkCapacityMbps,
+  conversationAnomalySummary: () => conversationAnomalySummary, conversationDefaultSortDir: () => conversationDefaultSortDir, copyTextToClipboard: () => copyTextToClipboard,
+  correlateCpuWithStalls: () => correlateCpuWithStalls, correlateFixLatency: () => correlateFixLatency, correlateJvmStalls: () => correlateJvmStalls,
+  correlateSarWithTcp: () => correlateSarWithTcp, createBaseline: () => createBaseline, createBaselineSnapshot: () => createBaselineSnapshot,
+  createDashboardSnapshot: () => createDashboardSnapshot, createGuideView: () => createGuideView, createModalView: () => createModalView,
+  ctx: () => ctx, currentAliasDisplay: () => currentAliasDisplay, currentAliasForEndpoint: () => currentAliasForEndpoint,
+  currentApplicationService: () => currentApplicationService, currentApplicationServiceSortKey: () => currentApplicationServiceSortKey, currentSourceAnnotations: () => currentSourceAnnotations,
+  dashboardPresetIcon: () => dashboardPresetIcon, dashboardPresetIdOrDefault: () => dashboardPresetIdOrDefault, dashboardSnapshot: () => dashboardSnapshot,
+  dateTimeFormatter: () => dateTimeFormatter, defaultAlertRules: () => defaultAlertRules, defaultSsCommandConfig: () => defaultSsCommandConfig,
+  defaultSsLogPath: () => defaultSsLogPath, defaultTableColumns: () => defaultTableColumns, defaultTableState: () => defaultTableState,
+  deleteEndpointAlias: () => deleteEndpointAlias, deleteServiceOverride: () => deleteServiceOverride, deleteTopologyGroup: () => deleteTopologyGroup,
+  detectCwndPhases: () => detectCwndPhases, detectFragmentation: () => detectFragmentation, detectMicroburstWindow: () => detectMicroburstWindow,
+  detectMultiSocketCorrelation: () => detectMultiSocketCorrelation, detectRateOfChange: () => detectRateOfChange, detectReordering: () => detectReordering,
+  detectTailLatencyLens: () => detectTailLatencyLens, detectTimelineStories: () => detectTimelineStories, detectTrends: () => detectTrends,
+  diagnosticHypotheses: () => diagnosticHypotheses, document: () => document, downloadBlob: () => downloadBlob,
+  drawBdpWindowCharts: () => drawBdpWindowCharts, drawChart: () => drawChart, drawChartInto: () => drawChartInto,
+  drawFixCharts: () => drawFixCharts, drawJvmCharts: () => drawJvmCharts, dropRateSeverity: () => dropRateSeverity,
+  dropRateSummary: () => dropRateSummary, emptyPreImportFilters: () => emptyPreImportFilters, endpointHost: () => endpointHost,
+  endpointPresentation: () => endpointPresentation, envCommand: () => envCommand, escapeHtml: () => escapeHtml,
+  evaluateAlertRuleEvents: () => evaluateAlertRuleEvents, evaluateAlertRules: () => evaluateAlertRules, exportChartAsPng: () => exportChartAsPng,
+  exportEvidencePack: () => exportEvidencePack, exportFixSpikeCsv: () => exportFixSpikeCsv, exportIncidentReportHtml: () => exportIncidentReportHtml,
+  extractTcpCounters: () => extractTcpCounters, filteredAnomalies: () => filteredAnomalies, focusSocket: () => focusSocket,
+  formatBitsPerSecond: () => formatBitsPerSecond, formatBytesHuman: () => formatBytesHuman, formatDropCadence: () => formatDropCadence,
+  formatDurationCompact: () => formatDurationCompact, formatMetricNumber: () => formatMetricNumber, formatMetricValue: () => formatMetricValue,
+  formatMicroburstWindow: () => formatMicroburstWindow, formatNumber: () => formatNumber, formatTailLatencyWindow: () => formatTailLatencyWindow,
+  formatTimelineOffset: () => formatTimelineOffset, formatTimelineTime: () => formatTimelineTime, generateIncidentDemoSample: () => generateIncidentDemoSample,
+  generateIncidentReport: () => generateIncidentReport, generateMicroburstSample: () => generateMicroburstSample, generateSlowConsumerSample: () => generateSlowConsumerSample,
+  generateTailLatencySample: () => generateTailLatencySample, getColumn: () => getColumn, groupedSockets: () => groupedSockets,
+  guidedChecklistItems: () => guidedChecklistItems, handleGlobalKeydown: () => handleGlobalKeydown, handleIngestAction: () => handleIngestAction,
+  handleLayoutProfileAction: () => handleLayoutProfileAction, handleServiceConfigAction: () => handleServiceConfigAction, hasActiveTableFilters: () => hasActiveTableFilters,
+  hasPreImportFilterValue: () => hasPreImportFilterValue, hasRealTimestampHistory: () => hasRealTimestampHistory, hasTimestampedRawData: () => hasTimestampedRawData,
+  hideAppServiceTooltip: () => hideAppServiceTooltip, hideFloatingChartTooltipNow: () => hideFloatingChartTooltipNow, html: () => html,
+  icons: () => icons, importFile: () => importFile, importSocketFile: () => importSocketFile,
+  inferApplicationService: () => inferApplicationService, inferredApplicationService: () => inferredApplicationService, ingestActionDependencies: () => ingestActionDependencies,
+  ingestViewDependencies: () => ingestViewDependencies, initCodeMirror: () => initCodeMirror, ipIntelDetail: () => ipIntelDetail,
+  ipIntelSummary: () => ipIntelSummary, isAnalystRole: () => isAnalystRole, isLxcProfile: () => isLxcProfile,
+  iterateCompressed: () => iterateCompressed, layoutProfileActionDependencies: () => layoutProfileActionDependencies, layoutTopologyLanePositions: () => layoutTopologyLanePositions,
+  lazySparklineIndex: () => lazySparklineIndex, linuxProfileLabel: () => linuxProfileLabel, loadPrefsRaw: () => loadPrefsRaw,
+  loadTableStateRaw: () => loadTableStateRaw, localStorage: () => localStorage, mapNodeTitle: () => mapNodeTitle,
+  markAnalysisDirty: () => markAnalysisDirty, metricColor: () => metricColor, metricCorrelations: () => metricCorrelations,
+  metricDiagnosticGuidance: () => metricDiagnosticGuidance, metricInterpretation: () => metricInterpretation, metricLabel: () => metricLabel,
+  metricReliabilityProfile: () => metricReliabilityProfile, metricSource: () => metricSource, metricUnit: () => metricUnit,
+  metricValue: () => metricValue, microburstSummary: () => microburstSummary, moveTableColumn: () => moveTableColumn,
+  moveVisibleChartMetric: () => moveVisibleChartMetric, navigator: () => globalThis.navigator, nodeLabel: () => nodeLabel,
+  nodeSubtitle: () => nodeSubtitle, normalizeAliasStore: () => normalizeAliasStore, normalizeBdpDirection: () => normalizeBdpDirection,
+  normalizePreImportFilters: () => normalizePreImportFilters, normalizeSsEditorTheme: () => normalizeSsEditorTheme, normalizeTableState: () => normalizeTableState,
+  normalizeTopologyProfile: () => normalizeTopologyProfile, numberFormatter: () => numberFormatter, numberFormatterWith: () => numberFormatterWith,
+  numberSeparators: () => numberSeparators, openAnnotationModal: () => openAnnotationModal, openIncidentReport: () => openIncidentReport,
+  openTopologyModal: () => openTopologyModal, orderServiceMapConnectivity: () => orderServiceMapConnectivity, orderedChartMetrics: () => orderedChartMetrics,
+  pagedRows: () => pagedRows, parseFixLog: () => parseFixLog, parseFormattedNumber: () => parseFormattedNumber,
+  parseGcLog: () => parseGcLog, parseNstat: () => parseNstat, parseNstatTimestamped: () => parseNstatTimestamped,
+  parsePidstat: () => parsePidstat, parseSar: () => parseSar, parseTimestampLine: () => parseTimestampLine,
+  parseTimestampedSnapshots: () => parseTimestampedSnapshots, parseUiIntervalSeconds: () => parseUiIntervalSeconds, parseVmstat: () => parseVmstat,
+  parsedTimestampSnapshots: () => parsedTimestampSnapshots, percentile: () => percentile, performance: () => performance,
+  pickExecutiveFocusSocket: () => pickExecutiveFocusSocket, playbookForHypothesis: () => playbookForHypothesis, positionConversationInsight: () => positionConversationInsight,
+  prefsDefault: () => prefsDefault, publicPeerIps: () => publicPeerIps, queueMicrotask: () => queueMicrotask,
+  readSsCommandConfigFromDocument: () => readSsCommandConfigFromDocument, recompute: () => recompute, recomputeFromSockets: () => recomputeFromSockets,
+  redrawChartCardMetric: () => redrawChartCardMetric, render: () => render, renderAnalysisPage: () => renderAnalysisPage,
+  renderAnalysisPageView: () => renderAnalysisPageView, renderAnalysisTabs: () => renderAnalysisTabs, renderApplicationServiceChip: () => renderApplicationServiceChip,
+  renderBdpWindowPanel: () => renderBdpWindowPanel, renderCaptureQualityReportView: () => renderCaptureQualityReportView, renderChartAnnotationMenu: () => renderChartAnnotationMenu,
+  renderChartMoveMenu: () => renderChartMoveMenu, renderChartsGlobalToolbar: () => renderChartsGlobalToolbar, renderChartsPage: () => renderChartsPage,
+  renderColumnTooltipView: () => renderColumnTooltipView, renderConversationSortHeader: () => renderConversationSortHeader, renderDashboardPresetOptions: () => renderDashboardPresetOptions,
+  renderDashboardStudioInline: () => renderDashboardStudioInline, renderDatalist: () => renderDatalist, renderDrawer: () => renderDrawer,
+  renderExportMenu: () => renderExportMenu, renderFixLatencyPanel: () => renderFixLatencyPanel, renderFixLatencyPanelView: () => renderFixLatencyPanelView,
+  renderFocusView: () => renderFocusView, renderGeoMapSvg: () => renderGeoMapSvg, renderGuide: () => renderGuide,
+  renderHeatmapView: () => renderHeatmapView, renderHotPaths: () => renderHotPaths, renderIngestPage: () => renderIngestPage,
+  renderIngestPageView: () => renderIngestPageView, renderInvestigationContext: () => renderInvestigationContext, renderJvmGcPanel: () => renderJvmGcPanel,
+  renderJvmGcPanelView: () => renderJvmGcPanelView, renderKeepingModalPosition: () => renderKeepingModalPosition, renderKeepingWorkspacePosition: () => renderKeepingWorkspacePosition,
+  renderMapEdgeInsight: () => renderMapEdgeInsight, renderMapLegend: () => renderMapLegend, renderMetricChartLegend: () => renderMetricChartLegend,
+  renderModal: () => renderModal, renderOnboarding: () => renderOnboarding, renderPercentileDistribution: () => renderPercentileDistribution,
+  renderPrefsView: () => renderPrefsView, renderRowActions: () => renderRowActions, renderSankeySvg: () => renderSankeySvg,
+  renderServiceMapView: () => renderServiceMapView, renderSocketTableView: () => renderSocketTableView, renderSparkline: () => renderSparkline,
+  renderSsCommandBuilderView: () => renderSsCommandBuilderView, renderSsOptionChipView: () => renderSsOptionChipView, renderSsOptionControlView: () => renderSsOptionControlView,
+  renderSsOptionDetailView: () => renderSsOptionDetailView, renderTableHeader: () => renderTableHeader, renderTableMetricCell: () => renderTableMetricCell,
+  renderTableSettingsDrawerView: () => renderTableSettingsDrawerView, renderTableSettingsMenuView: () => renderTableSettingsMenuView, renderTableSettingsTriggerView: () => renderTableSettingsTriggerView,
+  renderThresholdSummaryView: () => renderThresholdSummaryView, renderTimelineStoriesViewModel: () => renderTimelineStoriesViewModel, reportChartDataUrl: () => reportChartDataUrl,
+  reportDefaultChartMetrics: () => reportDefaultChartMetrics, requestAnimationFrame: () => requestAnimationFrame, resetAllState: () => resetAllState,
+  resetDerivedCaches: () => resetDerivedCaches, resetSsEditorThemePreview: () => resetSsEditorThemePreview, resetTableColumns: () => resetTableColumns,
+  resetTableSort: () => resetTableSort, resolvePlaybook: () => resolvePlaybook, resolvedNumberLocale: () => resolvedNumberLocale,
+  resolvedTimeZone: () => resolvedTimeZone, riskRank: () => riskRank, runAdvisorAnalysis: () => runAdvisorAnalysis,
+  runFixCorrelation: () => runFixCorrelation, runJvmCorrelation: () => runJvmCorrelation, safeEvidenceFileName: () => safeEvidenceFileName,
+  saveAlertAcksRaw: () => saveAlertAcksRaw, saveAlertRulesRaw: () => saveAlertRulesRaw, saveAnnotations: () => saveAnnotations,
+  saveAnnotationsRaw: () => saveAnnotationsRaw, saveCurrentTopology: () => saveCurrentTopology, saveDashboardProfilesRaw: () => saveDashboardProfilesRaw,
+  saveFilterHistoryRaw: () => saveFilterHistoryRaw, savePrefs: () => savePrefs, savePrefsRaw: () => savePrefsRaw,
+  saveServiceAliasesRaw: () => saveServiceAliasesRaw, saveServiceOverridesRaw: () => saveServiceOverridesRaw, saveTableProfilesRaw: () => saveTableProfilesRaw,
+  saveTableState: () => saveTableState, saveTableStateRaw: () => saveTableStateRaw, scheduleAnomalyBadgeSettle: () => scheduleAnomalyBadgeSettle,
+  scheduleChartPageDraw: () => scheduleChartPageDraw, scheduleIpIntelEnrichment: () => scheduleIpIntelEnrichment, selectedSocket: () => selectedSocket,
+  selectedSsOptionView: () => selectedSsOptionView, serviceConfigActionDependencies: () => serviceConfigActionDependencies, serviceMapConnectivityOrder: () => serviceMapConnectivityOrder,
+  serviceMapGroupBands: () => serviceMapGroupBands, serviceOverrideForSocket: () => serviceOverrideForSocket, setActiveInvestigation: () => setActiveInvestigation,
+  setSourceName: () => setSourceName, setTableColumnVisibility: () => setTableColumnVisibility, setTimeout: () => setTimeout,
+  setZoom: () => setZoom, setZoomFromDateInputs: () => setZoomFromDateInputs, severityRank: () => severityRank,
+  severityVisible: () => severityVisible, showAppServiceTooltip: () => showAppServiceTooltip, showPercentileTableCrosshair: () => showPercentileTableCrosshair,
+  socketBandwidth: () => socketBandwidth, socketIdentityKey: () => socketIdentityKey, socketInteractionDependencies: () => socketInteractionDependencies,
+  socketKey: () => socketKey, socketMatchesAdvancedQuery: () => socketMatchesAdvancedQuery, socketsById: () => socketsById,
+  sortedFilteredSockets: () => sortedFilteredSockets, sourceFileEventDependencies: () => sourceFileEventDependencies, splitTimestampBlocks: () => splitTimestampBlocks,
+  ssOptionIntelView: () => ssOptionIntelView, state: () => state, svgToPngBlob: () => svgToPngBlob,
+  syncChartHistoryToSelection: () => syncChartHistoryToSelection, syncFromCodeMirror: () => syncFromCodeMirror, syncSsCommandFromBuilder: () => syncSsCommandFromBuilder,
+  tableDefaults: () => tableDefaults, tableFilterCacheKey: () => tableFilterCacheKey, tableInteractionDependencies: () => tableInteractionDependencies,
+  tableLayoutSnapshot: () => tableLayoutSnapshot, tableSettingsPlacement: () => tableSettingsPlacement, tableStateSnapshot: () => tableStateSnapshot,
+  tailLatencyLens: () => tailLatencyLens, thresholdFor: () => thresholdFor, thresholdSeverity: () => thresholdSeverity,
+  timeLabel: () => timeLabel, timeZoneOptions: () => timeZoneOptions, toast: () => toast,
+  toggleCommandOption: () => toggleCommandOption, toggleFixPlayback: () => toggleFixPlayback, toggleTableColumnPin: () => toggleTableColumnPin,
+  toggleTableColumnVisibility: () => toggleTableColumnVisibility, topologyGroupForEndpoint: () => topologyGroupForEndpoint, topologyScopeKey: () => topologyScopeKey,
+  truncateMiddle: () => truncateMiddle, ubuntuProfileLabel: () => ubuntuProfileLabel, updateAnomalyAlertState: () => updateAnomalyAlertState,
+  updateSsCommandValidationInDocument: () => updateSsCommandValidationInDocument, upsertEndpointAlias: () => upsertEndpointAlias, upsertServiceOverride: () => upsertServiceOverride,
+  upsertTopologyGroup: () => upsertTopologyGroup, validateSsCommandConfig: () => validateSsCommandConfig, visibleColumns: () => visibleColumns,
+  visibleHistory: () => visibleHistory, window: () => window, withStableSocketIds: () => withStableSocketIds,
+  zoomForMetric: () => zoomForMetric, zoomRangeFromDragSelection: () => zoomRangeFromDragSelection, zoomToTailLatencyWindow: () => zoomToTailLatencyWindow
+};
+
+function dependencyValue(name) {
+  const resolve = dependencyRegistry[name];
+  if (!resolve) throw new Error(`Missing main dependency: ${name}`);
+  return resolve();
+}
+const dependencyFactories = createMainDependencyFactories(dependencyValue);
 const preferencesController = createPreferencesController(preferencesDependencies);
 
 function normalizeSsEditorTheme(value) {
@@ -229,98 +398,13 @@ const historyController = createHistoryController(historyDependencies);
 const chartOverlays = createChartOverlayRenderer(chartOverlayDependencies);
 const conversationModel = createConversationModel(conversationModelDependencies);
 
-function metricChartDependencies() {
-  return {
-    state,
-    icons,
-    document,
-    window,
-    performance,
-    requestAnimationFrame,
-    DASHBOARD_PRESETS,
-    DEFAULT_TABLE_ORDER,
-    metricLabel: _metricLabel,
-    escapeHtml,
-    numberFormatter,
-    numberFormatterWith,
-    numberSeparators,
-    formatNumber,
-    lazySparklineIndex,
-    renderSparkline,
-    dateTimeFormatter,
-    resolvedNumberLocale,
-    resolvedTimeZone,
-    clearVisibleHistoryCache,
-    tailLatencyLens,
-    microburstSummary,
-    chartMicroburstBand,
-    chartAnnotationOverlay,
-    bdpWindowAnalysis,
-    formatBytesHuman,
-    annotationKindForChartContext,
-    annotationLabelForChartContext,
-    currentSourceAnnotations,
-    annotationColor,
-    toast,
-    render,
-    setSourceName,
-    setActiveInvestigation,
-    defaultSsCommandConfig,
-    defaultTableColumns,
-    clampChartColumns,
-    applyChartZoomOperation,
-    clampZoomRange,
-    zoomForMetric,
-    zoomRangeFromDragSelection,
-    savePrefs,
-    chartTooltipOpacity
-  };
-}
+function metricChartDependencies() { return dependencyFactories.metricChartDependencies(); }
 
-function historyDependencies() {
-  return {
-    state,
-    metricValue,
-    socketsById,
-    buildSocketHistoryFromSnapshots,
-    splitTimestampBlocks,
-    parseTimestampedSnapshots,
-    compressSnapshots,
-    iterateCompressed,
-    socketIdentityKey,
-    detectMicroburstWindow,
-    detectTailLatencyLens,
-    thresholdFor,
-    formatNumber,
-    timeLabel
-  };
-}
+function historyDependencies() { return dependencyFactories.historyDependencies(); }
 
-function chartOverlayDependencies() {
-  return {
-    annotationDefaultLabel,
-    annotationSocketId,
-    chartBgColor,
-    currentSourceAnnotations,
-    escapeHtml
-  };
-}
+function chartOverlayDependencies() { return dependencyFactories.chartOverlayDependencies(); }
 
-function conversationModelDependencies() {
-  return {
-    state,
-    CONVERSATION_SORT_COLLATOR,
-    CONVERSATION_SORT_LABELS,
-    currentApplicationServiceSortKey,
-    escapeHtml,
-    metricValue,
-    riskRank,
-    severityRank,
-    socketBandwidth,
-    socketKey,
-    sortedFilteredSockets
-  };
-}
+function conversationModelDependencies() { return dependencyFactories.conversationModelDependencies(); }
 
 const appEventBindings = createAppEventBindings(appEventDependencies);
 const globalDomController = createGlobalDomController(globalDomDependencies);
@@ -346,379 +430,43 @@ const runtimeProfile = createRuntimeProfile(runtimeProfileDependencies);
 const derivedCacheController = createDerivedCacheController(derivedCacheDependencies);
 const ipIntelController = createIpIntelController(ipIntelControllerDependencies);
 
-function advancedCorrelationDependencies() {
-  return {
-    state,
-    icons,
-    document,
-    window,
-    Worker: window.Worker,
-    performance,
-    requestAnimationFrame,
-    cancelAnimationFrame,
-    alignTimestamps,
-    chartBgColor,
-    chartTooltipOpacity,
-    computeFixStats,
-    correlateFixLatency,
-    correlateJvmStalls,
-    dateTimeFormatter,
-    dropRateSummary,
-    escapeHtml,
-    formatBytesHuman,
-    formatMetricValue,
-    formatNumber,
-    metricValue,
-    parsedTimestampSnapshots,
-    render,
-    renderFixLatencyPanelView,
-    renderJvmGcPanelView,
-    resolvedNumberLocale,
-    resolvedTimeZone,
-    setZoom,
-    socketsById,
-    timeLabel,
-    visibleHistory
-  };
-}
+function advancedCorrelationDependencies() { return dependencyFactories.advancedCorrelationDependencies(); }
 
-function serviceMapPresenterDependencies() {
-  return {
-    state,
-    icons,
-    SERVICE_MAP_SORT_COLLATOR,
-    aliasDisplay,
-    aliasForEndpoint,
-    anomaliesBySocketId,
-    buildServiceMapData,
-    escapeHtml,
-    formatMetricValue,
-    formatNumber,
-    metricLabel,
-    metricValue,
-    orderServiceMapConnectivity,
-    riskRank,
-    severityRank,
-    socketBandwidth,
-    sortedFilteredSockets,
-    thresholdSeverity,
-    topologyGroupForEndpoint
-  };
-}
+function serviceMapPresenterDependencies() { return dependencyFactories.serviceMapPresenterDependencies(); }
 
-function preferencesDependencies() {
-  return {
-    state,
-    DASHBOARD_PRESETS,
-    TABLE_COLUMNS,
-    clampChartColumns,
-    configuredLinkCapacityMbps,
-    defaultTableState,
-    escapeHtml,
-    loadPrefsRaw,
-    loadTableStateRaw,
-    normalizeBdpDirection,
-    normalizeSsEditorTheme,
-    normalizeTableState,
-    prefsDefault,
-    saveAnnotationsRaw,
-    savePrefsRaw,
-    saveTableStateRaw,
-    tableDefaults
-  };
-}
+function preferencesDependencies() { return dependencyFactories.preferencesDependencies(); }
 
-function annotationControllerDependencies() {
-  return {
-    state,
-    annotationsForContext,
-    buildAnnotationAnchorOptions,
-    buildAnnotationDraft,
-    metricLabel,
-    microburstSummary,
-    render,
-    reportDefaultChartMetrics,
-    selectedSocket,
-    tailLatencyLens,
-    thresholdSeverity,
-    toast,
-    visibleHistory
-  };
-}
+function annotationControllerDependencies() { return dependencyFactories.annotationControllerDependencies(); }
 
-function ssCommandControllerDependencies() {
-  return {
-    state,
-    document,
-    SS_OPTION_INTEL,
-    buildSsCollectionCommand,
-    defaultSsLogPath,
-    escapeHtml,
-    icons,
-    parseUiIntervalSeconds,
-    readSsCommandConfigFromDocument,
-    renderSsCommandBuilderView,
-    renderSsOptionChipView,
-    renderSsOptionControlView,
-    renderSsOptionDetailView,
-    selectedSsOptionView,
-    ssOptionIntelView,
-    updateSsCommandValidationInDocument,
-    validateSsCommandConfig
-  };
-}
+function ssCommandControllerDependencies() { return dependencyFactories.ssCommandControllerDependencies(); }
 
-function runtimeProfileDependencies() {
-  return {
-    state,
-    ACCESS_ROLES,
-    LINUX_PROFILES,
-    UBUNTU_PROFILES
-  };
-}
+function runtimeProfileDependencies() { return dependencyFactories.runtimeProfileDependencies(); }
 
-function derivedCacheDependencies() {
-  return {
-    state,
-    clearVisibleHistoryCache,
-    renderBdpWindowPanel
-  };
-}
+function derivedCacheDependencies() { return dependencyFactories.derivedCacheDependencies(); }
 
-function ipIntelControllerDependencies() {
-  return {
-    state,
-    publicPeerIps,
-    render
-  };
-}
+function ipIntelControllerDependencies() { return dependencyFactories.ipIntelControllerDependencies(); }
 
-function alertStateDependencies() {
-  return {
-    DateRef: Date,
-    buildBaselineComparison,
-    createBaselineSnapshot,
-    document,
-    evaluateAlertRuleEvents,
-    metricValue,
-    riskRank,
-    setTimeoutRef: setTimeout,
-    socketBandwidth,
-    socketKey,
-    state
-  };
-}
+function alertStateDependencies() { return dependencyFactories.alertStateDependencies(); }
 
-function analysisRuntimeDependencies() {
-  return {
-    aggregateTimestampedSockets,
-    analyzeAll,
-    applyRisks,
-    buildHistory,
-    buildSocketBandwidthIndex,
-    commandForPeer,
-    computeHealthScore,
-    detectFragmentation,
-    detectReordering,
-    dropRateSeverity,
-    dropRateSummary,
-    envCommand,
-    evaluateAlertRules,
-    formatDropCadence,
-    formatDurationCompact,
-    formatMetricValue,
-    formatMicroburstWindow,
-    hasTimestampedRawData,
-    isAnalystRole,
-    isLxcProfile,
-    metricValue,
-    microburstSummary,
-    parseTimestampLine,
-    resetDerivedCaches,
-    setActiveInvestigation,
-    setTimeoutRef: setTimeout,
-    setZoom,
-    socketsById,
-    state,
-    thresholdFor,
-    toast,
-    withStableSocketIds
-  };
-}
+function analysisRuntimeDependencies() { return dependencyFactories.analysisRuntimeDependencies(); }
 
-function appShellRenderDependencies() {
-  return {
-    APP_VERSION,
-    animateCounters: _animateCounters,
-    anomalyStatusClass,
-    bindEvents,
-    detectTrends,
-    document,
-    drawBdpWindowCharts,
-    drawChart,
-    drawFixCharts,
-    drawJvmCharts,
-    escapeHtml,
-    formatNumber,
-    hideAppServiceTooltip,
-    hideBusy: _hideBusy,
-    hideFloatingChartTooltipNow,
-    html,
-    icons,
-    initCodeMirror,
-    localStorage,
-    positionTabIndicator: _positionTabIndicator,
-    positionTourCard: _positionTourCard,
-    recompute,
-    renderAnalysisPage,
-    renderBdpWindowPanel,
-    renderChartAnnotationMenu,
-    renderChartsGlobalToolbar,
-    renderChartsPage,
-    renderDashboardStudioInline,
-    renderDrawer,
-    renderError: _renderError,
-    renderFixLatencyPanel,
-    renderFocusView,
-    renderGuide,
-    renderIngestPage,
-    renderInvestigationContext,
-    renderJvmGcPanel,
-    renderModal,
-    renderOnboarding,
-    scheduleAnomalyBadgeSettle,
-    scheduleChartPageDraw,
-    scheduleIpIntelEnrichment,
-    setTimeoutRef: setTimeout,
-    showBusy: _showBusy,
-    staggerReveal: _staggerReveal,
-    state,
-    updateAnomalyAlertState,
-    window
-  };
-}
+function appShellRenderDependencies() { return dependencyFactories.appShellRenderDependencies(); }
 
-function browserFeedbackDependencies() {
-  return {
-    document,
-    escapeHtml,
-    navigatorRef: navigator,
-    setTimeoutRef: setTimeout
-  };
-}
+function browserFeedbackDependencies() { return dependencyFactories.browserFeedbackDependencies(); }
 
-function codeMirrorDependencies() {
-  return {
-    CodeMirror: window.CodeMirror,
-    document,
-    setTimeoutRef: setTimeout,
-    state
-  };
-}
+function codeMirrorDependencies() { return dependencyFactories.codeMirrorDependencies(); }
 
-function focusViewDependencies() {
-  return {
-    chartMetricList,
-    escapeHtml,
-    icons,
-    metricLabel,
-    socketsById,
-    state,
-    visibleHistory
-  };
-}
+function focusViewDependencies() { return dependencyFactories.focusViewDependencies(); }
 
-function importFlowDependencies() {
-  return {
-    INGEST_RAW_EAGER_LIMIT,
-    aggregateParsedSocketsByKey,
-    document,
-    formatNumber,
-    hasPreImportFilterValue,
-    hasTimestampedRawData,
-    importSocketFile,
-    normalizePreImportFilters,
-    performance,
-    recompute,
-    recomputeFromSockets,
-    render,
-    resetDerivedCaches,
-    saveFilterHistory: filters => saveFilterHistoryRaw(filters),
-    setActiveInvestigation,
-    setSourceName,
-    setTimeoutRef: setTimeout,
-    state,
-    toast
-  };
-}
+function importFlowDependencies() { return dependencyFactories.importFlowDependencies(); }
 
-function investigationSummaryDependencies() {
-  return {
-    anomaliesBySocketId,
-    applyServiceOverride,
-    buildExecutiveSummary,
-    buildGuidedChecklistItems,
-    buildHistory,
-    clearVisibleHistoryCache,
-    escapeHtml,
-    formatMetricValue,
-    formatMicroburstWindow,
-    formatNumber,
-    formatTailLatencyWindow,
-    icons,
-    inferApplicationService,
-    metricValue,
-    microburstSummary,
-    pickExecutiveFocusSocket,
-    setActiveInvestigation,
-    severityRank,
-    socketBandwidth,
-    socketsById,
-    sortedFilteredSockets,
-    state,
-    tailLatencyLens,
-    thresholdFor
-  };
-}
+function investigationSummaryDependencies() { return dependencyFactories.investigationSummaryDependencies(); }
 
-function uiMenuDependencies() {
-  return {
-    DASHBOARD_PRESETS,
-    applyDashboardPreset,
-    cancelAnimationFrame,
-    dashboardPresetIcon,
-    dashboardPresetIdOrDefault,
-    document,
-    redo: _redo,
-    renderKeepingWorkspacePosition,
-    requestAnimationFrame,
-    resetSsEditorThemePreview,
-    state,
-    toast,
-    undo: _undo
-  };
-}
+function uiMenuDependencies() { return dependencyFactories.uiMenuDependencies(); }
 
-function undoCacheDependencies() {
-  return {
-    detectMultiSocketCorrelation,
-    detectRateOfChange,
-    detectTimelineStories,
-    render,
-    state
-  };
-}
+function undoCacheDependencies() { return dependencyFactories.undoCacheDependencies(); }
 
-function workspaceRenderDependencies() {
-  return {
-    document,
-    queueMicrotaskRef: queueMicrotask,
-    render,
-    requestAnimationFrame,
-    setTimeoutRef: setTimeout,
-    window
-  };
-}
+function workspaceRenderDependencies() { return dependencyFactories.workspaceRenderDependencies(); }
 
 function dashboardPresetIdOrDefault(value) {
   return preferencesController.dashboardPresetIdOrDefault(value);
@@ -1249,202 +997,7 @@ const ctx = createAppContext(state, {
 
 const appRendering = createAppRendering(appRenderingDependencies);
 
-function appRenderingDependencies() {
-  return {
-    state,
-    ctx,
-    icons,
-    document,
-    window,
-    performance,
-    APP_VERSION,
-    APP_SPLASH_IMAGE,
-    ACCESS_ROLES,
-    ANALYSIS_TAB_GUIDE,
-    ANALYSIS_TEMPLATES,
-    DASHBOARD_PRESETS,
-    EXPERT_CORRELATIONS,
-    EXPERT_DEFAULT_THRESHOLDS,
-    FIELD_DOCS,
-    FIELD_GUIDANCE,
-    LINUX_PROFILES,
-    PRE_IMPORT_PRESETS,
-    SERVICE_MAP_SORT_COLLATOR,
-    TABLE_COLUMNS,
-    UBUNTU_PROFILES,
-    html,
-    ingestViewDependencies,
-    renderIngestPageView,
-    renderAnalysisPageView,
-    renderExportMenu,
-    renderAnalysisTabs,
-    computeHealthScore,
-    _renderChartsGlobalToolbar,
-    _renderAdvisorGlobalSummary,
-    _renderMetricsStatsTable,
-    chartMetricList,
-    alphabeticalMetrics,
-    microburstSummary,
-    formatMicroburstWindow,
-    metricLabel,
-    orderedChartMetrics,
-    clampChartColumns,
-    hasRealTimestampHistory,
-    renderInvestigationContext,
-    formatMetricValue,
-    renderMetricChartLegend,
-    renderChartMoveMenu,
-    _renderDashboardPresetPicker,
-    _renderDashboardStudioInline,
-    _renderDashboardStudio,
-    tailLatencyLens,
-    formatTailLatencyWindow,
-    numberFormatter,
-    formatNumber,
-    visibleHistory,
-    socketsById,
-    analyzeBdpWindowLimit,
-    normalizeBdpDirection,
-    configuredLinkCapacityMbps,
-    thresholdFor,
-    formatBitsPerSecond,
-    bdpChartSeries,
-    metricUnit,
-    metricColor,
-    formatMetricNumber,
-    renderTableMetricCell,
-    thresholdSeverity,
-    renderPercentileDistribution,
-    advancedCorrelationPanels,
-    metricSource,
-    metricInterpretation,
-    metricCorrelations,
-    metricReliabilityProfile,
-    metricDiagnosticGuidance,
-    escapeHtml,
-    render,
-    buildAiSummary,
-    buildCorrelationMatrix,
-    analyzeCaptureQuality,
-    renderCaptureQualityReportView,
-    buildDiagnosticHypotheses,
-    buildRootCauseMatrix,
-    detectCwndPhases,
-    buildSparklineIndex,
-    socketIdentityKey,
-    anomaliesBySocketId,
-    riskRank,
-    resolvePlaybook,
-    playbookForHypothesis,
-    runAdvisorAnalysis,
-    renderSocketTableView,
-    tableSettingsPlacement,
-    buildSocketOptionSets,
-    tableDefaults,
-    visibleColumns,
-    sortedFilteredSockets,
-    tableStateSnapshot,
-    renderTableSettingsTriggerView,
-    renderTableSettingsDrawerView,
-    renderTableSettingsMenuView,
-    renderTableHeader,
-    getColumn,
-    columnHelpView,
-    renderThresholdSummaryView,
-    renderColumnTooltipView,
-    pagedRows,
-    groupedSockets,
-    buildConversations,
-    conversationAnomalySummary,
-    renderConversationSortHeader,
-    currentAliasForEndpoint,
-    aliasCountForSource,
-    aliasForEndpoint,
-    aliasListForSource,
-    ipIntelSummary,
-    ipIntelDetail,
-    buildServiceMap,
-    buildServiceMapData,
-    buildServiceMapRoutes,
-    layoutTopologyLanePositions,
-    renderGeoMapSvg,
-    buildGeoMarkers,
-    renderSankeySvg,
-    orderServiceMapConnectivity,
-    serviceMapConnectivityOrder,
-    serviceMapGroupBands,
-    endpointHost,
-    endpointPresentation,
-    topologyGroupForEndpoint,
-    topologyScopeKey,
-    nodeLabel,
-    nodeSubtitle,
-    mapNodeTitle,
-    renderMapLegend,
-    renderHotPaths,
-    renderMapEdgeInsight,
-    buildExpertInformation,
-    buildTimelineEvents,
-    cachedStories,
-    cachedMultiSocket,
-    cachedRateAlerts,
-    detectTrends,
-    formatTimelineTime,
-    formatTimelineOffset,
-    renderHeatmapView,
-    renderTimelineStoriesViewModel,
-    severityVisible,
-    defaultAlertRules,
-    baselineDeviations,
-    buildComparison,
-    buildBaselineNarrative,
-    _renderBaselineNarrative,
-    _renderDelta,
-    selectedSocket,
-    metricValue,
-    renderApplicationServiceChip,
-    currentApplicationService,
-    inferredApplicationService,
-    currentSourceAnnotations,
-    annotationTypeList,
-    buildAnnotationDraft,
-    annotationAnchorOptions,
-    annotationMetricChoices,
-    annotationDefaultLabel,
-    annotationTypeLabel,
-    createModalView,
-    renderPrefsView,
-    timeZoneOptions,
-    createGuideView,
-    normalizeAliasStore,
-    normalizeTopologyProfile,
-    serviceOverrideForSocket,
-    normalizePreImportFilters,
-    renderDashboardPresetOptions,
-    renderDatalist,
-    accessRoleLabel,
-    linuxProfileLabel,
-    ubuntuProfileLabel,
-    envCommand,
-    commandForPeer,
-    isAnalystRole,
-    isLxcProfile,
-    hasActiveTableFilters,
-    currentApplicationServiceSortKey,
-    socketBandwidth,
-    truncateMiddle,
-    parsedTimestampSnapshots,
-    chartTooltipOpacity,
-    chartStats,
-    numberFormatterWith,
-    renderServiceMapView,
-    resolvedNumberLocale,
-    resolvedTimeZone,
-    timeLabel,
-    analysisTabGuide,
-    annotationSocketId
-  };
-}
+function appRenderingDependencies() { return dependencyFactories.appRenderingDependencies(); }
 
 function renderFocusView() { return focusViewController.renderFocusView(); }
 function renderTailLatencyLensPanel(...args) { return appRendering.renderTailLatencyLensPanel(...args); }
@@ -1535,68 +1088,7 @@ function bdpChartSeries(analysis, kind) { return metricChartEngine.bdpChartSerie
 function attachChartInteractions(svg, deps = chartDrawDependencies()) { return metricChartEngine.attachChartInteractions(svg, deps); }
 const reportActions = createReportActions(reportActionDependencies);
 
-function reportActionDependencies() {
-  return {
-    state,
-    document,
-    window,
-    APP_VERSION,
-    metricLabel,
-    toast,
-    visibleHistory,
-    resolvedTimeZone,
-    timeLabel,
-    selectedSocket,
-    anomaliesBySocketId,
-    microburstSummary,
-    formatMicroburstWindow,
-    drawChartInto,
-    sortedFilteredSockets,
-    socketBandwidth,
-    metricValue,
-    percentile,
-    severityRank,
-    currentSourceAnnotations,
-    annotationSocketId,
-    buildPrintableIncidentReportHtml,
-    buildIncidentReportPdfModel,
-    buildJiraReportModel,
-    reportChartDataUrl,
-    svgToPngBlob,
-    safeEvidenceFileName,
-    buildAnomaliesCsv,
-    buildTopSocketsCsv,
-    buildTimelinePayload,
-    buildEvidenceManifest,
-    downloadBlob,
-    resolvePlaybook,
-    playbookForHypothesis,
-    buildComparison,
-    buildBaselineNarrative,
-    buildAiSummary,
-    generateIncidentReport,
-    buildRootCauseMatrix,
-    cachedStories,
-    cachedMultiSocket,
-    cachedRateAlerts,
-    captureQualityReport,
-    diagnosticHypotheses,
-    cachedRootCauseMatrix,
-    formatMetricValue,
-    formatNumber,
-    resolvedNumberLocale,
-    linuxProfileLabel,
-    accessRoleLabel,
-    escapeHtml,
-    annotationTypeLabel,
-    pickExecutiveFocusSocket,
-    tailLatencyLens,
-    guidedChecklistItems,
-    buildExecutiveSummary,
-    formatTailLatencyWindow,
-    socketsById
-  };
-}
+function reportActionDependencies() { return dependencyFactories.reportActionDependencies(); }
 
 function exportChartAsPng(...args) { return reportActions.exportChartAsPng(...args); }
 function reportDefaultChartMetrics(...args) { return reportActions.reportDefaultChartMetrics(...args); }
@@ -1632,355 +1124,29 @@ function closeFloatingMenus(options = {}) { return uiMenuController.closeFloatin
 
 function handleGlobalKeydown(event) { uiMenuController.handleGlobalKeydown(event); }
 
-function appEventDependencies() {
-  return {
-    ...chartDrawDependencies(),
-    document,
-    window,
-    state,
-    cmInstance,
-    icons,
-    EXPERT_CORRELATIONS,
-    PRE_IMPORT_PRESETS,
-    ANALYSIS_TEMPLATES,
-    render,
-    renderKeepingWorkspacePosition,
-    drawBdpWindowCharts,
-    drawJvmCharts,
-    drawFixCharts,
-    redrawChartCardMetric,
-    applyChartZoomAction,
-    chartZoomFor,
-    clearVisibleHistoryCache,
-    chartSeriesKey,
-    handleGlobalKeydown,
-    bindSmartChartTooltips,
-    bindColumnHelpTooltips,
-    sortedFilteredSockets,
-    visibleColumns,
-    escapeHtml,
-    renderRowActions,
-    handleIngestAction,
-    ingestActionDependencies,
-    openIncidentReport,
-    exportEvidencePack,
-    toast,
-    annotationAnchorOptions,
-    annotationDefaultLabel,
-    visibleHistory,
-    annotationSocketId,
-    saveAnnotations,
-    zoomToTailLatencyWindow,
-    applyDashboardPreset,
-    resetAllState,
-    _undo,
-    _redo,
-    _undoSnapshot,
-    renderModal,
-    parseGcLog,
-    runJvmCorrelation,
-    toggleFixPlayback,
-    selectedSocket,
-    anomaliesBySocketId,
-    applyContextAction,
-    chartMetricList,
-    syncChartHistoryToSelection,
-    openAnnotationModal,
-    bindTableInteractionEvents,
-    tableInteractionDependencies,
-    bindSocketInteractionEvents,
-    socketInteractionDependencies,
-    closeDashboardPresetMenu,
-    commitDashboardPresetChoice,
-    applyDashboardProfile,
-    saveDashboardProfiles: () => saveDashboardProfilesRaw(state.dashboardProfiles),
-    saveAlertAcks: () => saveAlertAcksRaw(state.alertAcks),
-    defaultAlertRules,
-    saveAlertRules: () => saveAlertRulesRaw(state.alertRules),
-    saveFilterHistory: () => saveFilterHistoryRaw(state.filterHistory),
-    hasPreImportFilterValue,
-    emptyPreImportFilters,
-    importFile,
-    openTopologyModal,
-    renderKeepingModalPosition,
-    socketsById,
-    focusSocket,
-    hideAppServiceTooltip,
-    showAppServiceTooltip,
-    applyAnalysisTemplate,
-    savePrefs,
-    normalizeBdpDirection,
-    syncSsCommandFromBuilder,
-    syncFromCodeMirror,
-    toggleCommandOption,
-    normalizeSsEditorTheme,
-    applySsEditorThemePreview,
-    resetSsEditorThemePreview,
-    runFixCorrelation,
-    sourceFileEventDependencies,
-    bindSourceFileEvents,
-    setZoom,
-    saveTableState,
-    moveVisibleChartMetric,
-    showPercentileTableCrosshair,
-    clearPercentileTableCrosshair,
-    exportChartAsPng,
-    copyTextToClipboard,
-    buildJiraReport,
-    exportIncidentReportHtml,
-    exportFixSpikeCsv,
-    createBaseline,
-    formatNumber,
-    handleLayoutProfileAction,
-    layoutProfileActionDependencies,
-    handleServiceConfigAction,
-    serviceConfigActionDependencies,
-    setZoomFromDateInputs,
-    clampZoomRange
-  };
-}
+function appEventDependencies() { return dependencyFactories.appEventDependencies(); }
 
-function ingestActionDependencies() {
-  return {
-    document,
-    state,
-    cmInstance,
-    performance,
-    SAMPLE,
-    INGEST_RAW_EAGER_LIMIT,
-    generateIncidentDemoSample,
-    generateSlowConsumerSample,
-    generateMicroburstSample,
-    generateTailLatencySample,
-    setSourceName,
-    setActiveInvestigation,
-    resetDerivedCaches,
-    markAnalysisDirty,
-    recompute,
-    applyDashboardPreset,
-    setZoom,
-    syncSsCommandFromBuilder,
-    copyTextToClipboard,
-    captureQualityReport,
-    defaultSsLogPath,
-    buildSsCollectionCommand,
-    render,
-    renderKeepingWorkspacePosition,
-    _showBusy,
-    _hideBusy,
-    _renderSkeleton,
-    toast,
-    savePrefs
-  };
-}
+function ingestActionDependencies() { return dependencyFactories.ingestActionDependencies(); }
 
-function sourceFileEventDependencies() {
-  return {
-    document,
-    state,
-    cmInstance,
-    parseGcLog,
-    parsePidstat,
-    parseNstat,
-    parseFixLog,
-    parseVmstat,
-    parseNstatTimestamped,
-    parseSar,
-    extractTcpCounters,
-    correlateCpuWithStalls,
-    correlateSarWithTcp,
-    visibleHistory,
-    runJvmCorrelation,
-    runFixCorrelation,
-    drawJvmCharts,
-    drawFixCharts,
-    toast,
-    render,
-    _showBusy,
-    _hideBusy
-  };
-}
+function sourceFileEventDependencies() { return dependencyFactories.sourceFileEventDependencies(); }
 
-function serviceConfigActionDependencies() {
-  return {
-    document,
-    state,
-    currentAliasDisplay,
-    upsertEndpointAlias,
-    deleteEndpointAlias,
-    saveServiceAliases: () => saveServiceAliasesRaw(state.serviceAliases),
-    upsertServiceOverride,
-    deleteServiceOverride,
-    saveServiceOverrides: () => saveServiceOverridesRaw(state.serviceOverrides),
-    upsertTopologyGroup,
-    deleteTopologyGroup,
-    saveCurrentTopology,
-    toast,
-    render
-  };
-}
+function serviceConfigActionDependencies() { return dependencyFactories.serviceConfigActionDependencies(); }
 
-function tableInteractionDependencies() {
-  return {
-    document,
-    state,
-    TABLE_COLUMNS,
-    tableDefaults,
-    tableSettingsPlacement,
-    applyTableColumnSearchFilter,
-    resetTableSort,
-    resetTableColumns,
-    toggleTableColumnPin,
-    setTableColumnVisibility,
-    toggleTableColumnVisibility,
-    saveTableState,
-    applyTableLayout,
-    saveTableProfiles: () => saveTableProfilesRaw(state.tableProfiles),
-    moveTableColumn,
-    toast,
-    renderKeepingWorkspacePosition,
-    renderKeepingModalPosition,
-    render
-  };
-}
+function tableInteractionDependencies() { return dependencyFactories.tableInteractionDependencies(); }
 
-function socketInteractionDependencies() {
-  return {
-    document,
-    window,
-    state,
-    CONVERSATION_SORT_LABELS,
-    conversationDefaultSortDir,
-    positionConversationInsight,
-    socketsById,
-    focusSocket,
-    chartMetricList,
-    metricLabel,
-    anomaliesBySocketId,
-    metricValue,
-    formatNumber,
-    openIncidentReport,
-    exportIncidentReportHtml,
-    exportEvidencePack,
-    buildJiraReport,
-    exportFixSpikeCsv,
-    copyTextToClipboard,
-    toast,
-    renderKeepingWorkspacePosition,
-    render
-  };
-}
+function socketInteractionDependencies() { return dependencyFactories.socketInteractionDependencies(); }
 
-function layoutProfileActionDependencies() {
-  return {
-    document,
-    state,
-    DEFAULT_TABLE_ORDER,
-    parseFormattedNumber,
-    cloneThresholds,
-    clampChartColumns,
-    clampChartTooltipOpacity,
-    defaultTableColumns,
-    saveTableState,
-    tableLayoutSnapshot,
-    saveTableProfiles: () => saveTableProfilesRaw(state.tableProfiles),
-    applyDashboardProfile,
-    saveDashboardProfiles: () => saveDashboardProfilesRaw(state.dashboardProfiles),
-    dashboardSnapshot,
-    dashboardPresetIdOrDefault,
-    savePrefs,
-    toast,
-    renderKeepingWorkspacePosition,
-    render
-  };
-}
+function layoutProfileActionDependencies() { return dependencyFactories.layoutProfileActionDependencies(); }
 
-function globalDomDependencies() {
-  return {
-    document,
-    window,
-    localStorage,
-    setTimeout,
-    state,
-    render,
-    renderKeepingWorkspacePosition,
-    saveTableState,
-    sortedFilteredSockets,
-    focusSocket,
-    drawJvmCharts,
-    openIncidentReport,
-    exportIncidentReportHtml,
-    exportEvidencePack,
-    copyTextToClipboard,
-    buildJiraReport,
-    toast,
-    exportFixSpikeCsv,
-    clampZoomRange,
-    importFile,
-    createBaseline
-  };
-}
+function globalDomDependencies() { return dependencyFactories.globalDomDependencies(); }
 
-function renderShellDependencies() {
-  return {
-    consoleRef: console,
-    document,
-    escapeHtml,
-    IntersectionObserver,
-    performance,
-    requestAnimationFrame,
-    state,
-    window
-  };
-}
+function renderShellDependencies() { return dependencyFactories.renderShellDependencies(); }
 
-function timelineEventDependencies() {
-  return {
-    state,
-    currentApplicationServiceSortKey,
-    filteredAnomalies,
-    formatMetricValue,
-    metricLabel,
-    socketsById,
-    thresholdFor,
-    thresholdSeverity
-  };
-}
+function timelineEventDependencies() { return dependencyFactories.timelineEventDependencies(); }
 
-function tableDashboardDependencies() {
-  return {
-    state,
-    DASHBOARD_PRESETS,
-    DEFAULT_TABLE_ORDER,
-    TABLE_COLUMNS,
-    TABLE_COLUMN_BY_KEY,
-    TABLE_SORT_COLLATOR,
-    anomaliesBySocketId,
-    applyDashboardPresetProfile,
-    applySavedDashboardProfile,
-    applyTemplateProfile,
-    buildVisibleColumnOrder,
-    chartMetricList,
-    clampChartColumns,
-    createDashboardSnapshot,
-    dashboardPresetIdOrDefault,
-    metricValue,
-    savePrefs,
-    saveTableState,
-    socketBandwidth,
-    socketMatchesAdvancedQuery,
-    tableDefaults,
-    tableFilterCacheKey
-  };
-}
+function tableDashboardDependencies() { return dependencyFactories.tableDashboardDependencies(); }
 
-function monitoringInsightsDependencies() {
-  return {
-    state,
-    socketsById,
-    thresholdFor
-  };
-}
+function monitoringInsightsDependencies() { return dependencyFactories.monitoringInsightsDependencies(); }
 
 function bindChartMinimapEvents(deps = appEventDependencies()) { return appEventBindings.bindChartMinimapEvents(deps); }
 function bindChartChromeEvents(deps = appEventDependencies()) { return appEventBindings.bindChartChromeEvents(deps); }
