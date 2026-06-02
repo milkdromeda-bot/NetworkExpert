@@ -91,6 +91,8 @@ import { createAppEventBindings } from "../events/app-event-bindings.js";
 import { createGlobalDomController } from "./controllers/global-dom-controller.js";
 import { createRenderShellController } from "./controllers/render-shell-controller.js";
 import { createTimelineEventController } from "./controllers/timeline-event-controller.js";
+import { createTableDashboardController } from "./controllers/table-dashboard-controller.js";
+import { createMonitoringInsightsController } from "./controllers/monitoring-insights-controller.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../analysis/snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "../parsing/shared-buffer.js";
 import { applySsEditorThemePreview as applySsEditorThemePreviewToDocument, defaultSsCommandConfig as createDefaultSsCommandConfig, defaultSsLogPath as createDefaultSsLogPath, normalizeSsEditorTheme as normalizeSsEditorThemeValue, parseUiIntervalSeconds as parseSsUiIntervalSeconds, readSsCommandConfig as readSsCommandConfigFromDocument, updateSsCommandValidation as updateSsCommandValidationInDocument } from "../parsing/ss-command-config.js";
@@ -157,6 +159,7 @@ function hasActiveTableFilters(filters = state?.table?.filters) {
   return hasNonDefaultTableFilters(filters);
 }
 
+const tableDashboardController = createTableDashboardController(tableDashboardDependencies);
 
 const initialPrefs = loadPrefs();
 if (initialPrefs.theme === "light") document.documentElement.setAttribute("data-theme", "light");
@@ -313,6 +316,7 @@ const appEventBindings = createAppEventBindings(appEventDependencies);
 const globalDomController = createGlobalDomController(globalDomDependencies);
 const renderShellController = createRenderShellController(renderShellDependencies);
 const timelineEventController = createTimelineEventController(timelineEventDependencies);
+const monitoringInsightsController = createMonitoringInsightsController(monitoringInsightsDependencies);
 const advancedCorrelationPanels = createAdvancedCorrelationPanels(advancedCorrelationDependencies);
 const serviceMapPresenter = createServiceMapPresenter(serviceMapPresenterDependencies);
 const annotationController = createAnnotationController(annotationControllerDependencies);
@@ -904,71 +908,11 @@ function makeFinding({ id, severity, title, pattern, sockets, confidence, why, n
   };
 }
 
-function buildCorrelationMatrix() {
-  const history = state.history;
-  if (!history || history.length < 20) return null;
-  const metrics = ["rtt", "sendQ", "recvQ", "cwnd", "rto", "retrans", "skmem.r", "skmem.d"];
-  const data = metrics.map(m => history.map(h => h[m] || 0));
-  function pearson(a, b) {
-    const n = a.length; if (n < 5) return 0;
-    const ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n;
-    let num = 0, da = 0, db = 0;
-    for (let i = 0; i < n; i++) { const x = a[i] - ma, y = b[i] - mb; num += x * y; da += x * x; db += y * y; }
-    const denom = Math.sqrt(da) * Math.sqrt(db);
-    return denom ? num / denom : 0;
-  }
-  const cells = metrics.map((_, i) => metrics.map((_, j) => i === j ? 1 : pearson(data[i], data[j])));
-  function color(v) { const abs = Math.abs(v); if (abs < 0.3) return "transparent"; return v > 0 ? `rgba(255,92,119,${abs})` : `rgba(59,130,246,${abs})`; }
-  return `<table style="border-collapse:collapse;font-size:11px"><thead><tr><th></th>${metrics.map(m => `<th style="padding:3px 6px;color:var(--muted);font-weight:400">${m}</th>`).join("")}</tr></thead><tbody>${cells.map((row, i) => `<tr><td style="padding:3px 6px;font-weight:600;color:var(--text)">${metrics[i]}</td>${row.map(v => `<td style="padding:3px 6px;text-align:center;background:${color(v)};border-radius:3px">${v === 1 ? "" : v.toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
-}
+function buildCorrelationMatrix() { return monitoringInsightsController.buildCorrelationMatrix(); }
 
-function detectTrends() {
-  const history = state.history;
-  if (!history || history.length < 10) return [];
-  const trends = [];
-  const metrics = [
-    { key: "recvQ", label: "Recv-Q", limit: s => (s?.details?.skmem?.rb || 4194304), unit: "bytes" },
-    { key: "sendQ", label: "Send-Q", limit: () => 1048576, unit: "bytes" },
-    { key: "skmem.r", label: "skmem.r", limit: s => (s?.details?.skmem?.rb || 4194304), unit: "bytes" },
-    { key: "rto", label: "RTO", limit: () => 120000, unit: "ms" }
-  ];
-  const recent = history.slice(-20);
-  const older = history.slice(-40, -20);
-  if (!older.length) return [];
-  const socket = socketsById().get(state.selectedId) || state.sockets[0];
-  for (const m of metrics) {
-    const recentAvg = recent.reduce((s, d) => s + (d[m.key] || 0), 0) / recent.length;
-    const olderAvg = older.reduce((s, d) => s + (d[m.key] || 0), 0) / older.length;
-    if (olderAvg <= 0 || recentAvg <= olderAvg) continue;
-    const growthRate = (recentAvg - olderAvg) / olderAvg;
-    if (growthRate < 0.1) continue;
-    const limit = m.limit(socket);
-    const timePerSample = history.length > 1 ? (history[history.length-1].epochMs - history[0].epochMs) / history.length : 1000;
-    const samplesPerMin = 60000 / timePerSample;
-    const ratePerMin = (recentAvg - olderAvg) / (20 / samplesPerMin);
-    const remaining = limit - recentAvg;
-    const minutesToOverflow = remaining > 0 && ratePerMin > 0 ? Math.round(remaining / ratePerMin) : null;
-    if (minutesToOverflow !== null && minutesToOverflow < 30) {
-      trends.push({ metric: m.label, rate: `${(growthRate * 100).toFixed(0)}%`, perMin: ratePerMin, eta: minutesToOverflow, unit: m.unit, current: Math.round(recentAvg), limit });
-    }
-  }
-  return trends;
-}
+function detectTrends() { return monitoringInsightsController.detectTrends(); }
 
-function baselineDeviations() {
-  if (!state.baseline?.history?.length || !state.history?.length) return [];
-  const deviations = [];
-  const metrics = ["rtt", "sendQ", "recvQ", "retrans", "rto"];
-  for (const m of metrics) {
-    const baseVals = state.baseline.history.map(d => d[m] || 0).filter(v => v > 0);
-    const currVals = state.history.map(d => d[m] || 0).filter(v => v > 0);
-    if (!baseVals.length || !currVals.length) continue;
-    const baseP95 = baseVals.sort((a, b) => a - b)[Math.floor(baseVals.length * 0.95)] || 0;
-    const currP95 = currVals.sort((a, b) => a - b)[Math.floor(currVals.length * 0.95)] || 0;
-    if (baseP95 > 0 && currP95 > baseP95 * 2) deviations.push({ metric: m, baseP95, currP95, ratio: (currP95 / baseP95).toFixed(1) });
-  }
-  return deviations;
-}
+function baselineDeviations() { return monitoringInsightsController.baselineDeviations(); }
 
 function advisorFindingDependencies() {
   return {
@@ -1011,152 +955,35 @@ function severityRank(severity) {
   return { low: 1, medium: 2, high: 3, critical: 4 }[severity] || 0;
 }
 
-function getColumn(key) {
-  return TABLE_COLUMN_BY_KEY.get(key) || TABLE_COLUMNS[0];
-}
+function getColumn(key) { return tableDashboardController.getColumn(key); }
 
-function visibleColumns() {
-  return buildVisibleColumnOrder(state.table, TABLE_COLUMNS, tableDefaults()).map(getColumn);
-}
+function visibleColumns() { return tableDashboardController.visibleColumns(); }
 
-function tableLayoutSnapshot(name) {
-  return {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: name.trim(),
-    createdAt: new Date().toISOString(),
-    order: [...state.table.order],
-    visible: [...state.table.visible],
-    pinned: [...state.table.pinned],
-    sortKey: state.table.sortKey,
-    sortDir: state.table.sortDir,
-    pageSize: state.table.pageSize
-  };
-}
+function tableLayoutSnapshot(name) { return tableDashboardController.tableLayoutSnapshot(name); }
 
-function applyTableLayout(profile) {
-  if (!profile) return;
-  const allKeys = DEFAULT_TABLE_ORDER;
-  const allKeySet = new Set(allKeys);
-  state.table.order = [...new Set([...(profile.order || []), ...allKeys])].filter(key => allKeySet.has(key));
-  state.table.visible = (profile.visible || allKeys).filter(key => allKeySet.has(key));
-  if (!state.table.visible.length) state.table.visible = ["risk"];
-  state.table.pinned = (profile.pinned || []).filter(key => state.table.visible.includes(key));
-  state.table.sortKey = profile.sortKey || state.table.sortKey;
-  state.table.sortDir = profile.sortDir || state.table.sortDir;
-  state.table.pageSize = Number(profile.pageSize || state.table.pageSize);
-  state.table.page = 1;
-  saveTableState();
-}
+function applyTableLayout(profile) { tableDashboardController.applyTableLayout(profile); }
 
-function dashboardSnapshot(name) {
-  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
-  return createDashboardSnapshot(state, name);
-}
+function dashboardSnapshot(name) { return tableDashboardController.dashboardSnapshot(name); }
 
-function applyDefaultDashboardPreset() {
-  const presetId = dashboardPresetIdOrDefault(state.prefs.defaultDashboardPreset);
-  state.activeDashboardPreset = presetId;
-  applyDashboardPresetProfile(state, presetId, chartMetricList);
-}
-function applyDashboardProfile(profile) {
-  applySavedDashboardProfile(state, profile, chartMetricList);
-  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
-  savePrefs();
-}
+function applyDefaultDashboardPreset() { tableDashboardController.applyDefaultDashboardPreset(); }
 
-function applyDashboardPreset(presetId) {
-  if (!DASHBOARD_PRESETS[presetId]) return;
-  applyDashboardPresetProfile(state, presetId, chartMetricList);
-  state.activeDashboardPreset = presetId;
-  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
-  savePrefs();
-}
+function applyDashboardProfile(profile) { tableDashboardController.applyDashboardProfile(profile); }
 
-function applyAnalysisTemplate(templateId) {
-  const allColumns = DEFAULT_TABLE_ORDER;
-  applyTemplateProfile(state, templateId, allColumns, chartMetricList);
-  savePrefs();
-}
+function applyDashboardPreset(presetId) { tableDashboardController.applyDashboardPreset(presetId); }
 
-function moveTableColumn(sourceKey, targetKey) {
-  if (!sourceKey || !targetKey || sourceKey === targetKey) return false;
-  const order = [...state.table.order];
-  const from = order.indexOf(sourceKey);
-  const to = order.indexOf(targetKey);
-  if (from < 0 || to < 0) return false;
-  order.splice(from, 1);
-  order.splice(to, 0, sourceKey);
-  state.table.order = order;
-  return true;
-}
+function applyAnalysisTemplate(templateId) { tableDashboardController.applyAnalysisTemplate(templateId); }
 
-function createSocketFilterMatcher(filters = state.table.filters) {
-  const f = filters || {};
-  const text = String(f.text || "").trim();
-  const process = String(f.process || "").trim().toLowerCase();
-  const srcIp = String(f.srcIp || "").trim().toLowerCase();
-  const dstIp = String(f.dstIp || "").trim().toLowerCase();
-  const srcPort = String(f.srcPort || "").trim().toLowerCase();
-  const dstPort = String(f.dstPort || "").trim().toLowerCase();
-  const risk = f.risk || "all";
-  const socketState = f.state || "all";
-  const family = f.family || "all";
-  const minRecvQ = f.minRecvQ == null || f.minRecvQ === "" ? null : Number(f.minRecvQ);
-  const minSendQ = f.minSendQ == null || f.minSendQ === "" ? null : Number(f.minSendQ);
-  const minRtt = f.minRtt == null || f.minRtt === "" ? null : Number(f.minRtt);
-  const anomalySocketIds = f.onlyAnomalies ? anomaliesBySocketId() : null;
+function moveTableColumn(sourceKey, targetKey) { return tableDashboardController.moveTableColumn(sourceKey, targetKey); }
 
-  return socket => {
-    if (text && !socketMatchesAdvancedQuery(socket, text, { metricValue, socketBandwidth })) return false;
-    if (process && !String(socket.details.process?.name || "").toLowerCase().includes(process)) return false;
-    if (risk !== "all" && socket.risk !== risk) return false;
-    if (socketState !== "all" && socket.state !== socketState) return false;
-    if (family !== "all" && socket.family !== family) return false;
-    if (Number.isFinite(minRecvQ) && socket.recvQ < minRecvQ) return false;
-    if (Number.isFinite(minSendQ) && socket.sendQ < minSendQ) return false;
-    if (Number.isFinite(minRtt) && metricValue(socket, "rtt") < minRtt) return false;
-    if (srcIp && !socket.localAddress.host.toLowerCase().includes(srcIp)) return false;
-    if (dstIp && !socket.peerAddress.host.toLowerCase().includes(dstIp)) return false;
-    if (srcPort && String(socket.localAddress.port || "").toLowerCase() !== srcPort) return false;
-    if (dstPort && String(socket.peerAddress.port || "").toLowerCase() !== dstPort) return false;
-    if (anomalySocketIds && !anomalySocketIds.has(socket.id)) return false;
-    return true;
-  };
-}
+function createSocketFilterMatcher(filters = state.table.filters) { return tableDashboardController.createSocketFilterMatcher(filters); }
 
-function sortedFilteredSockets() {
-  const cacheKey = [
-    state.dataVersion,
-    tableFilterCacheKey(state.table.filters),
-    state.table.sortKey,
-    state.table.sortDir
-  ].join("\u001e");
-  if (state.cache.filteredKey === cacheKey && state.cache.filteredRows) return state.cache.filteredRows;
-  const col = getColumn(state.table.sortKey);
-  const factor = state.table.sortDir === "asc" ? 1 : -1;
-  const matchesFilters = createSocketFilterMatcher(state.table.filters);
-  const rows = state.sockets.filter(matchesFilters).sort((a, b) => {
-    const av = col.value(a);
-    const bv = col.value(b);
-    if (typeof av === "number" && typeof bv === "number") return (av - bv) * factor;
-    return TABLE_SORT_COLLATOR.compare(String(av), String(bv)) * factor;
-  });
-  state.cache.filteredKey = cacheKey;
-  state.cache.filteredRows = rows;
-  rows.forEach(s => { const h = state.socketHistory?.get?.(s.id); s._rttHistory = h?.map(p => p.rtt ?? 0).slice(-20) || null; });
-  return rows;
-}
+function sortedFilteredSockets() { return tableDashboardController.sortedFilteredSockets(); }
 
 function renderDatalist(id, values) {
   return `<datalist id="${id}">${values.slice(0, 1000).map(value => `<option value="${escapeHtml(value)}"></option>`).join("")}</datalist>`;
 }
 
-function pagedRows(rows) {
-  const totalPages = Math.max(1, Math.ceil(rows.length / state.table.pageSize));
-  state.table.page = Math.min(Math.max(1, state.table.page), totalPages);
-  const start = (state.table.page - 1) * state.table.pageSize;
-  return { rows: rows.slice(start, start + state.table.pageSize), totalPages, start };
-}
+function pagedRows(rows) { return tableDashboardController.pagedRows(rows); }
 
 function groupedSockets() {
   return conversationModel.groupedSockets();
@@ -2737,6 +2564,41 @@ function timelineEventDependencies() {
     socketsById,
     thresholdFor,
     thresholdSeverity
+  };
+}
+
+function tableDashboardDependencies() {
+  return {
+    state,
+    DASHBOARD_PRESETS,
+    DEFAULT_TABLE_ORDER,
+    TABLE_COLUMNS,
+    TABLE_COLUMN_BY_KEY,
+    TABLE_SORT_COLLATOR,
+    anomaliesBySocketId,
+    applyDashboardPresetProfile,
+    applySavedDashboardProfile,
+    applyTemplateProfile,
+    buildVisibleColumnOrder,
+    chartMetricList,
+    clampChartColumns,
+    createDashboardSnapshot,
+    dashboardPresetIdOrDefault,
+    metricValue,
+    savePrefs,
+    saveTableState,
+    socketBandwidth,
+    socketMatchesAdvancedQuery,
+    tableDefaults,
+    tableFilterCacheKey
+  };
+}
+
+function monitoringInsightsDependencies() {
+  return {
+    state,
+    socketsById,
+    thresholdFor
   };
 }
 
