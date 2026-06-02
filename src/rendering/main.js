@@ -112,6 +112,7 @@ const SERVICE_MAP_SORT_COLLATOR = new Intl.Collator("en", { numeric: true });
 const BROWSER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 const APP_VERSION = "1.0.0.0";
 const APP_SPLASH_IMAGE = "./images/ultimateNetworkExpert.png";
+let state;
 const tableDefaultModel = createTableDefaults({ columns: TABLE_COLUMNS, prefsDefault, getPrefs: () => state?.prefs });
 const { DEFAULT_TABLE_ORDER, defaultTableColumns, defaultTableState, tableDefaults } = tableDefaultModel;
 const preferencesController = createPreferencesController(preferencesDependencies);
@@ -159,7 +160,7 @@ if (initialPrefs.theme === "light") document.documentElement.setAttribute("data-
 if (initialPrefs.density === "compact") document.documentElement.setAttribute("data-density", "compact");
 const showOnboarding = !localStorage.getItem("networkExpertOnboarded");
 
-let state = createInitialState({
+state = createInitialState({
   buildAnnotationDraft,
   cloneThresholds,
   dashboardPresetIdOrDefault,
