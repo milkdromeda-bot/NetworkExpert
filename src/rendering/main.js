@@ -89,6 +89,8 @@ import { createRuntimeProfile, emptyPreImportFilters as createEmptyPreImportFilt
 import { createSsCommandController } from "./ss-command-controller.js";
 import { createAppEventBindings } from "../events/app-event-bindings.js";
 import { createGlobalDomController } from "./controllers/global-dom-controller.js";
+import { createRenderShellController } from "./controllers/render-shell-controller.js";
+import { createTimelineEventController } from "./controllers/timeline-event-controller.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../analysis/snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "../parsing/shared-buffer.js";
 import { applySsEditorThemePreview as applySsEditorThemePreviewToDocument, defaultSsCommandConfig as createDefaultSsCommandConfig, defaultSsLogPath as createDefaultSsLogPath, normalizeSsEditorTheme as normalizeSsEditorThemeValue, parseUiIntervalSeconds as parseSsUiIntervalSeconds, readSsCommandConfig as readSsCommandConfigFromDocument, updateSsCommandValidation as updateSsCommandValidationInDocument } from "../parsing/ss-command-config.js";
@@ -309,6 +311,8 @@ function conversationModelDependencies() {
 
 const appEventBindings = createAppEventBindings(appEventDependencies);
 const globalDomController = createGlobalDomController(globalDomDependencies);
+const renderShellController = createRenderShellController(renderShellDependencies);
+const timelineEventController = createTimelineEventController(timelineEventDependencies);
 const advancedCorrelationPanels = createAdvancedCorrelationPanels(advancedCorrelationDependencies);
 const serviceMapPresenter = createServiceMapPresenter(serviceMapPresenterDependencies);
 const annotationController = createAnnotationController(annotationControllerDependencies);
@@ -1203,95 +1207,11 @@ function conversationAnomalySummary(conv) {
 }
 
 function buildExpertInformation() {
-  const rank = { critical: 4, high: 3, medium: 2, low: 1 };
-  const map = new Map();
-  const socketLookup = socketsById();
-  for (const anomaly of filteredAnomalies(state.anomalies)) {
-    const socket = socketLookup.get(anomaly.socketId);
-    const key = `${anomaly.severity}|${anomaly.metric || "socket"}|${anomaly.title}`;
-    if (!map.has(key)) {
-      map.set(key, {
-        ...anomaly,
-        count: 0,
-        sockets: [],
-        processes: new Set(),
-        application: currentApplicationServiceSortKey(socket),
-        peers: new Set()
-      });
-    }
-    const item = map.get(key);
-    item.count += 1;
-    if (socket) {
-      item.sockets.push(socket);
-      if (socket.details.process?.name) item.processes.add(socket.details.process.name);
-      if (socket.peer) item.peers.add(socket.peer);
-    }
-  }
-  return [...map.values()].sort((a, b) =>
-    rank[b.severity] - rank[a.severity] ||
-    b.count - a.count ||
-    a.title.localeCompare(b.title)
-  );
+  return timelineEventController.buildExpertInformation();
 }
 
 function buildTimelineEvents() {
-  const rank = { critical: 4, high: 3, medium: 2, low: 1 };
-  const events = [];
-  const rows = state.history || [];
-  const selected = socketsById().get(state.selectedId) || state.sockets[0];
-  const metrics = ["rto", "rtt", "sendQ", "recvQ", "skmem.d", "skmem.d_rate", "cwnd", "tx_bps", "rx_bps"];
-  let previousTimerName = "";
-  const prevMetricValue = {};
-  for (const row of rows) {
-    const timerName = String(row.timerName || "").toLowerCase();
-    if (timerName === "persist" && previousTimerName !== "persist") {
-      const sendQ = Number(row.sendQ || 0);
-      const backoff = Number(row.backoff || 0);
-      const expire = Number(row.timerExpireMs || 0);
-      events.push({
-        epochMs: row.epochMs,
-        t: row.t,
-        severity: backoff >= 2 || sendQ >= thresholdFor("sendQ").danger ? "critical" : "high",
-        metric: "timer",
-        title: "TCP persist timer active",
-        detail: `timer:(persist${Number.isFinite(expire) && expire > 0 ? `, ${formatMetricValue("rto", expire)}` : ""}) is active: TCP is probing a constrained or closed receive window${sendQ > 0 ? ` while Send-Q is ${formatMetricValue("sendQ", sendQ)}` : ""}.`,
-        socketId: selected?.id
-      });
-    }
-    previousTimerName = timerName;
-    for (const metric of metrics) {
-      const value = Number(row[metric] || 0);
-      const severity = thresholdSeverity(metric, value);
-      if (severity === "danger" || severity === "warn") {
-        if (prevMetricValue[metric] === value) continue;
-        events.push({
-          epochMs: row.epochMs,
-          t: row.t,
-          severity: severity === "danger" ? "high" : "medium",
-          metric,
-          title: `${metricLabel(metric)} threshold crossed`,
-          detail: `${metricLabel(metric)} reached ${formatMetricValue(metric, value)}${selected ? ` on ${selected.local} -> ${selected.peer}` : ""}.`,
-          socketId: selected?.id
-        });
-      }
-      prevMetricValue[metric] = value;
-    }
-  }
-  state.anomalies.slice(0, 80).forEach((anomaly, index) => {
-    const row = rows[index % Math.max(1, rows.length)];
-    events.push({
-      epochMs: row?.epochMs || Date.now(),
-      t: row?.t ?? index,
-      severity: anomaly.severity,
-      metric: anomaly.metric || "socket",
-      title: anomaly.title,
-      detail: anomaly.detail,
-      socketId: anomaly.socketId
-    });
-  });
-  return events
-    .sort((a, b) => (a.epochMs || 0) - (b.epochMs || 0) || rank[b.severity] - rank[a.severity])
-    .slice(0, 160);
+  return timelineEventController.buildTimelineEvents();
 }
 
 function endpointPresentation(...args) { return serviceMapPresenter.endpointPresentation(...args); }
@@ -1396,64 +1316,15 @@ function syncFromCodeMirror() {
   if (cmInstance) state.raw = cmInstance.getValue();
 }
 
-const _busyEl = document.getElementById("busyOverlay");
-function _showBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.add("visible"); }
-function _hideBusy() { const el = document.getElementById("inlineBusy"); if (el) el.classList.remove("visible"); _busyEl?.classList.remove("visible"); }
-
-function _staggerReveal() {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.setAttribute("data-reveal", "");
-        observer.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.1 });
-  document.querySelectorAll(".workspace .advisor-card, .workspace .timeline-story, .workspace .expert-strip article, .workspace .diagnosis-grid > *").forEach((el, i) => {
-    el.style.animationDelay = `${i * 35}ms`;
-    el.style.opacity = "0";
-    observer.observe(el);
-  });
-}
-
-function _positionTabIndicator() {
-  const active = document.querySelector(".app-tab.active");
-  const indicator = document.getElementById("tabIndicator");
-  if (!active || !indicator) return;
-  const tabs = active.closest(".app-tabs");
-  const tabsRect = tabs.getBoundingClientRect();
-  const rect = active.getBoundingClientRect();
-  indicator.style.left = `${rect.left - tabsRect.left}px`;
-  indicator.style.width = `${rect.width}px`;
-}
-
-function _animateCounters() {
-  document.querySelectorAll("[data-countup]").forEach(el => {
-    const target = parseInt(el.dataset.countup, 10);
-    if (isNaN(target)) return;
-    const prev = parseInt(el.dataset.prev || "0", 10);
-    if (prev === target) return;
-    el.dataset.prev = target;
-    const duration = 500;
-    const start = performance.now();
-    const fmt = (n) => n.toLocaleString("fr");
-    (function step(now) {
-      const t = Math.min((now - start) / duration, 1);
-      const ease = 1 - Math.pow(1 - t, 3);
-      el.textContent = fmt(Math.round(prev + (target - prev) * ease));
-      if (t < 1) requestAnimationFrame(step);
-    })(start);
-  });
-}
-
-function _renderSkeleton(type) {
-  const skeletons = {
-    analysis: `<div class="skeleton-grid" style="margin-bottom:16px">${Array(4).fill('<div class="skeleton skeleton-kpi"></div>').join("")}</div><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-line long"></div><div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-chart" style="margin-top:16px"></div>`,
-    table: `<div class="skeleton skeleton-title"></div>${Array(8).fill('<div class="skeleton skeleton-table-row"></div>').join("")}`,
-    charts: `<div class="skeleton-grid">${Array(2).fill('<div class="skeleton skeleton-chart"></div>').join("")}</div>`
-  };
-  return skeletons[type] || skeletons.analysis;
-}
+function _showBusy() { renderShellController.showBusy(); }
+function _hideBusy() { renderShellController.hideBusy(); }
+function _staggerReveal() { renderShellController.staggerReveal(); }
+function _positionTabIndicator() { renderShellController.positionTabIndicator(); }
+function _animateCounters() { renderShellController.animateCounters(); }
+function _renderSkeleton(type) { return renderShellController.renderSkeleton(type); }
+function _renderError(err) { renderShellController.renderError(err); }
+function renderOnboarding() { return renderShellController.renderOnboarding(); }
+function _positionTourCard() { renderShellController.positionTourCard(); }
 
 function _undoSnapshot() {
   const snap = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
@@ -1480,26 +1351,10 @@ function _redo() {
   render();
 }
 
-function _renderError(err) {
-  console.error("Render error:", err);
-  const app = document.querySelector("#app");
-  if (app) app.innerHTML = `<div style="padding:40px;max-width:700px;margin:0 auto;font-family:monospace">
-    <h2 style="color:#ff5c77">⚠ Render error</h2>
-    <p style="color:#c4d0de">A module crashed during rendering. Your data is preserved in memory.</p>
-    <pre style="background:#0b1018;padding:16px;border-radius:8px;overflow:auto;color:#ff9f43;font-size:12px">${escapeHtml(err?.stack || err?.message || String(err))}</pre>
-    <button onclick="try{render()}catch(e){}" style="padding:8px 16px;background:#5db7ff;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:12px">Retry render</button>
-    <button onclick="location.reload()" style="padding:8px 16px;background:#52657a;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:12px;margin-left:8px">Reload page</button>
-  </div>`;
-}
-
-window.addEventListener("error", e => { console.error("Uncaught error:", e.error); });
-window.addEventListener("unhandledrejection", e => { console.error("Unhandled rejection:", e.reason); });
-
 let _cachedDataVersion = -1;
 let _cachedStories = [];
 let _cachedMultiSocket = [];
 let _cachedRateAlerts = [];
-
 function cachedStories() {
   if (_cachedDataVersion !== state.dataVersion) {
     _cachedDataVersion = state.dataVersion;
@@ -1511,66 +1366,6 @@ function cachedStories() {
 }
 function cachedMultiSocket() { cachedStories(); return _cachedMultiSocket; }
 function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
-
-function renderOnboarding() {
-  const steps = [
-    { icon: "ri-upload-cloud-line", title: "Import your data", desc: "Click <b>Open ss file</b> or <b>Auto-detect dir</b> to load ss, vmstat, nstat, GC logs, and FIX logs at once.", target: "[data-action='pickAutoDir'],[data-action='openSsFile']", view: "ingest", anchor: "bottom" },
-    { icon: "ri-play-line", title: "Analyze", desc: "Paste ss output in the editor and click <b>Analyze</b> — or use a sample from <b>See it in action</b>.", target: "[data-action='parse']", view: "ingest", anchor: "bottom" },
-    { icon: "ri-stethoscope-line", title: "Diagnosis & Advisor", desc: "The tool builds a Root Cause Matrix, causal stories, and multi-socket correlation. Explore tabs for deep analysis.", target: "[data-tab='diagnosis'],[data-tab='advisor']", view: "analysis", anchor: "bottom" },
-    { icon: "ri-line-chart-line", title: "Monitoring charts", desc: "Real-time charts with zoom, crosshair sync, and annotations. Use sub-tabs for BDP, JVM, and FIX Latency.", target: "[data-view='charts']", view: "charts", anchor: "bottom" },
-    { icon: "ri-node-tree", title: "Service Map", desc: "Topology view shows process → socket → peer connections. Use <b>Geo & Flow</b> tabs for traffic distribution.", target: "[data-tab='map']", view: "analysis", anchor: "bottom" },
-    { icon: "ri-settings-3-line", title: "Settings & Export", desc: "Customize thresholds, export PDF/HTML reports, evidence packs, or Jira tickets from the gear menu.", target: ".gear-btn", view: "ingest", anchor: "left" }
-  ];
-  const step = steps[state.onboarding] || steps[0];
-  const isLast = state.onboarding >= steps.length - 1;
-  if (step.view) state.view = step.view;
-  return `<div class="onboarding-overlay" data-tour-step="${state.onboarding}" data-tour-target="${step.target}" data-tour-anchor="${step.anchor}">
-    <div class="onboarding-card">
-      <div class="onboarding-progress">${steps.map((_, i) => `<span class="${i <= state.onboarding ? "active" : ""}"></span>`).join("")}</div>
-      <div class="onboarding-icon"><i class="${step.icon}"></i></div>
-      <h2>${step.title}</h2>
-      <p>${step.desc}</p>
-      <div class="onboarding-actions">
-        <button data-action="skipOnboarding" class="onboarding-skip">Skip tour</button>
-        <button data-action="${isLast ? "finishOnboarding" : "nextOnboarding"}" class="primary">${isLast ? "Start using" : "Next →"}</button>
-      </div>
-      <span class="onboarding-step-count">${state.onboarding + 1}/${steps.length}</span>
-    </div>
-  </div>`;
-}
-
-function _positionTourCard() {
-  const overlay = document.querySelector(".onboarding-overlay");
-  if (!overlay) return;
-  const selector = overlay.dataset.tourTarget;
-  const anchor = overlay.dataset.tourAnchor || "bottom";
-  const card = overlay.querySelector(".onboarding-card");
-  if (!card) return;
-  const target = selector ? document.querySelector(selector) : null;
-  if (!target) {
-    card.style.position = "fixed";
-    card.style.bottom = "24px";
-    card.style.right = "24px";
-    card.style.top = "auto";
-    card.style.left = "auto";
-    return;
-  }
-  const rect = target.getBoundingClientRect();
-  target.style.position = target.style.position || "relative";
-  target.style.zIndex = "100001";
-  target.style.boxShadow = "0 0 0 4px rgba(57,214,214,0.6), 0 0 20px rgba(57,214,214,0.3)";
-  target.style.borderRadius = "6px";
-  card.style.position = "fixed";
-  card.style.bottom = "auto";
-  card.style.right = "auto";
-  if (anchor === "bottom") {
-    card.style.top = `${Math.min(rect.bottom + 12, window.innerHeight - 260)}px`;
-    card.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - 380))}px`;
-  } else if (anchor === "left") {
-    card.style.top = `${Math.max(12, rect.top - 40)}px`;
-    card.style.left = `${Math.max(12, rect.left - 380)}px`;
-  }
-}
 
 function render() {
   _showBusy();
@@ -2916,6 +2711,32 @@ function globalDomDependencies() {
     clampZoomRange,
     importFile,
     createBaseline
+  };
+}
+
+function renderShellDependencies() {
+  return {
+    consoleRef: console,
+    document,
+    escapeHtml,
+    IntersectionObserver,
+    performance,
+    requestAnimationFrame,
+    state,
+    window
+  };
+}
+
+function timelineEventDependencies() {
+  return {
+    state,
+    currentApplicationServiceSortKey,
+    filteredAnomalies,
+    formatMetricValue,
+    metricLabel,
+    socketsById,
+    thresholdFor,
+    thresholdSeverity
   };
 }
 
