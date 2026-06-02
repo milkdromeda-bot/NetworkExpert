@@ -56,7 +56,6 @@ import { createGuideView } from "../views/guide-view.js";
 import { createModalView } from "../views/modal-view.js";
 import { createLocaleFormatting } from "../core/locale-formatting.js";
 import { downloadBlob, drawPdfSection, drawPdfTextBlock, reportChartDataUrl, svgToPngBlob } from "../reporting/report-utils.js";
-import { buildAdvisorFindings as buildAdvisorFindingsModel } from "../analysis/advisor-findings.js";
 import { buildPrintableIncidentReportHtml } from "../reporting/printable-incident-report.js";
 import { buildIncidentReportPdf as buildIncidentReportPdfModel } from "../reporting/incident-report-pdf.js";
 import { buildJiraReport as buildJiraReportModel } from "../reporting/jira-report.js";
@@ -93,6 +92,17 @@ import { createRenderShellController } from "./controllers/render-shell-controll
 import { createTimelineEventController } from "./controllers/timeline-event-controller.js";
 import { createTableDashboardController } from "./controllers/table-dashboard-controller.js";
 import { createMonitoringInsightsController } from "./controllers/monitoring-insights-controller.js";
+import { createAlertStateController } from "./controllers/alert-state-controller.js";
+import { createAnalysisRuntimeController } from "./controllers/analysis-runtime-controller.js";
+import { createAppShellRenderController } from "./controllers/app-shell-render-controller.js";
+import { createBrowserFeedbackController } from "./controllers/browser-feedback-controller.js";
+import { createCodeMirrorController } from "./controllers/code-mirror-controller.js";
+import { createFocusViewController } from "./controllers/focus-view-controller.js";
+import { createImportFlowController } from "./controllers/import-flow-controller.js";
+import { createInvestigationSummaryController } from "./controllers/investigation-summary-controller.js";
+import { createUiMenuController } from "./controllers/ui-menu-controller.js";
+import { createUndoCacheController } from "./controllers/undo-cache-controller.js";
+import { createWorkspaceRenderController } from "./controllers/workspace-render-controller.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../analysis/snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "../parsing/shared-buffer.js";
 import { applySsEditorThemePreview as applySsEditorThemePreviewToDocument, defaultSsCommandConfig as createDefaultSsCommandConfig, defaultSsLogPath as createDefaultSsLogPath, normalizeSsEditorTheme as normalizeSsEditorThemeValue, parseUiIntervalSeconds as parseSsUiIntervalSeconds, readSsCommandConfig as readSsCommandConfigFromDocument, updateSsCommandValidation as updateSsCommandValidationInDocument } from "../parsing/ss-command-config.js";
@@ -317,6 +327,17 @@ const globalDomController = createGlobalDomController(globalDomDependencies);
 const renderShellController = createRenderShellController(renderShellDependencies);
 const timelineEventController = createTimelineEventController(timelineEventDependencies);
 const monitoringInsightsController = createMonitoringInsightsController(monitoringInsightsDependencies);
+const alertStateController = createAlertStateController(alertStateDependencies);
+const analysisRuntimeController = createAnalysisRuntimeController(analysisRuntimeDependencies);
+const appShellRenderController = createAppShellRenderController(appShellRenderDependencies);
+const browserFeedbackController = createBrowserFeedbackController(browserFeedbackDependencies);
+const codeMirrorController = createCodeMirrorController(codeMirrorDependencies);
+const focusViewController = createFocusViewController(focusViewDependencies);
+const importFlowController = createImportFlowController(importFlowDependencies);
+const investigationSummaryController = createInvestigationSummaryController(investigationSummaryDependencies);
+const uiMenuController = createUiMenuController(uiMenuDependencies);
+const undoCacheController = createUndoCacheController(undoCacheDependencies);
+const workspaceRenderController = createWorkspaceRenderController(workspaceRenderDependencies);
 const advancedCorrelationPanels = createAdvancedCorrelationPanels(advancedCorrelationDependencies);
 const serviceMapPresenter = createServiceMapPresenter(serviceMapPresenterDependencies);
 const annotationController = createAnnotationController(annotationControllerDependencies);
@@ -472,6 +493,233 @@ function ipIntelControllerDependencies() {
   };
 }
 
+function alertStateDependencies() {
+  return {
+    DateRef: Date,
+    buildBaselineComparison,
+    createBaselineSnapshot,
+    document,
+    evaluateAlertRuleEvents,
+    metricValue,
+    riskRank,
+    setTimeoutRef: setTimeout,
+    socketBandwidth,
+    socketKey,
+    state
+  };
+}
+
+function analysisRuntimeDependencies() {
+  return {
+    aggregateTimestampedSockets,
+    analyzeAll,
+    applyRisks,
+    buildHistory,
+    buildSocketBandwidthIndex,
+    commandForPeer,
+    computeHealthScore,
+    detectFragmentation,
+    detectReordering,
+    dropRateSeverity,
+    dropRateSummary,
+    envCommand,
+    evaluateAlertRules,
+    formatDropCadence,
+    formatDurationCompact,
+    formatMetricValue,
+    formatMicroburstWindow,
+    hasTimestampedRawData,
+    isAnalystRole,
+    isLxcProfile,
+    metricValue,
+    microburstSummary,
+    parseTimestampLine,
+    resetDerivedCaches,
+    setActiveInvestigation,
+    setTimeoutRef: setTimeout,
+    setZoom,
+    socketsById,
+    state,
+    thresholdFor,
+    toast,
+    withStableSocketIds
+  };
+}
+
+function appShellRenderDependencies() {
+  return {
+    APP_VERSION,
+    animateCounters: _animateCounters,
+    anomalyStatusClass,
+    bindEvents,
+    detectTrends,
+    document,
+    drawBdpWindowCharts,
+    drawChart,
+    drawFixCharts,
+    drawJvmCharts,
+    escapeHtml,
+    formatNumber,
+    hideAppServiceTooltip,
+    hideBusy: _hideBusy,
+    hideFloatingChartTooltipNow,
+    html,
+    icons,
+    initCodeMirror,
+    localStorage,
+    positionTabIndicator: _positionTabIndicator,
+    positionTourCard: _positionTourCard,
+    recompute,
+    renderAnalysisPage,
+    renderBdpWindowPanel,
+    renderChartAnnotationMenu,
+    renderChartsGlobalToolbar,
+    renderChartsPage,
+    renderDashboardStudioInline,
+    renderDrawer,
+    renderError: _renderError,
+    renderFixLatencyPanel,
+    renderFocusView,
+    renderGuide,
+    renderIngestPage,
+    renderInvestigationContext,
+    renderJvmGcPanel,
+    renderModal,
+    renderOnboarding,
+    scheduleAnomalyBadgeSettle,
+    scheduleChartPageDraw,
+    scheduleIpIntelEnrichment,
+    setTimeoutRef: setTimeout,
+    showBusy: _showBusy,
+    staggerReveal: _staggerReveal,
+    state,
+    updateAnomalyAlertState,
+    window
+  };
+}
+
+function browserFeedbackDependencies() {
+  return {
+    document,
+    escapeHtml,
+    navigatorRef: navigator,
+    setTimeoutRef: setTimeout
+  };
+}
+
+function codeMirrorDependencies() {
+  return {
+    CodeMirror: window.CodeMirror,
+    document,
+    setTimeoutRef: setTimeout,
+    state
+  };
+}
+
+function focusViewDependencies() {
+  return {
+    chartMetricList,
+    escapeHtml,
+    icons,
+    metricLabel,
+    socketsById,
+    state,
+    visibleHistory
+  };
+}
+
+function importFlowDependencies() {
+  return {
+    INGEST_RAW_EAGER_LIMIT,
+    aggregateParsedSocketsByKey,
+    document,
+    formatNumber,
+    hasPreImportFilterValue,
+    hasTimestampedRawData,
+    importSocketFile,
+    normalizePreImportFilters,
+    performance,
+    recompute,
+    recomputeFromSockets,
+    render,
+    resetDerivedCaches,
+    saveFilterHistory: filters => saveFilterHistoryRaw(filters),
+    setActiveInvestigation,
+    setSourceName,
+    setTimeoutRef: setTimeout,
+    state,
+    toast
+  };
+}
+
+function investigationSummaryDependencies() {
+  return {
+    anomaliesBySocketId,
+    applyServiceOverride,
+    buildExecutiveSummary,
+    buildGuidedChecklistItems,
+    buildHistory,
+    clearVisibleHistoryCache,
+    escapeHtml,
+    formatMetricValue,
+    formatMicroburstWindow,
+    formatNumber,
+    formatTailLatencyWindow,
+    icons,
+    inferApplicationService,
+    metricValue,
+    microburstSummary,
+    pickExecutiveFocusSocket,
+    setActiveInvestigation,
+    severityRank,
+    socketBandwidth,
+    socketsById,
+    sortedFilteredSockets,
+    state,
+    tailLatencyLens,
+    thresholdFor
+  };
+}
+
+function uiMenuDependencies() {
+  return {
+    DASHBOARD_PRESETS,
+    applyDashboardPreset,
+    cancelAnimationFrame,
+    dashboardPresetIcon,
+    dashboardPresetIdOrDefault,
+    document,
+    redo: _redo,
+    renderKeepingWorkspacePosition,
+    requestAnimationFrame,
+    resetSsEditorThemePreview,
+    state,
+    toast,
+    undo: _undo
+  };
+}
+
+function undoCacheDependencies() {
+  return {
+    detectMultiSocketCorrelation,
+    detectRateOfChange,
+    detectTimelineStories,
+    render,
+    state
+  };
+}
+
+function workspaceRenderDependencies() {
+  return {
+    document,
+    queueMicrotaskRef: queueMicrotask,
+    render,
+    requestAnimationFrame,
+    setTimeoutRef: setTimeout,
+    window
+  };
+}
+
 function dashboardPresetIdOrDefault(value) {
   return preferencesController.dashboardPresetIdOrDefault(value);
 }
@@ -539,8 +787,6 @@ function openAnnotationModal(metric = "*", context = null) {
   annotationController.openAnnotationModal(metric, context);
 }
 
-
-
 function setSourceName(sourceName) {
   state.sourceName = sourceName;
   state.topology = normalizeTopologyProfile(state.topologyProfiles[topologyScopeKey(sourceName)]);
@@ -554,8 +800,6 @@ function saveCurrentTopology() {
   state.topologyProfiles = { ...state.topologyProfiles, [scope]: state.topology };
   saveTopologyProfiles(state.topologyProfiles);
 }
-
-
 
 function ssOptionIntel(short, long, desc, group) {
   return ssCommandController.ssOptionIntel(short, long, desc, group);
@@ -603,66 +847,20 @@ function scheduleBdpPrecompute() {
 function resetDerivedCaches({ raw = false } = {}) {
   derivedCacheController.resetDerivedCaches({ raw });
 }
-
 function markAnalysisDirty({ raw = false } = {}) {
   derivedCacheController.markAnalysisDirty({ raw });
 }
 
-function recompute() {
-  state.sockets = applyRisks(parseAnalysisSockets());
-  state.bandwidthIndex = buildSocketBandwidthIndex();
-  state.sparklineIndex = null;
-  state.anomalies = analyzeAll(state.sockets);
-  state.fragmentation = detectFragmentation(state.sockets);
-  state.reordering = detectReordering(state.sockets);
-  state.healthScore = computeHealthScore(state.sockets, { fragmentation: state.fragmentation, reordering: state.reordering });
-  const socketIds = new Set(state.sockets.map(socket => socket.id));
-  state.selectedId = socketIds.has(state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
-  if (!socketIds.has(state.activeContextId)) setActiveInvestigation(state, null);
-  setZoom(0, 1);
-  buildHistory();
-  addCollectionAnomalies();
-  runAdvisorAnalysis();
-  evaluateAlertRules();
-  state.analysisDirty = false;
-  resetDerivedCaches();
-  pushAnomalyAlerts();
-}
+function recompute() { analysisRuntimeController.recompute(); }
 
 function parseAnalysisSockets() {
   return aggregateTimestampedSockets(state.raw);
 }
 
-function recomputeFromSockets() {
-  state.sockets = withStableSocketIds(state.sockets);
-  state.bandwidthIndex = buildSocketBandwidthIndex();
-  state.sparklineIndex = null;
-  state.anomalies = analyzeAll(state.sockets);
-  state.fragmentation = detectFragmentation(state.sockets);
-  state.reordering = detectReordering(state.sockets);
-  state.healthScore = computeHealthScore(state.sockets, { fragmentation: state.fragmentation, reordering: state.reordering });
-  state.selectedId = state.sockets.some(socket => socket.id === state.selectedId) ? state.selectedId : state.sockets[0]?.id || null;
-  if (!state.sockets.some(socket => socket.id === state.activeContextId)) setActiveInvestigation(state, null);
-  setZoom(0, 1);
-  buildHistory();
-  addCollectionAnomalies();
-  runAdvisorAnalysis();
-  evaluateAlertRules();
-  state.analysisDirty = false;
-  resetDerivedCaches();
-  pushAnomalyAlerts();
-}
+function recomputeFromSockets() { analysisRuntimeController.recomputeFromSockets(); }
 
 function pushAnomalyAlerts() {
-  if (!state.prefs.autoToast) return;
-  const critical = state.anomalies.filter(a => a.severity === "critical" || a.severity === "high");
-  if (!critical.length) return;
-  const top = critical.slice(0, 3);
-  setTimeout(() => {
-    top.forEach((a, i) => {
-      setTimeout(() => toast(`⚠ ${a.title}`, a.detail || a.metric || "", "danger"), i * 800);
-    });
-  }, 300);
+  analysisRuntimeController.pushAnomalyAlerts();
 }
 
 function scheduleIpIntelEnrichment() {
@@ -776,71 +974,15 @@ function annotationColor(kind = "custom") {
 function chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime) {
   return chartOverlays.chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime);
 }
-function addCollectionAnomalies() {
-  const hasTimestamp = hasTimestampedRawData();
-  const huge = state.sockets.length >= 5000;
-  const dropRate = dropRateSummary();
-  const microburst = microburstSummary();
-  if (!hasTimestamp && state.raw.trim()) {
-    state.anomalies.push({
-      socketId: state.selectedId,
-      severity: "low",
-      title: "Collection has no timestamp",
-      detail: "Add date --iso-8601=ns or EPOCH_MS before each snapshot to build a real timeline.",
-      metric: "collection"
-    });
-  }
-  if (dropRate) {
-    state.anomalies.unshift({
-      socketId: state.selectedId,
-      severity: dropRateSeverity(dropRate),
-      title: "Socket drops are increasing",
-      detail: `skmem.d increased by ${formatMetricValue("skmem.d", dropRate.totalDropDelta)} over ${formatDurationCompact(dropRate.observedSeconds)} (${formatDropCadence(dropRate)}, peak ${formatMetricValue("skmem.d_rate", dropRate.peakDropRate)}).`,
-      metric: "skmem.d_rate"
-    });
-  }
-  if (microburst) {
-    state.anomalies.unshift({
-      socketId: state.selectedId,
-      severity: microburst.severity,
-      title: "Receive-side microburst detected",
-      detail: `${formatMicroburstWindow(microburst)}: RX peaked at ${formatMetricValue("rx_bps", microburst.peakRxBps)}, Recv-Q at ${formatMetricValue("recvQ", microburst.peakRecvQ)}, skmem.r at ${formatMetricValue("skmem.r", microburst.peakSkmemR)}, with ${formatMetricValue("skmem.d", microburst.dropDeltaTotal)} new drops (peak ${formatMetricValue("skmem.d_rate", microburst.peakDropRate)}).`,
-      metric: "rx_bps"
-    });
-  }
-  if (huge) {
-    state.anomalies.unshift({
-      socketId: state.selectedId,
-      severity: "medium",
-      title: "Very high socket volume",
-      detail: `${state.sockets.length} sockets parsed: avoid overly aggressive collection frequency, especially with -p, -e, -m, -i, --bpf, or DNS resolution.`,
-      metric: "overhead"
-    });
-  }
-}
+function addCollectionAnomalies() { analysisRuntimeController.addCollectionAnomalies(); }
 
-function runAdvisorAnalysis() {
-  state.advisorFindings = buildAdvisorFindings();
-}
+function runAdvisorAnalysis() { analysisRuntimeController.runAdvisorAnalysis(); }
 
-function socketsWhere(predicate) {
-  return state.sockets.filter(socket => {
-    try {
-      return predicate(socket);
-    } catch {
-      return false;
-    }
-  });
-}
+function socketsWhere(predicate) { return analysisRuntimeController.socketsWhere(predicate); }
 
-function endpointSamples(sockets, side = "peer", limit = 4) {
-  const values = sockets.map(socket => side === "peer" ? socket.peer : socket.local).filter(Boolean);
-  return [...new Set(values)].slice(0, limit);
-}
+function endpointSamples(sockets, side = "peer", limit = 4) { return analysisRuntimeController.endpointSamples(sockets, side, limit); }
 
-function processSamples(sockets, limit = 4) {
-  return [...new Set(sockets.map(socket => socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "").filter(Boolean))].slice(0, limit);
-}
+function processSamples(sockets, limit = 4) { return analysisRuntimeController.processSamples(sockets, limit); }
 
 function emptyPreImportFilters() {
   return createEmptyPreImportFilters();
@@ -886,27 +1028,7 @@ function commandForPeer(socket) {
   return runtimeProfile.commandForPeer(socket);
 }
 
-function makeFinding({ id, severity, title, pattern, sockets, confidence, why, next, mitigate, commands }) {
-  const rank = { critical: 4, high: 3, medium: 2, low: 1 };
-  const topSocket = sockets[0] || state.sockets[0];
-  return {
-    id,
-    severity,
-    score: (rank[severity] || 1) * 100 + Math.min(99, sockets.length),
-    title,
-    pattern,
-    count: sockets.length,
-    confidence,
-    why,
-    next,
-    mitigate,
-    commands,
-    socketId: topSocket?.id || null,
-    local: endpointSamples(sockets, "local"),
-    peer: endpointSamples(sockets, "peer"),
-    processes: processSamples(sockets)
-  };
-}
+function makeFinding(args) { return analysisRuntimeController.makeFinding(args); }
 
 function buildCorrelationMatrix() { return monitoringInsightsController.buildCorrelationMatrix(); }
 
@@ -914,33 +1036,7 @@ function detectTrends() { return monitoringInsightsController.detectTrends(); }
 
 function baselineDeviations() { return monitoringInsightsController.baselineDeviations(); }
 
-function advisorFindingDependencies() {
-  return {
-    state,
-    socketsById,
-    socketsWhere,
-    thresholdFor,
-    metricValue,
-    dropRateSummary,
-    microburstSummary,
-    parseTimestampLine,
-    isLxcProfile,
-    isAnalystRole,
-    makeFinding,
-    envCommand,
-    commandForPeer,
-    processSamples,
-    dropRateSeverity,
-    formatMetricValue,
-    formatDurationCompact,
-    formatDropCadence,
-    formatMicroburstWindow
-  };
-}
-
-function buildAdvisorFindings() {
-  return buildAdvisorFindingsModel(advisorFindingDependencies());
-}
+function buildAdvisorFindings() { return analysisRuntimeController.buildAdvisorFindings(); }
 
 function severityVisible(sev) {
   const rank = { critical: 4, high: 3, medium: 2, low: 1 };
@@ -985,53 +1081,18 @@ function renderDatalist(id, values) {
 
 function pagedRows(rows) { return tableDashboardController.pagedRows(rows); }
 
-function groupedSockets() {
-  return conversationModel.groupedSockets();
-}
-
-function conversationKey(socket) {
-  return conversationModel.conversationKey(socket);
-}
-
-function anomaliesBySocketId() {
-  return conversationModel.anomaliesBySocketId();
-}
-
-function socketsById() {
-  return conversationModel.socketsById();
-}
-
-function buildConversations() {
-  return conversationModel.buildConversations();
-}
-
-function conversationDefaultSortDir(key) {
-  return conversationModel.conversationDefaultSortDir(key);
-}
-
-function conversationSortText(conv, key) {
-  return conversationModel.conversationSortText(conv, key);
-}
-
-function conversationSortValue(conv, key) {
-  return conversationModel.conversationSortValue(conv, key);
-}
-
-function compareConversationFallback(a, b) {
-  return conversationModel.compareConversationFallback(a, b);
-}
-
-function sortConversations(conversations) {
-  return conversationModel.sortConversations(conversations);
-}
-
-function renderConversationSortHeader(key, label) {
-  return conversationModel.renderConversationSortHeader(key, label);
-}
-
-function conversationAnomalySummary(conv) {
-  return conversationModel.conversationAnomalySummary(conv);
-}
+const conversationFacade = Object.fromEntries([
+  "groupedSockets", "conversationKey", "buildConversations", "conversationDefaultSortDir",
+  "conversationSortText", "conversationSortValue", "compareConversationFallback", "sortConversations", "renderConversationSortHeader",
+  "conversationAnomalySummary"
+].map(name => [name, (...args) => conversationModel[name](...args)]));
+const {
+  groupedSockets, conversationKey, buildConversations, conversationDefaultSortDir,
+  conversationSortText, conversationSortValue, compareConversationFallback, sortConversations, renderConversationSortHeader,
+  conversationAnomalySummary
+} = conversationFacade;
+function anomaliesBySocketId() { return conversationModel.anomaliesBySocketId(); }
+function socketsById() { return conversationModel.socketsById(); }
 
 function buildExpertInformation() {
   return timelineEventController.buildExpertInformation();
@@ -1041,106 +1102,38 @@ function buildTimelineEvents() {
   return timelineEventController.buildTimelineEvents();
 }
 
-function endpointPresentation(...args) { return serviceMapPresenter.endpointPresentation(...args); }
-function currentAliasForEndpoint(...args) { return serviceMapPresenter.currentAliasForEndpoint(...args); }
-function currentAliasDisplay(...args) { return serviceMapPresenter.currentAliasDisplay(...args); }
-function nodeLabel(...args) { return serviceMapPresenter.nodeLabel(...args); }
-function nodeSubtitle(...args) { return serviceMapPresenter.nodeSubtitle(...args); }
-function serviceMapGroupBands(...args) { return serviceMapPresenter.serviceMapGroupBands(...args); }
-function renderMapLegend(...args) { return serviceMapPresenter.renderMapLegend(...args); }
-function renderHotPaths(...args) { return serviceMapPresenter.renderHotPaths(...args); }
-function renderMapEdgeInsight(...args) { return serviceMapPresenter.renderMapEdgeInsight(...args); }
-function mapNodeTitle(...args) { return serviceMapPresenter.mapNodeTitle(...args); }
-function buildServiceMap(...args) { return serviceMapPresenter.buildServiceMap(...args); }
-function serviceMapConnectivityOrder(...args) { return serviceMapPresenter.serviceMapConnectivityOrder(...args); }
+const serviceMapFacade = Object.fromEntries([
+  "endpointPresentation", "currentAliasForEndpoint", "currentAliasDisplay", "nodeLabel", "nodeSubtitle", "serviceMapGroupBands",
+  "renderMapLegend", "renderHotPaths", "renderMapEdgeInsight", "mapNodeTitle", "buildServiceMap", "serviceMapConnectivityOrder"
+].map(name => [name, (...args) => serviceMapPresenter[name](...args)]));
+const {
+  endpointPresentation, currentAliasForEndpoint, currentAliasDisplay, nodeLabel, nodeSubtitle, serviceMapGroupBands,
+  renderMapLegend, renderHotPaths, renderMapEdgeInsight, mapNodeTitle, buildServiceMap, serviceMapConnectivityOrder
+} = serviceMapFacade;
 
-function evaluateAlertRules() {
-  state.alertEvents = evaluateAlertRuleEvents({
-    rules: state.alertRules,
-    sockets: state.sockets,
-    alertAcks: state.alertAcks
-  }, { metricValue, socketBandwidth, riskRank });
-}
+function evaluateAlertRules() { alertStateController.evaluateAlertRules(); }
 
-function createBaseline() {
-  const baseline = createBaselineSnapshot(state, { metricValue, socketBandwidth, socketKey });
-  baseline.history = state.history?.slice(0, 2000) || [];
-  return baseline;
-}
+function createBaseline() { return alertStateController.createBaseline(); }
 
-function buildComparison() {
-  return buildBaselineComparison(state, { metricValue, socketBandwidth, socketKey, riskRank });
-}
+function buildComparison() { return alertStateController.buildComparison(); }
 
-function updateAnomalyAlertState() {
-  const count = state.anomalies.length;
-  if (count <= 0) {
-    state.anomalyAlertSince = null;
-    state.lastAnomalyCount = 0;
-    return;
-  }
-  if (count !== state.lastAnomalyCount || !state.anomalyAlertSince) {
-    state.anomalyAlertSince = Date.now();
-    state.lastAnomalyCount = count;
-  }
-  updateFavicon();
-}
+function updateAnomalyAlertState() { alertStateController.updateAnomalyAlertState(); }
 
-function updateFavicon() {
-  const critical = state.anomalies.some(a => a.severity === "critical" || a.severity === "high");
-  const hasAnomalies = state.anomalies.length > 0;
-  const color = critical ? "%23ff5c77" : hasAnomalies ? "%23ff9f43" : "%234cde8a";
-  const dot = critical || hasAnomalies ? `%3Ccircle cx='54' cy='10' r='9' fill='${color}'/%3E` : "";
-  const link = document.querySelector("link[rel='icon']");
-  if (link) link.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b11'/%3E%3Cpath d='M18 34h12m4 0h12M24 24l8 10 8-10' fill='none' stroke='%2339d6d6' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='18' cy='34' r='6' fill='%235db7ff'/%3E%3Ccircle cx='46' cy='34' r='6' fill='${color}'/%3E${dot}%3C/svg%3E`;
-}
+function updateFavicon() { alertStateController.updateFavicon(); }
 
-function anomalyStatusClass() {
-  if (!state.anomalies.length) return "";
-  return Date.now() - state.anomalyAlertSince < 10000 ? "blink" : "solid";
-}
+function anomalyStatusClass() { return alertStateController.anomalyStatusClass(); }
 
-function scheduleAnomalyBadgeSettle() {
-  if (!state.anomalies.length || !state.anomalyAlertSince) return;
-  const remaining = 10050 - (Date.now() - state.anomalyAlertSince);
-  if (remaining > 0) setTimeout(() => {
-    const badge = document.querySelector(".anomaly-status.blink");
-    if (badge) {
-      badge.classList.remove("blink");
-      badge.classList.add("solid");
-    }
-  }, remaining);
-}
+function scheduleAnomalyBadgeSettle() { alertStateController.scheduleAnomalyBadgeSettle(); }
 
 let cmInstance = null;
 let chartPageDrawFrame = 0;
 let correlationDrawFrame = 0;
-let dashboardPresetRenderFrame = 0;
 function initCodeMirror() {
-  const container = document.querySelector("#cmContainer");
-  if (!container || !window.CodeMirror) return;
-  if (container.querySelector(".CodeMirror")) return;
-  cmInstance = CodeMirror(container, {
-    value: state.raw || "",
-    mode: "ss",
-    theme: "default",
-    lineNumbers: true,
-    lineWrapping: state.editorWordWrap,
-    readOnly: false,
-    placeholder: "Paste ss output or a timestamped collection here...",
-    extraKeys: {
-      "Ctrl-F": "findPersistent",
-      "Cmd-F": "findPersistent",
-      "Ctrl-G": "jumpToLine",
-      "Cmd-G": "jumpToLine"
-    }
-  });
-  cmInstance.on("change", () => { state.raw = cmInstance.getValue(); });
-  cmInstance.on("paste", () => { setTimeout(() => { const val = cmInstance.getValue(); if (val.length > 20 && val.length < 500000) { document.querySelector("[data-action='parse']")?.click(); } }, 100); });
-  cmInstance.setSize("100%", "clamp(360px, 58vh, 620px)");
+  cmInstance = codeMirrorController.initCodeMirror();
 }
 function syncFromCodeMirror() {
-  if (cmInstance) state.raw = cmInstance.getValue();
+  codeMirrorController.syncFromCodeMirror();
+  cmInstance = codeMirrorController.getInstance();
 }
 
 function _showBusy() { renderShellController.showBusy(); }
@@ -1153,160 +1146,23 @@ function _renderError(err) { renderShellController.renderError(err); }
 function renderOnboarding() { return renderShellController.renderOnboarding(); }
 function _positionTourCard() { renderShellController.positionTourCard(); }
 
-function _undoSnapshot() {
-  const snap = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
-  state._undoStack.push(snap);
-  if (state._undoStack.length > 30) state._undoStack.shift();
-  state._redoStack = [];
-}
-function _undo() {
-  if (!state._undoStack.length) return;
-  const current = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
-  state._redoStack.push(current);
-  const snap = state._undoStack.pop();
-  state.view = snap.view; state.activeTab = snap.activeTab; state.chartsTab = snap.chartsTab; state.selectedId = snap.selectedId; state.filter = snap.filter;
-  try { state.annotations = JSON.parse(snap.annotations); } catch(e) {}
-  render();
-}
-function _redo() {
-  if (!state._redoStack.length) return;
-  const current = { view: state.view, activeTab: state.activeTab, chartsTab: state.chartsTab, selectedId: state.selectedId, annotations: JSON.stringify(state.annotations), filter: state.filter };
-  state._undoStack.push(current);
-  const snap = state._redoStack.pop();
-  state.view = snap.view; state.activeTab = snap.activeTab; state.chartsTab = snap.chartsTab; state.selectedId = snap.selectedId; state.filter = snap.filter;
-  try { state.annotations = JSON.parse(snap.annotations); } catch(e) {}
-  render();
-}
+function _undoSnapshot() { undoCacheController.undoSnapshot(); }
 
-let _cachedDataVersion = -1;
-let _cachedStories = [];
-let _cachedMultiSocket = [];
-let _cachedRateAlerts = [];
-function cachedStories() {
-  if (_cachedDataVersion !== state.dataVersion) {
-    _cachedDataVersion = state.dataVersion;
-    _cachedStories = detectTimelineStories(state.raw, state.sockets);
-    _cachedMultiSocket = detectMultiSocketCorrelation(state.raw);
-    _cachedRateAlerts = detectRateOfChange(state.raw);
-  }
-  return _cachedStories;
-}
-function cachedMultiSocket() { cachedStories(); return _cachedMultiSocket; }
-function cachedRateAlerts() { cachedStories(); return _cachedRateAlerts; }
+function _undo() { undoCacheController.undo(); }
+
+function _redo() { undoCacheController.redo(); }
+
+function cachedStories() { return undoCacheController.cachedStories(); }
+
+function cachedMultiSocket() { return undoCacheController.cachedMultiSocket(); }
+
+function cachedRateAlerts() { return undoCacheController.cachedRateAlerts(); }
 
 function render() {
-  _showBusy();
-  hideAppServiceTooltip();
-  hideFloatingChartTooltipNow();
-  if (state.analysisDirty) recompute();
-  updateAnomalyAlertState();
-  const doRender = () => { try { _renderSync(); } catch(e) { _renderError(e); } _hideBusy(); };
-  setTimeout(doRender, 16);
+  appShellRenderController.render();
 }
 
-function _renderSync() {
-  const app = document.querySelector("#app");
-  const newHtml = html`
-    ${state.onboarding >= 0 ? renderOnboarding() : ""}
-    <a href="#main-content" class="skip-link">Skip to content</a>
-    <div class="app-shell view-${state.view}" role="application" aria-label="Ultimate Network Expert">
-      <header class="topbar" role="banner">
-        <div class="title">
-          <div class="brand tcp-brand" title="TCP packets travelling between peers">
-          <span class="brand-node n1"></span>
-          <span class="brand-node n2"></span>
-          <span class="brand-link l1"></span>
-          <span class="brand-packet p1"></span>
-          <span class="brand-packet p2"></span>
-          </div>
-          <div>
-            <h1>
-              Ultimate Network Expert
-              <button class="version-pill" data-action="showSplash" title="Show product splash screen and version" aria-label="Show Ultimate Network Expert version">v${escapeHtml(APP_VERSION)}</button>
-              <button class="app-title-info" type="button" data-action="showSplash" title="About Ultimate Network Expert" aria-label="Open application details">
-                <i class="ri-information-line"></i>
-              </button>
-            </h1>
-          </div>
-        </div>
-        <div class="top-actions">
-          <div class="app-tabs" role="tablist" aria-label="Main navigation">
-            <span id="inlineBusy" class="inline-busy" aria-live="assertive" aria-atomic="true"><span class="busy-spinner-sm"></span> Analyzing...</span>
-            <span id="inlineReport" class="inline-busy" aria-live="assertive" aria-atomic="true"><span class="busy-spinner-sm"></span> Generating report...</span>
-            ${[
-              ["ingest", "Import", "ri-upload-2-line"],
-              ["analysis", "Analysis", "ri-stethoscope-line"],
-              ["charts", "Monitoring", "ri-line-chart-line"],
-              ["guide", "Guide", "ri-book-open-line"]
-            ].map(([key, label, icon]) => `<button class="app-tab ${state.view === key ? "active" : ""}" data-view="${key}" role="tab" aria-selected="${state.view === key}"><i class="${icon}"></i><span>${label}</span></button>`).join("")}
-            <span class="app-tab-indicator" id="tabIndicator"></span>
-          </div>
-          <span class="status-pill"><span class="dot"></span>${state.sockets.length} sockets parsed</span>
-          <span class="status-pill anomaly-status ${anomalyStatusClass()}">${state.anomalies.length ? icons.incidentWarning : ""}${formatNumber(state.anomalies.length)} anomalies</span>
-          ${(() => { const t = detectTrends(); return t.length ? `<span class="status-pill trend-badge" title="${t.map(x => x.metric + " overflow in ~" + x.eta + " min").join(", ")}"><i class="ri-timer-flash-line" style="color:#ff9f43"></i> ${t.length} trend${t.length > 1 ? "s" : ""}</span>` : ""; })()}
-          ${state.sockets.length ? `<button class="icon reset-workspace-btn" data-action="requestResetWorkspace" title="Reset workspace" aria-label="Reset workspace">${icons.resetWorkspace}</button>` : ""}
-          <button class="icon" data-action="undo" title="Undo (Ctrl+Z)" aria-label="Undo" ${!state._undoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-back-line"></i></button>
-          <button class="icon" data-action="redo" title="Redo (Ctrl+Y)" aria-label="Redo" ${!state._redoStack?.length ? 'disabled style="opacity:0.3"' : ""}><i class="ri-arrow-go-forward-line"></i></button>
-          <button class="icon" data-action="togglePresentation" title="Presentation mode (hide controls, enlarge charts)" aria-label="Toggle presentation mode"><i class="ri-slideshow-line"></i></button>
-          <button class="theme-toggle" data-action="toggleTheme" title="Toggle light/dark mode" aria-label="Toggle theme"><span class="theme-toggle-track"><i class="ri-sun-line"></i><i class="ri-moon-line"></i><span class="theme-toggle-thumb ${state.prefs.theme === "light" ? "" : "dark"}"></span></span></button>
-          <div class="gear-menu-wrap">
-            <button class="icon gear-btn ${state.gearMenuOpen ? "is-open" : ""}" data-action="toggleGearMenu" title="Settings" aria-label="Settings" aria-haspopup="true"><i class="ri-settings-3-line"></i></button>
-            ${state.gearMenuOpen ? `<div class="gear-dropdown" role="menu">
-              <button role="menuitem" data-action="prefs"><i class="ri-equalizer-line"></i> Settings</button>
-              <button role="menuitem" data-action="showShortcuts"><i class="ri-keyboard-box-line"></i> Keyboard shortcuts</button>
-              <button role="menuitem" data-action="startTour"><i class="ri-compass-3-line"></i> Guided tour</button>
-            </div>` : ""}
-          </div>
-        </div>
-      </header>
-      <nav class="breadcrumb" aria-label="Navigation">${state.view === "ingest" ? "Import" : state.view === "analysis" ? `Analysis → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.activeTab} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu">${["quality","diagnosis","advisor","templates","map","conversations","expert","timeline","alerts","compare","sockets","groups","anomalies","fields"].map(t => `<button data-tab="${t}" class="${t === state.activeTab ? "active" : ""}">${t}</button>`).join("")}</div>` : ""}` : state.view === "charts" ? `Monitoring → <button class="breadcrumb-dropdown-trigger" data-action="toggleBreadcrumbMenu">${state.chartsTab === "charts" ? "Metrics" : state.chartsTab === "bdp" ? "BDP" : state.chartsTab === "jvm" ? "JVM Stall" : state.chartsTab === "fix" ? "FIX Latency" : state.chartsTab === "focus" ? "Focus" : "Advisor"} <i class="ri-arrow-down-s-line"></i></button>${state.breadcrumbMenuOpen ? `<div class="breadcrumb-menu"><button data-charts-tab="charts">Metrics</button><button data-charts-tab="bdp">BDP</button><button data-charts-tab="jvm">JVM Stall</button><button data-charts-tab="fix">FIX Latency</button></div>` : ""}` : "Guide"}</nav>
-      ${state.view !== "charts" ? renderInvestigationContext() : ""}
-      ${state.view === "ingest" ? `<main id="main-content" class="workspace wide" role="main">${renderIngestPage()}</main>` : ""}
-      ${state.view === "analysis" ? `<main id="main-content" class="workspace wide" role="main">${renderAnalysisPage()}</main>` : ""}
-      ${state.view === "charts" ? `<main id="main-content" class="workspace wide" role="main">
-        <nav class="charts-sub-tabs" role="tablist">
-          <button class="charts-sub-tab ${state.chartsTab === "charts" ? "active" : ""}" data-charts-tab="charts" role="tab" aria-selected="${state.chartsTab === "charts"}">Metrics</button>
-          <button class="charts-sub-tab ${state.chartsTab === "bdp" ? "active" : ""}" data-charts-tab="bdp" role="tab" aria-selected="${state.chartsTab === "bdp"}">BDP & Throughput</button>
-          ${state.jvmGc.pauses.length ? `<button class="charts-sub-tab ${state.chartsTab === "jvm" ? "active" : ""}" data-charts-tab="jvm" role="tab" aria-selected="${state.chartsTab === "jvm"}">JVM Stall / GC</button>` : ""}
-          ${state.fixLatency.records.length ? `<button class="charts-sub-tab ${state.chartsTab === "fix" ? "active" : ""}" data-charts-tab="fix" role="tab" aria-selected="${state.chartsTab === "fix"}">FIX Latency</button>` : ""}
-          <button class="charts-sub-tab ${state.chartsTab === "advisor" ? "active" : ""}" data-charts-tab="advisor" role="tab" aria-selected="${state.chartsTab === "advisor"}">Advisor</button>
-          ${state.selectedId ? `<button class="charts-sub-tab ${state.chartsTab === "focus" ? "active" : ""}" data-charts-tab="focus" role="tab" aria-selected="${state.chartsTab === "focus"}"><i class="ri-focus-3-line"></i> Focus</button>` : ""}
-          ${state.chartsTab === "charts" ? renderDashboardStudioInline() : ""}
-        </nav>
-        ${state.chartsTab === "charts" ? renderChartsGlobalToolbar() : ""}
-        ${state.chartsTab === "charts" ? renderChartsPage() : ""}
-        ${state.chartsTab === "bdp" ? renderBdpWindowPanel() : ""}
-        ${state.chartsTab === "jvm" ? renderJvmGcPanel() : ""}
-        ${state.chartsTab === "fix" ? renderFixLatencyPanel() : ""}
-        ${state.chartsTab === "focus" ? renderFocusView() : ""}
-        ${state.chartsTab === "advisor" ? renderChartsPage() : ""}
-      </main>` : ""}
-      ${state.view === "guide" ? `<main class="workspace wide">${renderGuide()}</main>` : ""}
-    </div>
-    ${!localStorage.getItem("onboarded") && !state.sockets.length && state.view === "ingest" && !state.modal ? `<div class="cmd-palette-overlay" data-action="dismissOnboarding"><div class="cmd-palette" onclick="event.stopPropagation()" style="max-width:500px"><div style="padding:24px;text-align:center"><h2 style="margin:0 0 8px;font-size:20px">Welcome to Ultimate Network Expert</h2><p style="color:var(--muted);margin:0 0 20px">Analyze TCP socket behavior from ss captures with multi-source correlation.</p><div style="display:grid;gap:12px;text-align:left"><div style="display:flex;gap:10px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;font-weight:700;color:#3b82f6">1</span><span><b>Load data</b> — Open an ss file, or use <b>Auto-detect dir</b> to load ss + GC + vmstat + nstat + FIX at once</span></div><div style="display:flex;gap:10px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:rgba(44,198,44,0.15);display:flex;align-items:center;justify-content:center;font-weight:700;color:#2cc62c">2</span><span><b>Analyze</b> — Click Analyze or press Enter. The tool detects anomalies, builds hypotheses, and generates stories.</span></div><div style="display:flex;gap:10px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:rgba(255,159,67,0.15);display:flex;align-items:center;justify-content:center;font-weight:700;color:#ff9f43">3</span><span><b>Investigate</b> — Use Diagnosis, Timeline, Charts, and Expert tabs. Press <kbd>Ctrl+K</kbd> to search anything.</span></div></div><button class="primary" data-action="dismissOnboarding" style="margin-top:20px;padding:8px 24px">Got it, let's go</button></div></div></div>` : ""}
-    ${state.modal === "shortcuts" ? `<div class="cmd-palette-overlay" data-action="closeCmdPalette"><div class="cmd-palette" onclick="event.stopPropagation()" style="max-width:420px"><div class="cmd-palette-head"><strong style="flex:1">Keyboard shortcuts</strong><kbd>?</kbd></div><div class="cmd-palette-results" style="padding:12px 16px"><table style="width:100%;font-size:13px;border-collapse:collapse"><tbody><tr><td style="padding:4px 0"><kbd>?</kbd></td><td>Show this help</td></tr><tr><td style="padding:4px 0"><kbd>Ctrl+K</kbd></td><td>Command palette</td></tr><tr><td style="padding:4px 0"><kbd>j</kbd> / <kbd>k</kbd></td><td>Next / previous socket</td></tr><tr><td style="padding:4px 0"><kbd>r</kbd></td><td>Reset chart zoom</td></tr><tr><td style="padding:4px 0"><kbd>Esc</kbd></td><td>Close modal / palette</td></tr><tr><td style="padding:4px 0"><kbd>Ctrl+Shift+P</kbd></td><td>Export PDF</td></tr><tr><td style="padding:4px 0"><kbd>Ctrl+Shift+H</kbd></td><td>Export HTML report</td></tr><tr><td style="padding:4px 0"><kbd>Ctrl+Shift+Z</kbd></td><td>Evidence pack ZIP</td></tr><tr><td style="padding:4px 0"><kbd>Ctrl+Shift+J</kbd></td><td>Copy Jira report</td></tr><tr><td style="padding:4px 0"><kbd>Ctrl+Shift+F</kbd></td><td>FIX spikes CSV</td></tr></tbody></table></div></div></div>` : ""}
-    ${state.modal === "commandPalette" ? `<div class="cmd-palette-overlay" data-action="closeCmdPalette"><div class="cmd-palette" onclick="event.stopPropagation()"><div class="cmd-palette-head"><i class="ri-search-line"></i><input id="cmdPaletteInput" type="text" placeholder="Search sockets, metrics, commands..." value="${escapeHtml(state.commandPaletteQuery || "")}" autocomplete="off"/><kbd>Esc</kbd></div><div class="cmd-palette-results">${(() => { const q = (state.commandPaletteQuery || "").toLowerCase(); if (!q) return "<div class=cmd-palette-hint><i class='ri-command-line' style='font-size:20px;opacity:.4;display:block;margin-bottom:6px'></i>Type to search sockets, metrics, tabs, or commands</div>"; function fuzzyHighlight(text, query) { let result = "", qi = 0; for (let i = 0; i < text.length; i++) { if (qi < query.length && text[i].toLowerCase() === query[qi]) { result += "<mark>" + escapeHtml(text[i]) + "</mark>"; qi++; } else { result += escapeHtml(text[i]); } } return qi === query.length ? result : null; } const results = []; state.sockets.filter(s => (s.peer + s.local + s.state + (s.details?.process?.name || "")).toLowerCase().includes(q)).slice(0, 5).forEach(s => { const label = s.local + " → " + s.peer; const hl = fuzzyHighlight(label, q) || escapeHtml(label); results.push(`<button data-action="cmdPaletteSelect" data-socket-id="${s.id}"><i class="ri-plug-line" style="color:var(--cyan)"></i><span>${hl}<small style="color:var(--muted);margin-left:6px">${escapeHtml(s.state)}</small></span><kbd class="cmd-cat">socket</kbd></button>`); }); const tabIcons = { quality:"ri-shield-check-line", diagnosis:"ri-stethoscope-line", advisor:"ri-lightbulb-line", sockets:"ri-plug-line", timeline:"ri-time-line", alerts:"ri-alarm-warning-line", compare:"ri-scales-3-line", groups:"ri-folder-line", anomalies:"ri-error-warning-line", fields:"ri-list-settings-line" }; ["quality","diagnosis","advisor","sockets","timeline","alerts","compare","groups","anomalies","fields"].filter(t => t.includes(q)).forEach((t, i) => results.push(`<button data-action="cmdPaletteTab" data-tab="${t}"><i class="${tabIcons[t] || "ri-layout-grid-line"}" style="color:var(--green)"></i><span>Go to <b>${t}</b></span><kbd>${i < 9 ? "⌘" + (i+1) : ""}</kbd></button>`)); ["rtt","cwnd","sendQ","recvQ","retrans","rto","pacing_rate","delivery_rate"].filter(m => m.toLowerCase().includes(q)).forEach(m => results.push(`<button data-action="cmdPaletteMetric" data-metric="${m}"><i class="ri-line-chart-line" style="color:var(--yellow)"></i><span>Chart <b>${m}</b></span><kbd class="cmd-cat">metric</kbd></button>`)); return results.length ? results.join("") : "<div class=cmd-palette-hint>No results</div>"; })()}</div></div></div>` : ""}
-    ${renderChartAnnotationMenu()}
-    ${renderDrawer()}
-    ${renderModal()}
-  `;
-  if (false && window.Idiomorph) {
-    Idiomorph.morph(app, newHtml, { morphStyle: "innerHTML" });
-  } else {
-    app.innerHTML = newHtml;
-  }
-  bindEvents();
-  _staggerReveal();
-  _positionTabIndicator();
-  _animateCounters();
-  _positionTourCard();
-  initCodeMirror();
-  if (state.view === "charts") {
-    scheduleChartPageDraw();
-  }
-  scheduleAnomalyBadgeSettle();
-  scheduleIpIntelEnrichment();
-}
+function _renderSync() { appShellRenderController.renderSync(); }
 
 function scheduleChartPageDraw() {
   if (chartPageDrawFrame) cancelAnimationFrame(chartPageDrawFrame);
@@ -1329,281 +1185,36 @@ function scheduleCorrelationDraw() {
   });
 }
 
-function selectedSocket() {
-  return state.activeContextId ? socketsById().get(state.activeContextId) || null : null;
-}
+function selectedSocket() { return investigationSummaryController.selectedSocket(); }
 
-function syncChartHistoryToSelection() {
-  buildHistory();
-  clearVisibleHistoryCache();
-}
+function syncChartHistoryToSelection() { investigationSummaryController.syncChartHistoryToSelection(); }
 
-function focusSocket(socketId, reason = "Selected by user") {
-  if (!socketId) return;
-  state.selectedId = socketId;
-  setActiveInvestigation(state, socketId, reason);
-  syncChartHistoryToSelection();
-}
+function focusSocket(socketId, reason = "Selected by user") { investigationSummaryController.focusSocket(socketId, reason); }
 
-function renderInvestigationContext() {
-  const socket = selectedSocket();
-  if (!socket) return "";
-  const socketAnomalies = state.anomalies.filter(anomaly => anomaly.socketId === socket.id);
-  const topAnomaly = socketAnomalies
-    .slice()
-    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))[0];
-  const process = socket.details.process ? `${socket.details.process.name}:${socket.details.process.pid}` : "unknown process";
-  const appChip = renderApplicationServiceChip(socket, "inline");
-  return `<section class="investigation-context" aria-label="Active investigation context">
-    <div class="investigation-main">
-      <span class="tooltip-kicker">Active investigation</span>
-      <div class="investigation-flow">
-        <strong>${escapeHtml(socket.local)}</strong>
-        <span>${icons.arrowRight}</span>
-        <strong>${escapeHtml(socket.peer)}</strong>
-      </div>
-      <small>${escapeHtml(state.activeContextReason || "Chosen by explicit user selection")} / ${escapeHtml(socket.family || "socket")} / ${escapeHtml(socket.state)} / ${escapeHtml(process)} ${appChip}</small>
-    </div>
-    <div class="investigation-metrics">
-      <span><b class="risk ${socket.risk}">${escapeHtml(socket.risk)}</b><small>risk</small></span>
-      <span><b>${formatNumber(socketAnomalies.length)}</b><small>anomalies</small></span>
-      <span><b>${formatMetricValue("rtt", metricValue(socket, "rtt"))}</b><small>RTT</small></span>
-      <span><b>${formatMetricValue("rto", metricValue(socket, "rto"))}</b><small>RTO</small></span>
-      <span><b>${formatMetricValue("tx_bps", socketBandwidth(socket, "tx_bps"))}</b><small>TX</small></span>
-      <span><b>${formatMetricValue("rx_bps", socketBandwidth(socket, "rx_bps"))}</b><small>RX</small></span>
-    </div>
-    <div class="investigation-actions">
-      <button data-context-action="details">${icons.activity} Details</button>
-      <button data-context-action="charts">${icons.chart} Charts</button>
-      <button data-context-action="focus"><i class="ri-focus-3-line"></i> Focus</button>
-      <button data-context-action="anomalies" class="${socketAnomalies.length ? "hot-action" : ""}">${icons.alert} Anomalies</button>
-      <button data-context-action="conversations"><i class="ri-chat-3-line"></i> Conversations</button>
-      <button class="icon" data-context-action="clear" title="Clear active context" aria-label="Clear active context">${icons.x}</button>
-    </div>
-    <div class="investigation-subrow">
-      ${topAnomaly ? `<div class="investigation-note ${topAnomaly.severity}">
-        <b>${escapeHtml(topAnomaly.severity)}</b>
-        <span>${escapeHtml(topAnomaly.title)}</span>
-      </div>` : ""}
-      ${(state.view === "analysis" || state.view === "charts") ? renderGuidedChecklistPanel(socket) : ""}
-    </div>
-  </section>`;
-}
+function renderInvestigationContext() { return investigationSummaryController.renderInvestigationContext(); }
 
-function inferredApplicationService(socket) {
-  return inferApplicationService(socket);
-}
+function inferredApplicationService(socket) { return investigationSummaryController.inferredApplicationService(socket); }
 
-function currentApplicationService(socket) {
-  return applyServiceOverride(socket, state.serviceOverrides, state.sourceName, inferredApplicationService(socket));
-}
+function currentApplicationService(socket) { return investigationSummaryController.currentApplicationService(socket); }
 
-function currentApplicationServiceSortKey(socket = {}) {
-  const app = currentApplicationService(socket);
-  if (!app || app.source === "suppressed") return "";
-  return `${app.label} ${app.port || ""}`.trim();
-}
+function currentApplicationServiceSortKey(socket = {}) { return investigationSummaryController.currentApplicationServiceSortKey(socket); }
 
-function renderApplicationServiceChip(socket, extraClass = "") {
-  const app = currentApplicationService(socket);
-  if (!app) return "";
-  const side = app.side === "local" ? "local port" : "peer port";
-  const source = app.source === "override"
-    ? "Analyst override"
-    : app.source === "suppressed"
-      ? "Port heuristic suppressed"
-      : "Inferred from port";
-  const title = app.source === "override"
-    ? `${app.label} set by analyst override for this recording. ${app.description}`
-    : app.source === "suppressed"
-      ? `Port-based inference hidden by analyst override. Original heuristic is no longer shown for this scope.`
-      : `${app.label} inferred from ${side} ${app.port}. ${app.description} Confidence: ${app.confidence}.`;
-  const label = app.source === "suppressed" ? "Hidden" : app.label;
-  const scopeLabel = app.override?.scope === "global" ? "global rule" : app.source === "override" || app.source === "suppressed" ? "recording rule" : `${side} ${app.port}`;
-  return `<button type="button" class="app-service-chip ${escapeHtml(extraClass)} ${app.source === "override" ? "override" : ""} ${app.source === "suppressed" ? "suppressed" : ""}" data-service-override="${escapeHtml(socket.id)}" data-app-tooltip-label="${escapeHtml(label)}" data-app-tooltip-source="${escapeHtml(source)}" data-app-tooltip-scope="${escapeHtml(scopeLabel)}" data-app-tooltip-detail="${escapeHtml(title)}" aria-label="Correct service classification: ${escapeHtml(label)}">
-    <i class="ri-stack-line"></i>
-    <b>APP</b>
-    <span class="app-service-label">${escapeHtml(label)}</span>
-  </button>`;
-}
+function renderApplicationServiceChip(socket, extraClass = "") { return investigationSummaryController.renderApplicationServiceChip(socket, extraClass); }
 
-function guidedChecklistItems(socket = selectedSocket()) {
-  return buildGuidedChecklistItems({
-    socket,
-    lens: tailLatencyLens(),
-    burst: microburstSummary(),
-    anomalies: socket ? anomaliesBySocketId().get(socket.id) || [] : [],
-    thresholdFor,
-    formatMicroburstWindow,
-    formatTailLatencyWindow
-  });
-}
+function guidedChecklistItems(socket = selectedSocket()) { return investigationSummaryController.guidedChecklistItems(socket); }
 
-function renderGuidedChecklistPanel(socket = selectedSocket()) {
-  const items = guidedChecklistItems(socket);
-  if (!items.length) return "";
-  const collapsed = state.prefs.guidedChecklistCollapsed !== false;
-  const summary = `${items.length} next step${items.length > 1 ? "s" : ""} - ${items[0].severity} - ${items[0].title}`;
-  return `<div class="guided-checklist ${collapsed ? "collapsed" : "expanded"}" aria-label="Next best step checklist">
-    <div class="guided-checklist-head">
-      <div class="guided-checklist-title">
-        <span class="tooltip-kicker">Guided checklist</span>
-        <strong>Next best step</strong>
-        <p class="hint">This panel turns the current socket evidence into concrete investigation moves, so you can avoid hopping between tabs without a hypothesis.</p>
-      </div>
-      <div class="guided-checklist-tools">
-        <span class="guided-checklist-summary">${escapeHtml(summary)}</span>
-        <button class="icon" data-action="toggleGuidedChecklist" aria-expanded="${collapsed ? "false" : "true"}" title="${collapsed ? "Expand guided checklist" : "Collapse guided checklist"}">${collapsed ? icons.down : icons.up}</button>
-      </div>
-    </div>
-    <div class="guided-checklist-grid">
-      ${items.map(item => `<article class="guided-checklist-card ${item.severity}">
-        <header>
-          <span class="risk ${item.severity}">${escapeHtml(item.severity)}</span>
-          <strong>${escapeHtml(item.title)}</strong>
-        </header>
-        <p>${escapeHtml(item.why)}</p>
-        <small>${escapeHtml(item.next)}</small>
-        <footer>
-          <button data-action="${item.action}" ${item.preset ? `data-dashboard-preset-jump="${escapeHtml(item.preset)}"` : ""}>${icons.focus} ${escapeHtml(item.actionLabel)}</button>
-        </footer>
-      </article>`).join("")}
-    </div>
-  </div>`;
-}
+function renderGuidedChecklistPanel(socket = selectedSocket()) { return investigationSummaryController.renderGuidedChecklistPanel(socket); }
 
-function executiveSummarySignal() {
-  const rows = sortedFilteredSockets();
-  const focusSocket = pickExecutiveFocusSocket(selectedSocket(), rows.length ? rows : state.sockets);
-  const anomalyMap = anomaliesBySocketId();
-  const summary = buildExecutiveSummary({
-    focusSocket,
-    anomalies: focusSocket ? anomalyMap.get(focusSocket.id) || [] : state.anomalies,
-    advisorFindings: state.advisorFindings || [],
-    microburst: microburstSummary(),
-    tailLatency: tailLatencyLens(),
-    checklistItems: focusSocket ? guidedChecklistItems(focusSocket) : [],
-    formatMicroburstWindow,
-    formatTailLatencyWindow,
-    formatMetricValue
-  });
-  if (!summary) return null;
-  const process = focusSocket?.details?.process ? `${focusSocket.details.process.name}:${focusSocket.details.process.pid}` : "unknown process";
-  return { ...summary, process };
-}
+function executiveSummarySignal() { return investigationSummaryController.executiveSummarySignal(); }
 
-function renderExecutiveSummary() {
-  const rows = sortedFilteredSockets();
-  const summary = executiveSummarySignal();
-  if (!summary) return "";
-  const focusSocket = summary.focusSocket;
-  const anomalyMap = anomaliesBySocketId();
-  const visibleAnomalies = focusSocket
-    ? anomalyMap.get(focusSocket.id)?.length || 0
-    : state.anomalies.length;
-  const criticalCount = state.anomalies.filter(item => item.severity === "critical").length;
-  const checklist = focusSocket ? guidedChecklistItems(focusSocket) : [];
-  const cards = [
-    {
-      label: "Dominant signal",
-      value: summary.title,
-      detail: summary.summary,
-      tone: summary.severity
-    },
-    {
-      label: "Focus flow",
-      value: focusSocket ? `${focusSocket.local} -> ${focusSocket.peer}` : "No selected flow",
-      detail: focusSocket ? `${focusSocket.family} / ${focusSocket.state} / ${summary.process}` : "Select a row to anchor the investigation on one socket.",
-      tone: focusSocket?.risk || "low"
-    },
-    {
-      label: "Visible scope",
-      value: `${formatNumber(rows.length)} socket${rows.length > 1 ? "s" : ""}`,
-      detail: `${formatNumber(visibleAnomalies)} anomaly signal(s) on the current focus${criticalCount ? ` - ${formatNumber(criticalCount)} critical globally` : ""}.`,
-      tone: criticalCount ? "critical" : summary.severity
-    },
-    {
-      label: "Next best step",
-      value: checklist[0]?.actionLabel || "Open charts or advisor",
-      detail: summary.next,
-      tone: checklist[0]?.severity || summary.severity
-    }
-  ];
-  return `<section class="executive-summary ${summary.severity}" aria-label="Incident snapshot">
-    <div class="executive-summary-head">
-      <div>
-        <span class="tooltip-kicker">Incident snapshot</span>
-        <h2>${escapeHtml(summary.headline)}</h2>
-        <p>${escapeHtml(summary.summary)}</p>
-      </div>
-      <div class="executive-summary-badge ${summary.severity}">
-        <span>${escapeHtml(summary.severity)}</span>
-        <strong>${escapeHtml(summary.title)}</strong>
-      </div>
-    </div>
-    <div class="executive-summary-grid">
-      ${cards.map(card => `<article class="executive-summary-card ${card.tone}">
-        <span>${escapeHtml(card.label)}</span>
-        <strong>${escapeHtml(card.value)}</strong>
-        <small>${escapeHtml(card.detail)}</small>
-      </article>`).join("")}
-    </div>
-  </section>`;
-}
-function captureWorkspacePosition() {
-  const workspace = document.querySelector(".workspace");
-  return {
-    scrollTop: workspace?.scrollTop || 0,
-    scrollLeft: workspace?.scrollLeft || 0,
-    windowScrollX: window.scrollX || 0,
-    windowScrollY: window.scrollY || 0
-  };
-}
+function renderExecutiveSummary() { return investigationSummaryController.renderExecutiveSummary(); }
+function captureWorkspacePosition() { return workspaceRenderController.captureWorkspacePosition(); }
 
-function restoreWorkspacePosition(snapshot) {
-  const nextWorkspace = document.querySelector(".workspace");
-  if (nextWorkspace) {
-    nextWorkspace.scrollTop = snapshot.scrollTop;
-    nextWorkspace.scrollLeft = snapshot.scrollLeft;
-  }
-  window.scrollTo(snapshot.windowScrollX, snapshot.windowScrollY);
-}
+function restoreWorkspacePosition(snapshot) { workspaceRenderController.restoreWorkspacePosition(snapshot); }
 
-function renderKeepingWorkspacePosition() {
-  const snapshot = captureWorkspacePosition();
-  const active = document.activeElement;
-  if (active && typeof active.blur === "function" && active.closest?.(".modal")) active.blur();
-  const restore = () => restoreWorkspacePosition(snapshot);
-  render();
-  restore();
-  queueMicrotask(restore);
-  requestAnimationFrame(() => {
-    restore();
-    requestAnimationFrame(restore);
-  });
-  setTimeout(restore, 0);
-  setTimeout(restore, 80);
-}
+function renderKeepingWorkspacePosition() { workspaceRenderController.renderKeepingWorkspacePosition(); }
 
-function renderKeepingModalPosition() {
-  const modal = document.querySelector(".modal");
-  const modalScrollTop = modal?.scrollTop || 0;
-  const modalScrollLeft = modal?.scrollLeft || 0;
-  const columnList = document.querySelector(".column-list");
-  const columnListScrollTop = columnList?.scrollTop || 0;
-  const columnListScrollLeft = columnList?.scrollLeft || 0;
-  render();
-  const nextModal = document.querySelector(".modal");
-  if (nextModal) {
-    nextModal.scrollTop = modalScrollTop;
-    nextModal.scrollLeft = modalScrollLeft;
-  }
-  const nextColumnList = document.querySelector(".column-list");
-  if (nextColumnList) {
-    nextColumnList.scrollTop = columnListScrollTop;
-    nextColumnList.scrollLeft = columnListScrollLeft;
-  }
-}
+function renderKeepingModalPosition() { workspaceRenderController.renderKeepingModalPosition(); }
 
 function ingestViewDependencies() {
   return {
@@ -1623,6 +1234,18 @@ function ingestViewDependencies() {
     renderSsOptionDetail
   };
 }
+
+const ctx = createAppContext(state, {
+  html, escapeHtml, truncateMiddle, icons,
+  formatNumber, formatMetricValue, formatTimelineTime, formatTimelineOffset,
+  thresholdFor, thresholdSeverity, metricLabel,
+  selectedSocket, socketsById, parsedTimestampSnapshots,
+  metricValue, render, renderKeepingWorkspacePosition, toast,
+  focusSocket, sortedFilteredSockets, visibleHistory,
+  dropRateSummary, renderWhatIfSimulation, renderInvestigationContext, renderTailLatencyLensPanel,
+  renderExportMenu, renderTimeZoneOptions, zoomDateTimeValue,
+  DASHBOARD_PRESETS, resolvedNumberLocale
+});
 
 const appRendering = createAppRendering(appRenderingDependencies);
 
@@ -1823,86 +1446,35 @@ function appRenderingDependencies() {
   };
 }
 
-function renderIngestPage(...args) { return appRendering.renderIngestPage(...args); }
-function renderAnalysisPage(...args) { return appRendering.renderAnalysisPage(...args); }
-function renderChartsGlobalToolbar(...args) { return appRendering.renderChartsGlobalToolbar(...args); }
-function renderAdvisorGlobalSummary(...args) { return appRendering.renderAdvisorGlobalSummary(...args); }
-function renderMetricsStatsTable(...args) { return appRendering.renderMetricsStatsTable(...args); }
-function renderChartsPage(...args) { return appRendering.renderChartsPage(...args); }
-function renderFocusView() {
-  const selected = socketsById().get(state.selectedId);
-  if (!selected) return `<section class="panel"><div class="panel-body"><p class="empty">Select a socket from the table to enter focus mode.</p></div></section>`;
-  const history = visibleHistory();
-  const allMetrics = chartMetricList();
-  const activeMetrics = allMetrics.filter(m => {
-    return history.some(row => { const v = Number(row?.[m]); return Number.isFinite(v) && v !== 0; });
-  });
-  if (!activeMetrics.length) return `<section class="panel"><div class="panel-body"><p class="empty">No metric data available for this socket.</p></div></section>`;
-  const layout = state.prefs.chartLayout;
-  return `<section class="panel focus-panel">
-    <div class="panel-head">
-      <div class="panel-title"><i class="ri-focus-3-line"></i> Focus — ${escapeHtml(selected.local)} → ${escapeHtml(selected.peer)}</div>
-      <div class="col-tools">
-        <button class="mini" data-chart-zoom="zoomIn" title="Zoom in">${icons.zoomIn}</button>
-        <button class="mini" data-chart-zoom="zoomOut" title="Zoom out">${icons.zoomOut}</button>
-        <button class="mini" data-chart-zoom="resetZoom" title="Reset zoom">${icons.reset}</button>
-        <button class="mini" data-chart-zoom="panLeft" title="Pan left">${icons.arrowLeft}</button>
-        <button class="mini" data-chart-zoom="panRight" title="Pan right">${icons.arrowRight}</button>
-      </div>
-    </div>
-    <div class="panel-body">
-      <div class="focus-grid">
-        ${activeMetrics.map(m => `<div class="focus-chart-card chart-card" data-chart-card="${m}">
-          <div class="focus-chart-label">${escapeHtml(metricLabel(m))}</div>
-          <svg class="chart small-chart focus-chart" data-mini-chart="${m}" tabindex="0" role="img" aria-label="${escapeHtml(metricLabel(m))}"></svg>
-        </div>`).join("")}
-      </div>
-    </div>
-  </section>`;
-}
-function renderDashboardPresetPicker(...args) { return appRendering.renderDashboardPresetPicker(...args); }
-function renderDashboardStudioInline(...args) { return appRendering.renderDashboardStudioInline(...args); }
-function renderDashboardStudio(...args) { return appRendering.renderDashboardStudio(...args); }
+function renderFocusView() { return focusViewController.renderFocusView(); }
 function renderTailLatencyLensPanel(...args) { return appRendering.renderTailLatencyLensPanel(...args); }
 function formatBytesHuman(...args) { return appRendering.formatBytesHuman(...args); }
 function bdpWindowAnalysis(...args) { return appRendering.bdpWindowAnalysis(...args); }
-function renderBdpWindowPanel(...args) { return appRendering.renderBdpWindowPanel(...args); }
-function renderJvmGcPanel(...args) { return appRendering.renderJvmGcPanel(...args); }
-function runJvmCorrelation(...args) { return appRendering.runJvmCorrelation(...args); }
-function drawJvmCharts(...args) { return appRendering.drawJvmCharts(...args); }
-function hideFloatingChartTooltipNow(...args) { return appRendering.hideFloatingChartTooltipNow(...args); }
-function showAppServiceTooltip(...args) { return appRendering.showAppServiceTooltip(...args); }
-function hideAppServiceTooltip(...args) { return appRendering.hideAppServiceTooltip(...args); }
-function bindSmartChartTooltips(...args) { return appRendering.bindSmartChartTooltips(...args); }
-function bindColumnHelpTooltips(...args) { return appRendering.bindColumnHelpTooltips(...args); }
-function runFixCorrelation(...args) { return appRendering.runFixCorrelation(...args); }
-function renderFixLatencyPanel(...args) { return appRendering.renderFixLatencyPanel(...args); }
-function drawFixCharts(...args) { return appRendering.drawFixCharts(...args); }
 function renderWhatIfSimulation(...args) { return appRendering.renderWhatIfSimulation(...args); }
-function toggleFixPlayback(...args) { return appRendering.toggleFixPlayback(...args); }
-function captureQualityReport(...args) { return appRendering.captureQualityReport(...args); }
-function diagnosticHypotheses(...args) { return appRendering.diagnosticHypotheses(...args); }
-function cachedRootCauseMatrix(...args) { return appRendering.cachedRootCauseMatrix(...args); }
-function lazySparklineIndex(...args) { return appRendering.lazySparklineIndex(...args); }
-function renderTableSettingsTrigger(...args) { return appRendering.renderTableSettingsTrigger(...args); }
-function renderTableSettingsDrawer(...args) { return appRendering.renderTableSettingsDrawer(...args); }
-function renderTableSettingsMenu(...args) { return appRendering.renderTableSettingsMenu(...args); }
-function renderRowActions(...args) { return appRendering.renderRowActions(...args); }
 function renderEndpointCell(...args) { return appRendering.renderEndpointCell(...args); }
 function renderPeerCell(...args) { return appRendering.renderPeerCell(...args); }
-function columnHelp(...args) { return appRendering.columnHelp(...args); }
-function renderThresholdSummary(...args) { return appRendering.renderThresholdSummary(...args); }
-function renderColumnTooltip(...args) { return appRendering.renderColumnTooltip(...args); }
-function positionConversationInsight(...args) { return appRendering.positionConversationInsight(...args); }
-function renderTimelineHeatmap(...args) { return appRendering.renderTimelineHeatmap(...args); }
-function renderBaselineNarrative(...args) { return appRendering.renderBaselineNarrative(...args); }
-function renderDelta(...args) { return appRendering.renderDelta(...args); }
-function filteredAnomalies(...args) { return appRendering.filteredAnomalies(...args); }
-function renderChartAnnotationMenu(...args) { return appRendering.renderChartAnnotationMenu(...args); }
-function renderDrawer(...args) { return appRendering.renderDrawer(...args); }
 function renderTimeZoneOptions(...args) { return appRendering.renderTimeZoneOptions(...args); }
-function renderGuide(...args) { return appRendering.renderGuide(...args); }
-function renderModal(...args) { return appRendering.renderModal(...args); }
+
+const appRenderingFacade = Object.fromEntries([
+  "renderIngestPage", "renderAnalysisPage", "renderChartsGlobalToolbar", "renderAdvisorGlobalSummary", "renderMetricsStatsTable",
+  "renderChartsPage", "renderDashboardPresetPicker", "renderDashboardStudioInline", "renderDashboardStudio", "renderBdpWindowPanel",
+  "renderJvmGcPanel", "runJvmCorrelation", "drawJvmCharts", "hideFloatingChartTooltipNow", "showAppServiceTooltip",
+  "hideAppServiceTooltip", "bindSmartChartTooltips", "bindColumnHelpTooltips", "runFixCorrelation", "renderFixLatencyPanel",
+  "drawFixCharts", "toggleFixPlayback", "captureQualityReport", "diagnosticHypotheses", "cachedRootCauseMatrix",
+  "renderTableSettingsTrigger", "renderTableSettingsDrawer", "renderTableSettingsMenu", "renderRowActions", "columnHelp",
+  "renderThresholdSummary", "renderColumnTooltip", "positionConversationInsight", "renderTimelineHeatmap", "renderBaselineNarrative",
+  "renderDelta", "filteredAnomalies", "renderChartAnnotationMenu", "renderDrawer", "renderGuide", "renderModal"
+].map(name => [name, (...args) => appRendering[name](...args)]));
+const {
+  renderIngestPage, renderAnalysisPage, renderChartsGlobalToolbar, renderAdvisorGlobalSummary, renderMetricsStatsTable, renderChartsPage,
+  renderDashboardPresetPicker, renderDashboardStudioInline, renderDashboardStudio, renderBdpWindowPanel, renderJvmGcPanel, runJvmCorrelation,
+  drawJvmCharts, hideFloatingChartTooltipNow, showAppServiceTooltip, hideAppServiceTooltip, bindSmartChartTooltips, bindColumnHelpTooltips,
+  runFixCorrelation, renderFixLatencyPanel, drawFixCharts, toggleFixPlayback, captureQualityReport, diagnosticHypotheses, cachedRootCauseMatrix,
+  renderTableSettingsTrigger, renderTableSettingsDrawer, renderTableSettingsMenu, renderRowActions, columnHelp,
+  renderThresholdSummary, renderColumnTooltip, positionConversationInsight, renderTimelineHeatmap, renderBaselineNarrative, renderDelta,
+  filteredAnomalies, renderChartAnnotationMenu, renderDrawer, renderGuide, renderModal
+} = appRenderingFacade;
+function lazySparklineIndex(...args) { return appRendering.lazySparklineIndex(...args); }
 
 function resolvedNumberLocale(...args) { return localeFormatting.resolvedNumberLocale(...args); }
 function resolvedTimeZone(...args) { return localeFormatting.resolvedTimeZone(...args); }
@@ -2036,221 +1608,29 @@ function exportIncidentReportHtml(...args) { return reportActions.exportIncident
 function exportFixSpikeCsv(...args) { return reportActions.exportFixSpikeCsv(...args); }
 function openIncidentReport(...args) { return reportActions.openIncidentReport(...args); }
 
-async function importFile(file) {
-  state.importStatus = { title: "Preparing import", detail: `${file.name} (${formatNumber(file.size)} bytes)`, progress: 1 };
-  state.raw = "";
-  state.ingestRawExpanded = false;
-  state.sockets = [];
-  state.anomalies = [];
-  state.healthScore = null;
-  state.selectedId = null;
-  setActiveInvestigation(state, null);
-  setSourceName(file.name);
-  state.view = "ingest";
-  state.analysisDirty = false;
-  resetDerivedCaches({ raw: true });
-  render();
+async function importFile(file) { return importFlowController.importFile(file); }
 
-  const result = await importSocketFile(file, {
-    formatNumber,
-    preFilter: state.preImportFilters.enabled ? { ...state.preImportFilters } : null,
-    onProgress(update, options = {}) {
-      state.raw = update.raw;
-      const isTimelineImport = hasTimestampedRawData();
-      const visibleSockets = isTimelineImport ? aggregateParsedSocketsByKey(update.sockets) : update.sockets;
-      state.importStatus = update.status && isTimelineImport && visibleSockets.length !== update.sockets.length
-        ? {
-          ...update.status,
-          detail: `${update.status.detail} ${formatNumber(visibleSockets.length)} active sockets after timeline aggregation.`
-        }
-        : update.status;
-      if (options.render !== false) {
-        state.sockets = visibleSockets;
-        // Only render status, skip heavy recompute during streaming
-        const statusEl = document.querySelector(".import-status");
-        if (statusEl && update.status) statusEl.textContent = `${update.status.title} - ${update.status.detail} (${update.status.progress || 0}%)`;
-      } else {
-        state.sockets = visibleSockets;
-      }
-    }
-  });
-
-  state.raw = result.raw;
-  state.ingestRawExpanded = result.raw.length <= INGEST_RAW_EAGER_LIMIT;
-  setSourceName(result.sourceName);
-  rememberFilterHistory(state.preImportFilters);
-  state.importStatus = null;
-  state.view = "analysis";
-  state.activeTab = "advisor";
-  state.healthScore = null;
-  resetDerivedCaches({ raw: true });
-  // Yield to UI before heavy computation
-  render();
-  await new Promise(r => setTimeout(r, 50));
-  const t0 = performance.now();
-  if (hasTimestampedRawData()) {
-    recompute();
-  } else {
-    state.sockets = result.sockets;
-    recomputeFromSockets();
-  }
-  toast("Analysis complete", `${state.sockets.length} sockets in ${((performance.now() - t0) / 1000).toFixed(1)}s.`);
-  toast("Import complete", `${formatNumber(state.sockets.length)} sockets parsed from ${file.name}.`);
-  render();
-}
-
-function rememberFilterHistory(filters) {
-  if (!filters.enabled || !hasPreImportFilterValue(filters)) return;
-  const normalized = normalizePreImportFilters(filters);
-  state.filterHistory = [
-    { ...normalized, at: Date.now() },
-    ...state.filterHistory
-  ].filter((item, index, all) => index === all.findIndex(other =>
-    other.protocol === item.protocol &&
-    other.state === item.state &&
-    other.srcIp === item.srcIp &&
-    other.dstIp === item.dstIp &&
-    other.anyPort === item.anyPort &&
-    other.srcPort === item.srcPort &&
-    other.dstPort === item.dstPort
-  )).slice(0, 40);
-  saveFilterHistoryRaw(state.filterHistory);
-}
+function rememberFilterHistory(filters) { importFlowController.rememberFilterHistory(filters); }
 
 function toast(title, text, type = "") {
-  const stack = document.querySelector("#toastStack");
-  const el = document.createElement("div");
-  el.className = `toast ${type}`;
-  el.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p><button class="toast-close" aria-label="Close">×</button><span class="toast-progress"></span>`;
-  el.querySelector(".toast-close").addEventListener("click", () => { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); });
-  el.addEventListener("mouseenter", () => { el.classList.add("paused"); });
-  el.addEventListener("mouseleave", () => { el.classList.remove("paused"); });
-  stack.appendChild(el);
-  while (stack.children.length > 4) { stack.firstElementChild.remove(); }
-  setTimeout(() => { if (!el.classList.contains("paused")) { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); } else { const wait = () => { if (!el.classList.contains("paused")) { el.classList.add("leaving"); setTimeout(() => el.remove(), 300); } else { setTimeout(wait, 500); } }; setTimeout(wait, 500); } }, 8000);
+  browserFeedbackController.toast(title, text, type);
 }
 
 async function copyTextToClipboard(text) {
-  const value = String(text || "");
-  if (!value) return false;
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return true;
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const ok = document.execCommand("copy");
-  textarea.remove();
-  return ok;
+  return browserFeedbackController.copyTextToClipboard(text);
 }
 
-function closeDashboardPresetMenu(cancel = false) {
-  if (!state.openDashboardPresetMenu) return false;
-  if (cancel) {
-    state.activeDashboardPreset = dashboardPresetIdOrDefault(state.dashboardPresetBeforeOpen || state.activeDashboardPreset);
-  }
-  state.openDashboardPresetMenu = false;
-  state.dashboardPresetBeforeOpen = null;
-  return true;
-}
+function closeDashboardPresetMenu(cancel = false) { return uiMenuController.closeDashboardPresetMenu(cancel); }
 
-function updateDashboardPresetPickerChrome(presetId) {
-  const preset = DASHBOARD_PRESETS[presetId];
-  const picker = document.querySelector("#dashboardPresetPicker");
-  if (!preset || !picker) return;
-  const trigger = picker.querySelector("[data-dashboard-preset-toggle]");
-  const label = picker.querySelector(".dashboard-preset-current");
-  const icon = picker.querySelector(".dashboard-preset-trigger .dashboard-preset-icon i");
-  const menu = picker.querySelector(".dashboard-preset-menu");
-  trigger?.setAttribute("aria-expanded", "false");
-  trigger?.setAttribute("title", preset.description || "Choose an expert dashboard preset.");
-  if (label) label.textContent = preset.name || "Choose preset";
-  if (icon) icon.className = dashboardPresetIcon(presetId);
-  menu?.classList.remove("open");
-  picker.querySelectorAll("[data-dashboard-preset-choice]").forEach(option => {
-    const selected = option.dataset.dashboardPresetChoice === presetId;
-    option.classList.toggle("selected", selected);
-    option.setAttribute("aria-selected", selected ? "true" : "false");
-  });
-}
+function updateDashboardPresetPickerChrome(presetId) { uiMenuController.updateDashboardPresetPickerChrome(presetId); }
 
-function scheduleDashboardPresetRender() {
-  if (dashboardPresetRenderFrame) cancelAnimationFrame(dashboardPresetRenderFrame);
-  dashboardPresetRenderFrame = requestAnimationFrame(() => {
-    dashboardPresetRenderFrame = requestAnimationFrame(() => {
-      dashboardPresetRenderFrame = 0;
-      renderKeepingWorkspacePosition();
-    });
-  });
-}
+function scheduleDashboardPresetRender() { uiMenuController.scheduleDashboardPresetRender(); }
 
-function commitDashboardPresetChoice(presetId) {
-  const preset = DASHBOARD_PRESETS[presetId];
-  if (!preset) return;
-  state.openDashboardPresetMenu = false;
-  state.dashboardPresetBeforeOpen = null;
-  applyDashboardPreset(presetId);
-  updateDashboardPresetPickerChrome(presetId);
-  toast("Dashboard preset applied", preset.name || "Preset applied.");
-  scheduleDashboardPresetRender();
-}
+function commitDashboardPresetChoice(presetId) { uiMenuController.commitDashboardPresetChoice(presetId); }
 
-function closeFloatingMenus(options = {}) {
-  let changed = closeDashboardPresetMenu(Boolean(options.cancelDashboard));
-  if (state.openStyleMenu) {
-    state.openStyleMenu = false;
-    changed = true;
-  }
-  if (state.openSsEditorThemeMenu) {
-    state.openSsEditorThemeMenu = false;
-    resetSsEditorThemePreview();
-    changed = true;
-  }
-  if (state.openExportMenu || state.openExportMenuPos) {
-    state.openExportMenu = null;
-    state.openExportMenuPos = null;
-    changed = true;
-  }
-  if (state.openTableSettings || state.openTableSettingsPos) {
-    state.openTableSettings = false;
-    state.openTableSettingsPos = null;
-    changed = true;
-  }
-  if (state.openMenuId || state.openMenuPos) {
-    state.openMenuId = null;
-    state.openMenuPos = null;
-    changed = true;
-  }
-  if (state.openChartMoveMetric || state.openChartMovePos) {
-    state.openChartMoveMetric = null;
-    state.openChartMovePos = null;
-    changed = true;
-  }
-  if (state.openConversationInsightKey || state.openConversationInsightPos) {
-    state.openConversationInsightKey = null;
-    state.openConversationInsightPos = null;
-    changed = true;
-  }
-  if (state.drawer === "tableSettings") {
-    state.drawer = null;
-    changed = true;
-  }
-  return changed;
-}
+function closeFloatingMenus(options = {}) { return uiMenuController.closeFloatingMenus(options); }
 
-function handleGlobalKeydown(event) {
-  if (event.ctrlKey && event.key === "z" && !event.shiftKey) { event.preventDefault(); _undo(); return; }
-  if (event.ctrlKey && (event.key === "y" || (event.key === "z" && event.shiftKey))) { event.preventDefault(); _redo(); return; }
-  if (event.key !== "Escape") return;
-  if (!closeFloatingMenus({ cancelDashboard: true })) return;
-  event.preventDefault();
-  renderKeepingWorkspacePosition();
-}
+function handleGlobalKeydown(event) { uiMenuController.handleGlobalKeydown(event); }
 
 function appEventDependencies() {
   return {
@@ -2612,18 +1992,6 @@ function toggleCommandPalette() {
 
 globalDomController.bindGlobalDomEvents();
 
-// App context for extracted modules
-const ctx = createAppContext(state, {
-  html, escapeHtml, truncateMiddle, icons,
-  formatNumber, formatMetricValue, formatTimelineTime, formatTimelineOffset,
-  thresholdFor, thresholdSeverity, metricLabel,
-  selectedSocket, socketsById, parsedTimestampSnapshots,
-  metricValue, render, renderKeepingWorkspacePosition, toast,
-  focusSocket, sortedFilteredSockets, visibleHistory,
-  dropRateSummary, renderWhatIfSimulation, renderInvestigationContext, renderTailLatencyLensPanel,
-  renderExportMenu, renderTimeZoneOptions, zoomDateTimeValue,
-  DASHBOARD_PRESETS, resolvedNumberLocale
-});
 window._ctx = ctx;
 
 window._debug = { get state() { return state; }, snapshots: () => parsedTimestampSnapshots() };
