@@ -88,6 +88,7 @@ import { createReportActions } from "../reporting/report-actions.js";
 import { createRuntimeProfile, emptyPreImportFilters as createEmptyPreImportFilters } from "./runtime-profile.js";
 import { createSsCommandController } from "./ss-command-controller.js";
 import { createAppEventBindings } from "../events/app-event-bindings.js";
+import { createGlobalDomController } from "./controllers/global-dom-controller.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../analysis/snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "../parsing/shared-buffer.js";
 import { applySsEditorThemePreview as applySsEditorThemePreviewToDocument, defaultSsCommandConfig as createDefaultSsCommandConfig, defaultSsLogPath as createDefaultSsLogPath, normalizeSsEditorTheme as normalizeSsEditorThemeValue, parseUiIntervalSeconds as parseSsUiIntervalSeconds, readSsCommandConfig as readSsCommandConfigFromDocument, updateSsCommandValidation as updateSsCommandValidationInDocument } from "../parsing/ss-command-config.js";
@@ -307,6 +308,7 @@ function conversationModelDependencies() {
 }
 
 const appEventBindings = createAppEventBindings(appEventDependencies);
+const globalDomController = createGlobalDomController(globalDomDependencies);
 const advancedCorrelationPanels = createAdvancedCorrelationPanels(advancedCorrelationDependencies);
 const serviceMapPresenter = createServiceMapPresenter(serviceMapPresenterDependencies);
 const annotationController = createAnnotationController(annotationControllerDependencies);
@@ -2891,259 +2893,41 @@ function layoutProfileActionDependencies() {
   };
 }
 
+function globalDomDependencies() {
+  return {
+    document,
+    window,
+    localStorage,
+    setTimeout,
+    state,
+    render,
+    renderKeepingWorkspacePosition,
+    saveTableState,
+    sortedFilteredSockets,
+    focusSocket,
+    drawJvmCharts,
+    openIncidentReport,
+    exportIncidentReportHtml,
+    exportEvidencePack,
+    copyTextToClipboard,
+    buildJiraReport,
+    toast,
+    exportFixSpikeCsv,
+    clampZoomRange,
+    importFile,
+    createBaseline
+  };
+}
+
 function bindChartMinimapEvents(deps = appEventDependencies()) { return appEventBindings.bindChartMinimapEvents(deps); }
 function bindChartChromeEvents(deps = appEventDependencies()) { return appEventBindings.bindChartChromeEvents(deps); }
 function bindChartSeriesEvents(deps = appEventDependencies()) { return appEventBindings.bindChartSeriesEvents(deps); }
 function bindEvents(deps = appEventDependencies()) { return appEventBindings.bindEvents(deps); }
-// === DELEGATED EVENT HANDLING (installed once, never re-attached) ===
-document.addEventListener("keydown", event => {
-  if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA" || event.target.isContentEditable) return;
-  if (event.key === "Escape") {
-    if (state.onboarding >= 0) { state.onboarding = -1; localStorage.setItem("networkExpertOnboarded", "1"); render(); return; }
-    if (document.documentElement.classList.contains("presentation-mode")) { document.documentElement.classList.remove("presentation-mode"); return; }
-    if (state.modal) { state.modal = null; render(); return; }
-    if (state.drawer) { state.drawer = null; render(); return; }
-  }
-  if (event.ctrlKey || event.metaKey) {
-    const num = parseInt(event.key);
-    if (num >= 1 && num <= 9) {
-      const tabs = ["quality", "diagnosis", "advisor", "templates", "map", "conversations", "timeline", "alerts", "compare"];
-      if (tabs[num - 1]) { event.preventDefault(); state.activeTab = tabs[num - 1]; state.view = "analysis"; render(); }
-    }
-    if (event.key === "e") { event.preventDefault(); state.view = "ingest"; render(); }
-    if (event.key === "m") { event.preventDefault(); state.view = "charts"; state.chartsTab = "charts"; render(); }
-  }
-});
-
-document.querySelector("#app").addEventListener("click", event => {
-  const actionMenu = event.target.closest("[data-action-menu]");
-  if (actionMenu) {
-    event.stopPropagation();
-    const id = actionMenu.dataset.actionMenu;
-    if (state.openMenuId === id) { state.openMenuId = null; state.openMenuPos = null; }
-    else {
-      const rect = actionMenu.getBoundingClientRect();
-      const menuWidth = 250;
-      const menuHeight = 220;
-      const left = Math.min(Math.max(8, rect.right + 4), window.innerWidth - menuWidth - 8);
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const top = spaceBelow > menuHeight + 8 ? rect.top : Math.max(8, rect.bottom - menuHeight);
-      state.openMenuId = id;
-      state.openMenuPos = { left: Math.round(left), top: Math.round(top) };
-    }
-    render(); return;
-  }
-
-  const target = event.target.closest("[data-view]");
-  if (target) { state._lastTab = state._lastTab || {}; state._lastTab[state.view] = state.activeTab; state.view = target.dataset.view; if (state._lastTab[state.view]) state.activeTab = state._lastTab[state.view]; if (document.startViewTransition) { document.startViewTransition(() => render()); } else { render(); } return; }
-
-  const tab = event.target.closest("[data-tab]");
-  if (tab) { state.activeTab = tab.dataset.tab; state.breadcrumbMenuOpen = false; render(); return; }
-
-  const chartsTab = event.target.closest("[data-charts-tab]");
-  if (chartsTab) { state.chartsTab = chartsTab.dataset.chartsTab; state.breadcrumbMenuOpen = false; render(); return; }
-
-  const sort = event.target.closest("[data-sort]");
-  if (sort) {
-    event.stopPropagation();
-    const key = sort.dataset.sort;
-    state.table.sortDir = state.table.sortKey === key && state.table.sortDir === "desc" ? "asc" : "desc";
-    state.table.sortKey = key;
-    state.table.page = 1;
-    saveTableState();
-    render();
-    return;
-  }
-
-  const page = event.target.closest("[data-page]");
-  if (page) {
-    const action = page.dataset.page;
-    const total = Number(page.dataset.totalPages || Math.max(1, Math.ceil(sortedFilteredSockets().length / state.table.pageSize)));
-    if (action === "first") state.table.page = 1;
-    if (action === "prev") state.table.page = Math.max(1, state.table.page - 1);
-    if (action === "next") state.table.page = Math.min(total, state.table.page + 1);
-    if (action === "last") state.table.page = total;
-    render();
-    return;
-  }
-
-  const jvmSort = event.target.closest("[data-jvm-sort]");
-  if (jvmSort) {
-    event.stopPropagation();
-    const key = jvmSort.dataset.jvmSort;
-    state.jvmTable.sortDir = state.jvmTable.sortKey === key && state.jvmTable.sortDir === "desc" ? "asc" : "desc";
-    state.jvmTable.sortKey = key;
-    state.jvmTable.page = 1;
-    renderKeepingWorkspacePosition();
-    return;
-  }
-
-  const jvmPage = event.target.closest("[data-jvm-page]");
-  if (jvmPage) {
-    const action = jvmPage.dataset.jvmPage;
-    const total = Number(jvmPage.dataset.totalPages || 1);
-    if (action === "first") state.jvmTable.page = 1;
-    if (action === "prev") state.jvmTable.page = Math.max(1, state.jvmTable.page - 1);
-    if (action === "next") state.jvmTable.page = Math.min(total, state.jvmTable.page + 1);
-    if (action === "last") state.jvmTable.page = total;
-    renderKeepingWorkspacePosition();
-    return;
-  }
-
-  const jvmRow = event.target.closest("[data-jvm-row-epoch]");
-  if (jvmRow) {
-    const epoch = Number(jvmRow.dataset.jvmRowEpoch);
-    if (!epoch) return;
-    // Toggle selection: click again to deselect
-    if (state.jvmGc.selectedEpoch === epoch) {
-      state.jvmGc.selectedEpoch = null;
-      document.querySelectorAll("[data-jvm-row-epoch]").forEach(r => r.style.background = "");
-    } else {
-      state.jvmGc.selectedEpoch = epoch;
-      document.querySelectorAll("[data-jvm-row-epoch]").forEach(r => {
-        r.style.background = Number(r.dataset.jvmRowEpoch) === epoch ? "rgba(93,183,255,.15)" : "";
-      });
-    }
-    drawJvmCharts();
-    return;
-  }
-
-  const jump = event.target.closest("[data-jump]");
-  if (jump) {
-    focusSocket(jump.dataset.jump, "Chosen from navigation jump");
-    state.activeTab = "sockets";
-    render();
-    return;
-  }
-
-  const socket = event.target.closest("[data-socket]");
-  if (socket && !event.target.closest("button, input, label, select, textarea, a, [role='button'], .row-menu, .table-settings-menu, .column-tooltip")) {
-    focusSocket(socket.dataset.socket, "Chosen by clicking a row");
-    state.openConversationInsightKey = null;
-    state.openConversationInsightPos = null;
-    renderKeepingWorkspacePosition();
-    return;
-  }
-});
-
-
-// Keyboard shortcuts for export
-document.addEventListener("keydown", e => {
-  if (!e.ctrlKey || !e.shiftKey) return;
-  if (e.key === "P") { e.preventDefault(); openIncidentReport(); }
-  if (e.key === "H") { e.preventDefault(); exportIncidentReportHtml(); }
-  if (e.key === "Z") { e.preventDefault(); exportEvidencePack().catch(() => {}); }
-  if (e.key === "J") { e.preventDefault(); copyTextToClipboard(buildJiraReport()); toast("Jira report copied", "Paste into a Jira ticket."); }
-  if (e.key === "F") { e.preventDefault(); exportFixSpikeCsv(); }
-});
-
-// Dark/light auto from OS preference
-if (!localStorage.getItem("theme")) {
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  if (!prefersDark && state.prefs.theme !== "light") { state.prefs.theme = "light"; document.documentElement.dataset.theme = "light"; }
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => { state.prefs.theme = e.matches ? "dark" : "light"; document.documentElement.dataset.theme = state.prefs.theme; render(); });
-}
-
-// Undo stack
-const _undoStack = [];
-function pushUndo() { _undoStack.push({ activeTab: state.activeTab, selectedId: state.selectedId, chartZoom: { ...state.chartZoom }, view: state.view }); if (_undoStack.length > 20) _undoStack.shift(); }
-function popUndo() { const prev = _undoStack.pop(); if (prev) { Object.assign(state, prev); render(); toast("Undo", "Reverted to previous state."); } }
-
-// Keyboard shortcuts
-document.addEventListener("keydown", e => {
-  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
-  const sockets = state.sockets;
-  if (e.key === "j" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const next = sockets[Math.min(sockets.length - 1, idx + 1)]; if (next) { pushUndo(); state.selectedId = next.id; render(); } }
-  if (e.key === "k" && !e.ctrlKey) { const idx = sockets.findIndex(s => s.id === state.selectedId); const prev = sockets[Math.max(0, idx - 1)]; if (prev) { pushUndo(); state.selectedId = prev.id; render(); } }
-  if (e.key === "r" && !e.ctrlKey && !e.metaKey) { pushUndo(); state.chartZoom = { start: 0, end: 1 }; render(); }
-  if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) { e.preventDefault(); popUndo(); }
-  if (e.key === "k" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); toggleCommandPalette(); }
-  if (e.key === "?" && !e.ctrlKey) { state.modal = state.modal === "shortcuts" ? null : "shortcuts"; render(); }
-});
-
-// File drag & drop zone
-document.addEventListener("dragover", e => { e.preventDefault(); document.querySelector(".drop-zone")?.classList.add("dragover"); });
-document.addEventListener("dragleave", e => { if (!e.relatedTarget || !document.contains(e.relatedTarget)) document.querySelector(".drop-zone")?.classList.remove("dragover"); });
-document.addEventListener("drop", e => {
-  e.preventDefault();
-  document.querySelector(".drop-zone")?.classList.remove("dragover");
-  const files = [...(e.dataTransfer?.files || [])].filter(f => /\.(log|txt|out|ss|gz|zip)$/i.test(f.name));
-  if (!files.length) return;
-  if (files.length === 1) { importFile(files[0]); return; }
-  // Multi-file: first file = baseline, second = incident, auto-compare
-  (async () => {
-    await importFile(files[0]);
-    state.baseline = createBaseline();
-    state.baseline.role = "healthy";
-    state.baseline.label = files[0].name;
-    toast("Baseline set", `${files[0].name} loaded as baseline (${state.sockets.length} sockets).`);
-    await importFile(files[1]);
-    state.activeTab = "compare";
-    render();
-    toast("Comparison ready", `${files[0].name} vs ${files[1].name} — switch to Compare tab.`);
-  })();
-});
-
-// Topbar shrink on scroll + back to top
-const _backToTop = document.getElementById("backToTop");
-document.querySelector("#app").addEventListener("scroll", e => {
-  const ws = e.target.closest?.(".workspace");
-  if (!ws) return;
-  document.querySelector(".topbar")?.classList.toggle("compact", ws.scrollTop > 40);
-  _backToTop.classList.toggle("visible", ws.scrollTop > 300);
-}, true);
-_backToTop.addEventListener("click", () => { document.querySelector(".workspace")?.scrollTo({ top: 0, behavior: "smooth" }); });
-
-// Socket hover card
-// Mouse spotlight on panels
-document.querySelector("#app").addEventListener("mousemove", e => {
-  const panel = e.target.closest(".panel, .advisor-card, .guided-checklist-card");
-  if (panel) { const r = panel.getBoundingClientRect(); panel.style.setProperty("--mouse-x", `${e.clientX - r.left}px`); panel.style.setProperty("--mouse-y", `${e.clientY - r.top}px`); }
-}, { passive: true });
-
-// Ripple effect on buttons
-document.addEventListener("pointerdown", e => {
-  const btn = e.target.closest("button:not(.icon)");
-  if (!btn) return;
-  const r = btn.getBoundingClientRect();
-  const ripple = document.createElement("span");
-  ripple.className = "ripple";
-  const size = Math.max(r.width, r.height);
-  ripple.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size/2}px;top:${e.clientY - r.top - size/2}px`;
-  btn.appendChild(ripple);
-  setTimeout(() => ripple.remove(), 500);
-});
-
-// Double-click to zoom charts
-document.querySelector("#app").addEventListener("dblclick", e => {
-  const svg = e.target.closest("svg.chart");
-  if (!svg) return;
-  const rect = svg.getBoundingClientRect();
-  const xRatio = (e.clientX - rect.left) / rect.width;
-  const z = state.chartZoom;
-  const range = z.end - z.start;
-  const center = z.start + xRatio * range;
-  const newRange = range / 2;
-  state.chartZoom = clampZoomRange({ start: center - newRange / 2, end: center + newRange / 2 });
-  render();
-});
-document.querySelector("#app").addEventListener("contextmenu", e => {
-  if (!e.target.closest("svg.chart")) return;
-  e.preventDefault();
-  const z = state.chartZoom;
-  const range = z.end - z.start;
-  const center = (z.start + z.end) / 2;
-  const newRange = Math.min(1, range * 2);
-  state.chartZoom = clampZoomRange({ start: center - newRange / 2, end: center + newRange / 2 });
-  render();
-});
-
-// Command palette
 function toggleCommandPalette() {
-  if (state.modal === "commandPalette") { state.modal = null; render(); return; }
-  state.modal = "commandPalette"; state.commandPaletteQuery = ""; render();
-  setTimeout(() => document.querySelector("#cmdPaletteInput")?.focus(), 50);
+  globalDomController.toggleCommandPalette();
 }
+
+globalDomController.bindGlobalDomEvents();
 
 // App context for extracted modules
 const ctx = createAppContext(state, {
