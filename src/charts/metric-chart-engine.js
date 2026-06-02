@@ -438,7 +438,7 @@ function redrawChartCardMetric(metric, action = state.activeChartAction, deps = 
     state, document, chartDrawDependencies, chartBgColor,
     chartTooltipOpacity: (...a) => call("chartTooltipOpacity", ...a),
     escapeHtml, formatNumber, numberFormatter,
-    formatMetricValue, formatBitsPerSecond, formatBytesHuman, metricLabel, metricColor, thresholdFor,
+    formatMetricValue, formatBitsPerSecond, formatBytesHuman, metricLabel, metricUnit, metricColor, thresholdFor,
     thresholdSeverity, thresholdColor, timeLabel, dateTimeFormatter, resolvedNumberLocale, resolvedTimeZone,
     bdpWindowAnalysis: (...a) => call("bdpWindowAnalysis", ...a),
     chartAnnotationOverlay: (...a) => call("chartAnnotationOverlay", ...a),
@@ -450,7 +450,8 @@ function redrawChartCardMetric(metric, action = state.activeChartAction, deps = 
     render: (...a) => call("render", ...a),
     visibleHistory, chartRowTime, nearestChartRow,
     nearestChartRowIndex, chartPointBudget, renderableHistory, chartAxisDomain, chartSeriesKey,
-    chartSeriesHidden, metricChartSeries, drawChartInto
+    chartSeriesHidden, metricChartSeries, drawChartInto, chartZoomFor, zoomRangeFromDragSelection,
+    setZoom, redrawChartCardMetric, drawChart
   });
   const { drawCorrelation, drawBdpWindowCharts, bdpChartSeries, bdpSeriesValues, bdpPath, bdpMarkerOverlay, drawBdpWindowChart, attachBdpCrosshair, svgPoint, chartPointerContext, chartContextMenuPosition, attachChartContextAnnotation, attachChartInteractions } = _bdpDrawing;
 
