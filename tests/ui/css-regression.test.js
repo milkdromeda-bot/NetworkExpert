@@ -22,6 +22,7 @@ const uiEnhancementsCss = readFileSync(new URL("../../src/styles/ui-enhancements
 const css = [stylesCss, importPageCss, captureQualityCss, analysisGuideCss, analysisWorkbenchCss, analysisTableCss, metricIntelligenceCss, socketIndicatorsCss, advisorDiagnosisCss, serviceMapCss, alertsTemplatesCompareCss, chartsCoreCss, chartsAdvancedCss, designSystemCss, guideCss, lightModeCss, uiEnhancementsCss].join("\n");
 const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+const initialState = readFileSync(new URL("../../src/rendering/initial-state.js", import.meta.url), "utf8");
 const advancedCorrelationPanels = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
 const jvmChartDrawing = readFileSync(new URL("../../src/correlation/jvm-chart-drawing.js", import.meta.url), "utf8");
 const jvmPanelModel = readFileSync(new URL("../../src/correlation/jvm-panel-model.js", import.meta.url), "utf8");
@@ -220,10 +221,10 @@ test("file import flow has one clear filter entry point", () => {
   assert.doesNotMatch(main, /data-action="applyCommand"/);
   assert.doesNotMatch(main, /ss command updated/);
   assert.doesNotMatch(main, /Capture command updated/);
-  assert.match(main, /let state = \{\s*raw:\s*""/);
-  assert.match(main, /sourceName:\s*"empty workspace"/);
-  assert.match(main, /annotationDraft:\s*buildAnnotationDraft\(\{ sourceName:\s*"empty workspace" \}\)/);
-  assert.match(main, /ingestRawExpanded:\s*true/);
+  assert.match(main, /let state = createInitialState\(\{/);
+  assert.match(initialState, /sourceName:\s*"empty workspace"/);
+  assert.match(initialState, /annotationDraft:\s*buildAnnotationDraft\(\{ sourceName:\s*"empty workspace" \}\)/);
+  assert.match(initialState, /ingestRawExpanded:\s*true/);
   assert.doesNotMatch(main, /raw:\s*SAMPLE/);
   assert.doesNotMatch(main, /filters are offered after file selection/);
   assert.doesNotMatch(main, /class="import-flow-note"/);

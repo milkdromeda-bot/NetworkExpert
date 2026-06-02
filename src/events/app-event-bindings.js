@@ -6,140 +6,29 @@ import {
 import { bindCommandPreferenceEvents as bindCommandPreferenceEventsModel } from "./command-preference-events.js";
 import { bindActionButtonEvents as bindActionButtonEventsModel } from "./action-button-events.js";
 import { bindContextGuideEvents as bindContextGuideEventsModel } from "./context-guide-events.js";
+import { createAppEventContext } from "./app-event-context.js";
 
 export function createAppEventBindings(getDeps) {
-  const current = () => getDeps();
-  const call = (name, ...args) => {
-    const fn = current()[name];
-    if (typeof fn !== "function") throw new Error(`Missing app event dependency: ${name}`);
-    return fn(...args);
-  };
-  const proxiedObject = name => new Proxy({}, {
-    get(_target, prop) {
-      const source = current()[name] || globalThis[name];
-      const value = source?.[prop];
-      return typeof value === "function" ? value.bind(source) : value;
-    },
-    set(_target, prop, value) {
-      const source = current()[name] || globalThis[name];
-      if (!source) return false;
-      source[prop] = value;
-      return true;
-    },
-    has(_target, prop) { return prop in ((current()[name] || globalThis[name]) || {}); },
-    ownKeys() { return Reflect.ownKeys((current()[name] || globalThis[name]) || {}); },
-    getOwnPropertyDescriptor(_target, prop) {
-      const source = (current()[name] || globalThis[name]) || {};
-      return Object.getOwnPropertyDescriptor(source, prop) || { configurable: true, enumerable: true, writable: true, value: source[prop] };
-    }
-  });
-
-  const document = proxiedObject("document");
-  const window = proxiedObject("window");
-  const state = proxiedObject("state");
-  const localStorage = proxiedObject("localStorage");
-  const icons = proxiedObject("icons");
-  const EXPERT_CORRELATIONS = proxiedObject("EXPERT_CORRELATIONS");
-  const PRE_IMPORT_PRESETS = proxiedObject("PRE_IMPORT_PRESETS");
-  const ANALYSIS_TEMPLATES = proxiedObject("ANALYSIS_TEMPLATES");
-  const NodeFilter = proxiedObject("NodeFilter");
-  function appEventDependencies() { return current(); }
-  function cmInstanceRef() { return current().cmInstance || null; }
-  function requestAnimationFrame(callback) {
-    const raf = current().requestAnimationFrame || globalThis.requestAnimationFrame || (fn => setTimeout(fn, 16));
-    return raf(callback);
-  }
-  function handleGlobalKeydown(...args) { return call("handleGlobalKeydown", ...args); }
-  function bindSmartChartTooltips(...args) { return call("bindSmartChartTooltips", ...args); }
-  function bindColumnHelpTooltips(...args) { return call("bindColumnHelpTooltips", ...args); }
-  function sortedFilteredSockets(...args) { return call("sortedFilteredSockets", ...args); }
-  function visibleColumns(...args) { return call("visibleColumns", ...args); }
-  function escapeHtml(...args) { return call("escapeHtml", ...args); }
-  function renderRowActions(...args) { return call("renderRowActions", ...args); }
-  function render(...args) { return call("render", ...args); }
-  function handleIngestAction(...args) { return call("handleIngestAction", ...args); }
-  function ingestActionDependencies(...args) { return call("ingestActionDependencies", ...args); }
-  function openIncidentReport(...args) { return call("openIncidentReport", ...args); }
-  function exportEvidencePack(...args) { return call("exportEvidencePack", ...args); }
-  function toast(...args) { return call("toast", ...args); }
-  function annotationAnchorOptions(...args) { return call("annotationAnchorOptions", ...args); }
-  function annotationDefaultLabel(...args) { return call("annotationDefaultLabel", ...args); }
-  function visibleHistory(...args) { return call("visibleHistory", ...args); }
-  function annotationSocketId(...args) { return call("annotationSocketId", ...args); }
-  function saveAnnotations(...args) { return call("saveAnnotations", ...args); }
-  function renderKeepingWorkspacePosition(...args) { return call("renderKeepingWorkspacePosition", ...args); }
-  function zoomToTailLatencyWindow(...args) { return call("zoomToTailLatencyWindow", ...args); }
-  function applyDashboardPreset(...args) { return call("applyDashboardPreset", ...args); }
-  function resetAllState(...args) { return call("resetAllState", ...args); }
-  function _undo(...args) { return call("_undo", ...args); }
-  function _redo(...args) { return call("_redo", ...args); }
-  function _undoSnapshot(...args) { return call("_undoSnapshot", ...args); }
-  function renderModal(...args) { return call("renderModal", ...args); }
-  function parseGcLog(...args) { return call("parseGcLog", ...args); }
-  function runJvmCorrelation(...args) { return call("runJvmCorrelation", ...args); }
-  function drawJvmCharts(...args) { return call("drawJvmCharts", ...args); }
-  function toggleFixPlayback(...args) { return call("toggleFixPlayback", ...args); }
-  function selectedSocket(...args) { return call("selectedSocket", ...args); }
-  function anomaliesBySocketId(...args) { return call("anomaliesBySocketId", ...args); }
-  function applyContextAction(...args) { return call("applyContextAction", ...args); }
-  function chartMetricList(...args) { return call("chartMetricList", ...args); }
-  function syncChartHistoryToSelection(...args) { return call("syncChartHistoryToSelection", ...args); }
-  function openAnnotationModal(...args) { return call("openAnnotationModal", ...args); }
-  function bindTableInteractionEvents(...args) { return call("bindTableInteractionEvents", ...args); }
-  function tableInteractionDependencies(...args) { return call("tableInteractionDependencies", ...args); }
-  function bindSocketInteractionEvents(...args) { return call("bindSocketInteractionEvents", ...args); }
-  function socketInteractionDependencies(...args) { return call("socketInteractionDependencies", ...args); }
-  function closeDashboardPresetMenu(...args) { return call("closeDashboardPresetMenu", ...args); }
-  function commitDashboardPresetChoice(...args) { return call("commitDashboardPresetChoice", ...args); }
-  function applyDashboardProfile(...args) { return call("applyDashboardProfile", ...args); }
-  function saveDashboardProfiles(...args) { return call("saveDashboardProfiles", ...args); }
-  function saveAlertAcks(...args) { return call("saveAlertAcks", ...args); }
-  function defaultAlertRules(...args) { return call("defaultAlertRules", ...args); }
-  function saveAlertRules(...args) { return call("saveAlertRules", ...args); }
-  function saveFilterHistory(...args) { return call("saveFilterHistory", ...args); }
-  function hasPreImportFilterValue(...args) { return call("hasPreImportFilterValue", ...args); }
-  function emptyPreImportFilters(...args) { return call("emptyPreImportFilters", ...args); }
-  function importFile(...args) { return call("importFile", ...args); }
-  function openTopologyModal(...args) { return call("openTopologyModal", ...args); }
-  function renderKeepingModalPosition(...args) { return call("renderKeepingModalPosition", ...args); }
-  function socketsById(...args) { return call("socketsById", ...args); }
-  function focusSocket(...args) { return call("focusSocket", ...args); }
-  function hideAppServiceTooltip(...args) { return call("hideAppServiceTooltip", ...args); }
-  function showAppServiceTooltip(...args) { return call("showAppServiceTooltip", ...args); }
-  function applyAnalysisTemplate(...args) { return call("applyAnalysisTemplate", ...args); }
-  function savePrefs(...args) { return call("savePrefs", ...args); }
-  function normalizeBdpDirection(...args) { return call("normalizeBdpDirection", ...args); }
-  function syncSsCommandFromBuilder(...args) { return call("syncSsCommandFromBuilder", ...args); }
-  function toggleCommandOption(...args) { return call("toggleCommandOption", ...args); }
-  function syncFromCodeMirror(...args) { return call("syncFromCodeMirror", ...args); }
-  function normalizeSsEditorTheme(...args) { return call("normalizeSsEditorTheme", ...args); }
-  function applySsEditorThemePreview(...args) { return call("applySsEditorThemePreview", ...args); }
-  function resetSsEditorThemePreview(...args) { return call("resetSsEditorThemePreview", ...args); }
-  function drawFixCharts(...args) { return call("drawFixCharts", ...args); }
-  function runFixCorrelation(...args) { return call("runFixCorrelation", ...args); }
-  function sourceFileEventDependencies(...args) { return call("sourceFileEventDependencies", ...args); }
-  function bindSourceFileEvents(...args) { return call("bindSourceFileEvents", ...args); }
-  function setZoom(...args) { return call("setZoom", ...args); }
-  function clearVisibleHistoryCache(...args) { return call("clearVisibleHistoryCache", ...args); }
-  function saveTableState(...args) { return call("saveTableState", ...args); }
-  function moveVisibleChartMetric(...args) { return call("moveVisibleChartMetric", ...args); }
-  function showPercentileTableCrosshair(...args) { return call("showPercentileTableCrosshair", ...args); }
-  function clearPercentileTableCrosshair(...args) { return call("clearPercentileTableCrosshair", ...args); }
-  function exportChartAsPng(...args) { return call("exportChartAsPng", ...args); }
-  function copyTextToClipboard(...args) { return call("copyTextToClipboard", ...args); }
-  function buildJiraReport(...args) { return call("buildJiraReport", ...args); }
-  function exportIncidentReportHtml(...args) { return call("exportIncidentReportHtml", ...args); }
-  function exportFixSpikeCsv(...args) { return call("exportFixSpikeCsv", ...args); }
-  function createBaseline(...args) { return call("createBaseline", ...args); }
-  function formatNumber(...args) { return call("formatNumber", ...args); }
-  function handleLayoutProfileAction(...args) { return call("handleLayoutProfileAction", ...args); }
-  function layoutProfileActionDependencies(...args) { return call("layoutProfileActionDependencies", ...args); }
-  function handleServiceConfigAction(...args) { return call("handleServiceConfigAction", ...args); }
-  function serviceConfigActionDependencies(...args) { return call("serviceConfigActionDependencies", ...args); }
-  function setZoomFromDateInputs(...args) { return call("setZoomFromDateInputs", ...args); }
-  function applyChartZoomAction(...args) { return call("applyChartZoomAction", ...args); }
-  function clampZoomRange(...args) { return call("clampZoomRange", ...args); }
-  function drawBdpWindowCharts(...args) { return call("drawBdpWindowCharts", ...args); }
+  const {
+    appEventDependencies, cmInstanceRef, requestAnimationFrame, document, window, state,
+    localStorage, icons, EXPERT_CORRELATIONS, PRE_IMPORT_PRESETS, ANALYSIS_TEMPLATES, NodeFilter,
+    handleGlobalKeydown, bindSmartChartTooltips, bindColumnHelpTooltips, sortedFilteredSockets, visibleColumns, escapeHtml,
+    renderRowActions, render, handleIngestAction, ingestActionDependencies, openIncidentReport, exportEvidencePack,
+    toast, annotationAnchorOptions, annotationDefaultLabel, visibleHistory, annotationSocketId, saveAnnotations,
+    renderKeepingWorkspacePosition, zoomToTailLatencyWindow, applyDashboardPreset, resetAllState, _undo, _redo,
+    _undoSnapshot, renderModal, parseGcLog, runJvmCorrelation, drawJvmCharts, toggleFixPlayback,
+    selectedSocket, anomaliesBySocketId, applyContextAction, chartMetricList, syncChartHistoryToSelection, openAnnotationModal,
+    bindTableInteractionEvents, tableInteractionDependencies, bindSocketInteractionEvents, socketInteractionDependencies, closeDashboardPresetMenu, commitDashboardPresetChoice,
+    applyDashboardProfile, saveDashboardProfiles, saveAlertAcks, defaultAlertRules, saveAlertRules, saveFilterHistory,
+    hasPreImportFilterValue, emptyPreImportFilters, importFile, openTopologyModal, renderKeepingModalPosition, socketsById,
+    focusSocket, hideAppServiceTooltip, showAppServiceTooltip, applyAnalysisTemplate, savePrefs, normalizeBdpDirection,
+    syncSsCommandFromBuilder, toggleCommandOption, syncFromCodeMirror, normalizeSsEditorTheme, applySsEditorThemePreview, resetSsEditorThemePreview,
+    drawFixCharts, runFixCorrelation, sourceFileEventDependencies, bindSourceFileEvents, setZoom, clearVisibleHistoryCache,
+    saveTableState, moveVisibleChartMetric, showPercentileTableCrosshair, clearPercentileTableCrosshair, exportChartAsPng, copyTextToClipboard,
+    buildJiraReport, exportIncidentReportHtml, exportFixSpikeCsv, createBaseline, formatNumber, handleLayoutProfileAction,
+    layoutProfileActionDependencies, handleServiceConfigAction, serviceConfigActionDependencies, setZoomFromDateInputs, applyChartZoomAction, clampZoomRange,
+    drawBdpWindowCharts
+  } = createAppEventContext(getDeps);
 
 function bindChartMinimapEvents(deps = appEventDependencies()) {
   return bindChartMinimapEventsModel(deps);

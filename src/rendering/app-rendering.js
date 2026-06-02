@@ -13,235 +13,44 @@ import { createSocketDetailRendering } from "../views/socket-detail-rendering.js
 import { createServiceExpertRendering } from "../views/service-expert-rendering.js";
 import { createAnalysisTemplatesRendering } from "../views/analysis-templates-rendering.js";
 import { createModalShellRendering } from "../views/modal-shell-rendering.js";
+import { createAppAnalysisState } from "./app-analysis-state.js";
+import { createAppRenderingContext } from "./app-rendering-context.js";
 
 export function createAppRendering(getDeps) {
-  const current = () => getDeps();
-  const call = (name, ...args) => {
-    const fn = current()[name];
-    if (typeof fn !== "function") throw new Error(`Missing app rendering dependency: ${name}`);
-    return fn(...args);
-  };
-  const proxiedObject = name => new Proxy({}, {
-    get(_target, prop) {
-      const source = current()[name] || globalThis[name];
-      const value = source?.[prop];
-      return typeof value === "function" ? value.bind(source) : value;
-    },
-    set(_target, prop, value) {
-      const source = current()[name] || globalThis[name];
-      if (!source) return false;
-      source[prop] = value;
-      return true;
-    },
-    has(_target, prop) { return prop in ((current()[name] || globalThis[name]) || {}); },
-    ownKeys() { return Reflect.ownKeys((current()[name] || globalThis[name]) || {}); },
-    getOwnPropertyDescriptor(_target, prop) {
-      const source = (current()[name] || globalThis[name]) || {};
-      return Object.getOwnPropertyDescriptor(source, prop) || { configurable: true, enumerable: true, writable: true, value: source[prop] };
-    }
-  });
-  const proxiedValue = name => new Proxy({}, {
-    get(_target, prop) {
-      const value = current()[name];
-      if (prop === Symbol.toPrimitive) return () => value;
-      if (prop === "toString") return () => String(value ?? "");
-      if (prop === "valueOf") return () => value;
-      return value?.[prop];
-    }
-  });
-
-  const state = proxiedObject("state");
-  const ctx = proxiedObject("ctx");
-  const icons = proxiedObject("icons");
-  const document = proxiedObject("document");
-  const window = proxiedObject("window");
-  const performance = proxiedObject("performance");
-  const ACCESS_ROLES = proxiedObject("ACCESS_ROLES");
-  const ANALYSIS_TAB_GUIDE = proxiedObject("ANALYSIS_TAB_GUIDE");
-  const ANALYSIS_TEMPLATES = proxiedObject("ANALYSIS_TEMPLATES");
-  const DASHBOARD_PRESETS = proxiedObject("DASHBOARD_PRESETS");
-  const EXPERT_CORRELATIONS = proxiedObject("EXPERT_CORRELATIONS");
-  const EXPERT_DEFAULT_THRESHOLDS = proxiedObject("EXPERT_DEFAULT_THRESHOLDS");
-  const FIELD_DOCS = proxiedObject("FIELD_DOCS");
-  const FIELD_GUIDANCE = proxiedObject("FIELD_GUIDANCE");
-  const LINUX_PROFILES = proxiedObject("LINUX_PROFILES");
-  const PRE_IMPORT_PRESETS = proxiedObject("PRE_IMPORT_PRESETS");
-  const SERVICE_MAP_SORT_COLLATOR = proxiedObject("SERVICE_MAP_SORT_COLLATOR");
-  const TABLE_COLUMNS = proxiedObject("TABLE_COLUMNS");
-  const UBUNTU_PROFILES = proxiedObject("UBUNTU_PROFILES");
-  const advancedCorrelationPanels = proxiedObject("advancedCorrelationPanels");
-  const APP_VERSION = proxiedValue("APP_VERSION");
-  const APP_SPLASH_IMAGE = proxiedValue("APP_SPLASH_IMAGE");
-  function html(...args) { return call("html", ...args); }
-  function ingestViewDependencies(...args) { return call("ingestViewDependencies", ...args); }
-  function renderIngestPageView(...args) { return call("renderIngestPageView", ...args); }
-  function renderAnalysisPageView(...args) { return call("renderAnalysisPageView", ...args); }
-  function renderExportMenu(...args) { return call("renderExportMenu", ...args); }
-  function renderAnalysisTabs(...args) { return call("renderAnalysisTabs", ...args); }
-  function computeHealthScore(...args) { return call("computeHealthScore", ...args); }
-  function _renderChartsGlobalToolbar(...args) { return call("_renderChartsGlobalToolbar", ...args); }
-  function _renderAdvisorGlobalSummary(...args) { return call("_renderAdvisorGlobalSummary", ...args); }
-  function _renderMetricsStatsTable(...args) { return call("_renderMetricsStatsTable", ...args); }
-  function chartMetricList(...args) { return call("chartMetricList", ...args); }
-  function alphabeticalMetrics(...args) { return call("alphabeticalMetrics", ...args); }
-  function microburstSummary(...args) { return call("microburstSummary", ...args); }
-  function formatMicroburstWindow(...args) { return call("formatMicroburstWindow", ...args); }
-  function metricLabel(...args) { return call("metricLabel", ...args); }
-  function orderedChartMetrics(...args) { return call("orderedChartMetrics", ...args); }
-  function clampChartColumns(...args) { return call("clampChartColumns", ...args); }
-  function hasRealTimestampHistory(...args) { return call("hasRealTimestampHistory", ...args); }
-  function renderInvestigationContext(...args) { return call("renderInvestigationContext", ...args); }
-  function formatMetricValue(...args) { return call("formatMetricValue", ...args); }
-  function renderMetricChartLegend(...args) { return call("renderMetricChartLegend", ...args); }
-  function renderChartMoveMenu(...args) { return call("renderChartMoveMenu", ...args); }
-  function _renderDashboardPresetPicker(...args) { return call("_renderDashboardPresetPicker", ...args); }
-  function _renderDashboardStudioInline(...args) { return call("_renderDashboardStudioInline", ...args); }
-  function _renderDashboardStudio(...args) { return call("_renderDashboardStudio", ...args); }
-  function tailLatencyLens(...args) { return call("tailLatencyLens", ...args); }
-  function formatTailLatencyWindow(...args) { return call("formatTailLatencyWindow", ...args); }
-  function numberFormatter(...args) { return call("numberFormatter", ...args); }
-  function formatNumber(...args) { return call("formatNumber", ...args); }
-  function visibleHistory(...args) { return call("visibleHistory", ...args); }
-  function socketsById(...args) { return call("socketsById", ...args); }
-  function analyzeBdpWindowLimit(...args) { return call("analyzeBdpWindowLimit", ...args); }
-  function normalizeBdpDirection(...args) { return call("normalizeBdpDirection", ...args); }
-  function configuredLinkCapacityMbps(...args) { return call("configuredLinkCapacityMbps", ...args); }
-  function thresholdFor(...args) { return call("thresholdFor", ...args); }
-  function formatBitsPerSecond(...args) { return call("formatBitsPerSecond", ...args); }
-  function bdpChartSeries(...args) { return call("bdpChartSeries", ...args); }
-  function metricUnit(...args) { return call("metricUnit", ...args); }
-  function metricColor(...args) { return call("metricColor", ...args); }
-  function formatMetricNumber(...args) { return call("formatMetricNumber", ...args); }
-  function renderTableMetricCell(...args) { return call("renderTableMetricCell", ...args); }
-  function thresholdSeverity(...args) { return call("thresholdSeverity", ...args); }
-  function renderPercentileDistribution(...args) { return call("renderPercentileDistribution", ...args); }
-  function metricSource(...args) { return call("metricSource", ...args); }
-  function metricInterpretation(...args) { return call("metricInterpretation", ...args); }
-  function metricCorrelations(...args) { return call("metricCorrelations", ...args); }
-  function metricReliabilityProfile(...args) { return call("metricReliabilityProfile", ...args); }
-  function metricDiagnosticGuidance(...args) { return call("metricDiagnosticGuidance", ...args); }
-  function escapeHtml(...args) { return call("escapeHtml", ...args); }
-  function render(...args) { return call("render", ...args); }
-  function buildAiSummary(...args) { return call("buildAiSummary", ...args); }
-  function analyzeCaptureQuality(...args) { return call("analyzeCaptureQuality", ...args); }
-  function renderCaptureQualityReportView(...args) { return call("renderCaptureQualityReportView", ...args); }
-  function buildDiagnosticHypotheses(...args) { return call("buildDiagnosticHypotheses", ...args); }
-  function buildRootCauseMatrix(...args) { return call("buildRootCauseMatrix", ...args); }
-  function detectCwndPhases(...args) { return call("detectCwndPhases", ...args); }
-  function buildSparklineIndex(...args) { return call("buildSparklineIndex", ...args); }
-  function socketIdentityKey(...args) { return call("socketIdentityKey", ...args); }
-  function anomaliesBySocketId(...args) { return call("anomaliesBySocketId", ...args); }
-  function riskRank(...args) { return call("riskRank", ...args); }
-  function resolvePlaybook(...args) { return call("resolvePlaybook", ...args); }
-  function playbookForHypothesis(...args) { return call("playbookForHypothesis", ...args); }
-  function runAdvisorAnalysis(...args) { return call("runAdvisorAnalysis", ...args); }
-  function renderSocketTableView(...args) { return call("renderSocketTableView", ...args); }
-  function tableSettingsPlacement(...args) { return call("tableSettingsPlacement", ...args); }
-  function buildSocketOptionSets(...args) { return call("buildSocketOptionSets", ...args); }
-  function tableDefaults(...args) { return call("tableDefaults", ...args); }
-  function visibleColumns(...args) { return call("visibleColumns", ...args); }
-  function sortedFilteredSockets(...args) { return call("sortedFilteredSockets", ...args); }
-  function tableStateSnapshot(...args) { return call("tableStateSnapshot", ...args); }
-  function renderTableSettingsTriggerView(...args) { return call("renderTableSettingsTriggerView", ...args); }
-  function renderTableSettingsDrawerView(...args) { return call("renderTableSettingsDrawerView", ...args); }
-  function renderTableSettingsMenuView(...args) { return call("renderTableSettingsMenuView", ...args); }
-  function renderTableHeader(...args) { return call("renderTableHeader", ...args); }
-  function getColumn(...args) { return call("getColumn", ...args); }
-  function columnHelpView(...args) { return call("columnHelpView", ...args); }
-  function renderThresholdSummaryView(...args) { return call("renderThresholdSummaryView", ...args); }
-  function renderColumnTooltipView(...args) { return call("renderColumnTooltipView", ...args); }
-  function pagedRows(...args) { return call("pagedRows", ...args); }
-  function groupedSockets(...args) { return call("groupedSockets", ...args); }
-  function buildConversations(...args) { return call("buildConversations", ...args); }
-  function conversationAnomalySummary(...args) { return call("conversationAnomalySummary", ...args); }
-  function renderConversationSortHeader(...args) { return call("renderConversationSortHeader", ...args); }
-  function currentAliasForEndpoint(...args) { return call("currentAliasForEndpoint", ...args); }
-  function aliasCountForSource(...args) { return call("aliasCountForSource", ...args); }
-  function aliasForEndpoint(...args) { return call("aliasForEndpoint", ...args); }
-  function aliasListForSource(...args) { return call("aliasListForSource", ...args); }
-  function ipIntelSummary(...args) { return call("ipIntelSummary", ...args); }
-  function ipIntelDetail(...args) { return call("ipIntelDetail", ...args); }
-  function buildServiceMap(...args) { return call("buildServiceMap", ...args); }
-  function buildServiceMapData(...args) { return call("buildServiceMapData", ...args); }
-  function buildServiceMapRoutes(...args) { return call("buildServiceMapRoutes", ...args); }
-  function layoutTopologyLanePositions(...args) { return call("layoutTopologyLanePositions", ...args); }
-  function renderGeoMapSvg(...args) { return call("renderGeoMapSvg", ...args); }
-  function buildGeoMarkers(...args) { return call("buildGeoMarkers", ...args); }
-  function renderSankeySvg(...args) { return call("renderSankeySvg", ...args); }
-  function orderServiceMapConnectivity(...args) { return call("orderServiceMapConnectivity", ...args); }
-  function serviceMapGroupBands(...args) { return call("serviceMapGroupBands", ...args); }
-  function endpointHost(...args) { return call("endpointHost", ...args); }
-  function topologyGroupForEndpoint(...args) { return call("topologyGroupForEndpoint", ...args); }
-  function topologyScopeKey(...args) { return call("topologyScopeKey", ...args); }
-  function nodeLabel(...args) { return call("nodeLabel", ...args); }
-  function nodeSubtitle(...args) { return call("nodeSubtitle", ...args); }
-  function mapNodeTitle(...args) { return call("mapNodeTitle", ...args); }
-  function renderMapLegend(...args) { return call("renderMapLegend", ...args); }
-  function renderHotPaths(...args) { return call("renderHotPaths", ...args); }
-  function renderMapEdgeInsight(...args) { return call("renderMapEdgeInsight", ...args); }
-  function buildExpertInformation(...args) { return call("buildExpertInformation", ...args); }
-  function buildTimelineEvents(...args) { return call("buildTimelineEvents", ...args); }
-  function cachedStories(...args) { return call("cachedStories", ...args); }
-  function cachedMultiSocket(...args) { return call("cachedMultiSocket", ...args); }
-  function cachedRateAlerts(...args) { return call("cachedRateAlerts", ...args); }
-  function detectTrends(...args) { return call("detectTrends", ...args); }
-  function formatTimelineTime(...args) { return call("formatTimelineTime", ...args); }
-  function formatTimelineOffset(...args) { return call("formatTimelineOffset", ...args); }
-  function renderHeatmapView(...args) { return call("renderHeatmapView", ...args); }
-  function renderTimelineStoriesViewModel(...args) { return call("renderTimelineStoriesViewModel", ...args); }
-  function severityVisible(...args) { return call("severityVisible", ...args); }
-  function defaultAlertRules(...args) { return call("defaultAlertRules", ...args); }
-  function baselineDeviations(...args) { return call("baselineDeviations", ...args); }
-  function buildComparison(...args) { return call("buildComparison", ...args); }
-  function buildBaselineNarrative(...args) { return call("buildBaselineNarrative", ...args); }
-  function _renderBaselineNarrative(...args) { return call("_renderBaselineNarrative", ...args); }
-  function _renderDelta(...args) { return call("_renderDelta", ...args); }
-  function selectedSocket(...args) { return call("selectedSocket", ...args); }
-  function metricValue(...args) { return call("metricValue", ...args); }
-  function renderApplicationServiceChip(...args) { return call("renderApplicationServiceChip", ...args); }
-  function currentApplicationService(...args) { return call("currentApplicationService", ...args); }
-  function currentSourceAnnotations(...args) { return call("currentSourceAnnotations", ...args); }
-  function annotationTypeList(...args) { return call("annotationTypeList", ...args); }
-  function buildAnnotationDraft(...args) { return call("buildAnnotationDraft", ...args); }
-  function annotationAnchorOptions(...args) { return call("annotationAnchorOptions", ...args); }
-  function annotationMetricChoices(...args) { return call("annotationMetricChoices", ...args); }
-  function annotationDefaultLabel(...args) { return call("annotationDefaultLabel", ...args); }
-  function annotationTypeLabel(...args) { return call("annotationTypeLabel", ...args); }
-  function createModalView(...args) { return call("createModalView", ...args); }
-  function renderPrefsView(...args) { return call("renderPrefsView", ...args); }
-  function timeZoneOptions(...args) { return call("timeZoneOptions", ...args); }
-  function createGuideView(...args) { return call("createGuideView", ...args); }
-  function normalizePreImportFilters(...args) { return call("normalizePreImportFilters", ...args); }
-  function renderDashboardPresetOptions(...args) { return call("renderDashboardPresetOptions", ...args); }
-  function renderDatalist(...args) { return call("renderDatalist", ...args); }
-  function accessRoleLabel(...args) { return call("accessRoleLabel", ...args); }
-  function linuxProfileLabel(...args) { return call("linuxProfileLabel", ...args); }
-  function ubuntuProfileLabel(...args) { return call("ubuntuProfileLabel", ...args); }
-  function hasActiveTableFilters(...args) { return call("hasActiveTableFilters", ...args); }
-  function currentApplicationServiceSortKey(...args) { return call("currentApplicationServiceSortKey", ...args); }
-  function socketBandwidth(...args) { return call("socketBandwidth", ...args); }
-  function truncateMiddle(...args) { return call("truncateMiddle", ...args); }
-  function parsedTimestampSnapshots(...args) { return call("parsedTimestampSnapshots", ...args); }
-  function chartTooltipOpacity(...args) { return call("chartTooltipOpacity", ...args); }
-  function annotationSocketId(...args) { return call("annotationSocketId", ...args); }
-  function buildCorrelationMatrix(...args) { return call("buildCorrelationMatrix", ...args); }
-  function endpointPresentation(...args) { return call("endpointPresentation", ...args); }
-  function commandForPeer(...args) { return call("commandForPeer", ...args); }
-  function envCommand(...args) { return call("envCommand", ...args); }
-  function inferredApplicationService(...args) { return call("inferredApplicationService", ...args); }
-  function normalizeAliasStore(...args) { return call("normalizeAliasStore", ...args); }
-  function normalizeTopologyProfile(...args) { return call("normalizeTopologyProfile", ...args); }
-  function numberFormatterWith(...args) { return call("numberFormatterWith", ...args); }
-  function renderServiceMapView(...args) { return call("renderServiceMapView", ...args); }
-  function resolvedNumberLocale(...args) { return call("resolvedNumberLocale", ...args); }
-  function resolvedTimeZone(...args) { return call("resolvedTimeZone", ...args); }
-  function serviceOverrideForSocket(...args) { return call("serviceOverrideForSocket", ...args); }
-  function serviceMapConnectivityOrder(...args) { return call("serviceMapConnectivityOrder", ...args); }
-  function chartStats(...args) { return call("chartStats", ...args); }
-  function isAnalystRole(...args) { return call("isAnalystRole", ...args); }
-  function isLxcProfile(...args) { return call("isLxcProfile", ...args); }
-  function timeLabel(...args) { return call("timeLabel", ...args); }
-  function analysisTabGuide(...args) { return call("analysisTabGuide", ...args); }
+  const {
+    state, ctx, icons, document, window, performance,
+    ACCESS_ROLES, ANALYSIS_TAB_GUIDE, ANALYSIS_TEMPLATES, DASHBOARD_PRESETS, EXPERT_CORRELATIONS, EXPERT_DEFAULT_THRESHOLDS,
+    FIELD_DOCS, FIELD_GUIDANCE, LINUX_PROFILES, PRE_IMPORT_PRESETS, SERVICE_MAP_SORT_COLLATOR, TABLE_COLUMNS,
+    UBUNTU_PROFILES, advancedCorrelationPanels, APP_VERSION, APP_SPLASH_IMAGE, html, ingestViewDependencies,
+    renderIngestPageView, renderAnalysisPageView, renderExportMenu, renderAnalysisTabs, computeHealthScore, _renderChartsGlobalToolbar,
+    _renderAdvisorGlobalSummary, _renderMetricsStatsTable, chartMetricList, alphabeticalMetrics, microburstSummary, formatMicroburstWindow,
+    metricLabel, orderedChartMetrics, clampChartColumns, hasRealTimestampHistory, renderInvestigationContext, formatMetricValue,
+    renderMetricChartLegend, renderChartMoveMenu, _renderDashboardPresetPicker, _renderDashboardStudioInline, _renderDashboardStudio, tailLatencyLens,
+    formatTailLatencyWindow, numberFormatter, formatNumber, visibleHistory, socketsById, analyzeBdpWindowLimit,
+    normalizeBdpDirection, configuredLinkCapacityMbps, thresholdFor, formatBitsPerSecond, bdpChartSeries, metricUnit,
+    metricColor, formatMetricNumber, renderTableMetricCell, thresholdSeverity, renderPercentileDistribution, metricSource,
+    metricInterpretation, metricCorrelations, metricReliabilityProfile, metricDiagnosticGuidance, escapeHtml, render,
+    buildAiSummary, analyzeCaptureQuality, renderCaptureQualityReportView, buildDiagnosticHypotheses, buildRootCauseMatrix, detectCwndPhases,
+    buildSparklineIndex, socketIdentityKey, anomaliesBySocketId, riskRank, resolvePlaybook, playbookForHypothesis,
+    runAdvisorAnalysis, renderSocketTableView, tableSettingsPlacement, buildSocketOptionSets, tableDefaults, visibleColumns,
+    sortedFilteredSockets, tableStateSnapshot, renderTableSettingsTriggerView, renderTableSettingsDrawerView, renderTableSettingsMenuView, renderTableHeader,
+    getColumn, columnHelpView, renderThresholdSummaryView, renderColumnTooltipView, pagedRows, groupedSockets,
+    buildConversations, conversationAnomalySummary, renderConversationSortHeader, currentAliasForEndpoint, aliasCountForSource, aliasForEndpoint,
+    aliasListForSource, ipIntelSummary, ipIntelDetail, buildServiceMap, buildServiceMapData, buildServiceMapRoutes,
+    layoutTopologyLanePositions, renderGeoMapSvg, buildGeoMarkers, renderSankeySvg, orderServiceMapConnectivity, serviceMapGroupBands,
+    endpointHost, topologyGroupForEndpoint, topologyScopeKey, nodeLabel, nodeSubtitle, mapNodeTitle,
+    renderMapLegend, renderHotPaths, renderMapEdgeInsight, buildExpertInformation, buildTimelineEvents, cachedStories,
+    cachedMultiSocket, cachedRateAlerts, detectTrends, formatTimelineTime, formatTimelineOffset, renderHeatmapView,
+    renderTimelineStoriesViewModel, severityVisible, defaultAlertRules, baselineDeviations, buildComparison, buildBaselineNarrative,
+    _renderBaselineNarrative, _renderDelta, selectedSocket, metricValue, renderApplicationServiceChip, currentApplicationService,
+    currentSourceAnnotations, annotationTypeList, buildAnnotationDraft, annotationAnchorOptions, annotationMetricChoices, annotationDefaultLabel,
+    annotationTypeLabel, createModalView, renderPrefsView, timeZoneOptions, createGuideView, normalizePreImportFilters,
+    renderDashboardPresetOptions, renderDatalist, accessRoleLabel, linuxProfileLabel, ubuntuProfileLabel, hasActiveTableFilters,
+    currentApplicationServiceSortKey, socketBandwidth, truncateMiddle, parsedTimestampSnapshots, chartTooltipOpacity, annotationSocketId,
+    buildCorrelationMatrix, endpointPresentation, commandForPeer, envCommand, inferredApplicationService, normalizeAliasStore,
+    normalizeTopologyProfile, numberFormatterWith, renderServiceMapView, resolvedNumberLocale, resolvedTimeZone, serviceOverrideForSocket,
+    serviceMapConnectivityOrder, chartStats, isAnalystRole, isLxcProfile, timeLabel, analysisTabGuide
+  } = createAppRenderingContext(getDeps);
 
 const bdpPanelView = createBdpPanelView({
   state,
@@ -266,12 +75,30 @@ function bdpWindowAnalysis(...args) { return bdpPanelView.bdpWindowAnalysis(...a
 function renderBdpSummaryCard(...args) { return bdpPanelView.renderBdpSummaryCard(...args); }
 function renderBdpWindowPanel(...args) { return bdpPanelView.renderBdpWindowPanel(...args); }
 
-let _cachedDiagVersion = -1;
-let _cachedDiagHypotheses = [];
-let _cachedMatrixVersion = -1;
-let _cachedMatrix = null;
-let _cachedCwndPhasesVersion = -1;
-let _cachedCwndPhases = null;
+const appAnalysisState = createAppAnalysisState(() => ({
+  state,
+  icons,
+  escapeHtml,
+  formatMetricValue,
+  formatTailLatencyWindow,
+  hasRealTimestampHistory,
+  tailLatencyLens,
+  analyzeCaptureQuality,
+  formatNumber,
+  numberFormatterWith,
+  renderCaptureQualityReportView,
+  buildDiagnosticHypotheses,
+  configuredLinkCapacityMbps,
+  normalizeBdpDirection,
+  sortedFilteredSockets,
+  thresholdFor,
+  buildRootCauseMatrix,
+  detectCwndPhases,
+  buildSparklineIndex,
+  metricValue,
+  parsedTimestampSnapshots,
+  socketIdentityKey
+}));
 
 function renderIngestPage() {
   return renderIngestPageView(ingestViewDependencies());
@@ -329,31 +156,7 @@ function renderDashboardPresetPicker(activePresetId, presetEntries) { return _re
 function renderDashboardStudioInline() { return _renderDashboardStudioInline(ctx); }
 function renderDashboardStudio() { return _renderDashboardStudio(ctx); }
 function renderTailLatencyLensPanel() {
-  const lens = tailLatencyLens();
-  if (!hasRealTimestampHistory() || !lens) return "";
-  const rttStats = lens.stats.rtt;
-  const rtoStats = lens.stats.rto;
-  return `<section class="tail-latency-lens">
-    <article class="tail-lens-card ${lens.severity}">
-      <div class="tail-lens-head">
-        <div>
-          <span class="tooltip-kicker">Tail latency lens</span>
-          <strong>${escapeHtml(lens.suspicion)}</strong>
-          <p class="hint">This lens prioritizes extremes and short worst windows instead of averages, so the investigation can jump directly to the sharpest RTT/RTO tail behavior.</p>
-        </div>
-        <div class="tail-lens-actions">
-          <span class="risk ${escapeHtml(lens.severity)}">${escapeHtml(lens.severity)}</span>
-          <button data-action="zoomTailWindow">${icons.zoomIn} Zoom worst window</button>
-        </div>
-      </div>
-      <div class="tail-lens-grid">
-        <article><span>Worst window</span><strong>${escapeHtml(formatTailLatencyWindow(lens))}</strong></article>
-        <article><span>RTT tail</span><strong>${escapeHtml(`${formatMetricValue("rtt", rttStats?.p99 || 0)} / ${formatMetricValue("rtt", rttStats?.p999 || 0)}`)}</strong><small>P99 / P99.9</small></article>
-        <article><span>RTO tail</span><strong>${escapeHtml(`${formatMetricValue("rto", rtoStats?.p99 || 0)} / ${formatMetricValue("rto", rtoStats?.p999 || 0)}`)}</strong><small>P99 / P99.9</small></article>
-        <article><span>Worst peaks</span><strong>${escapeHtml(`${formatMetricValue("rtt", lens.peaks.rtt)} RTT * ${formatMetricValue("rto", lens.peaks.rto)} RTO`)}</strong><small>${escapeHtml(`${formatMetricValue("recvQ", lens.peaks.recvQ)} Recv-Q * ${formatMetricValue("sendQ", lens.peaks.sendQ)} Send-Q`)}</small></article>
-      </div>
-    </article>
-  </section>`;
+  return appAnalysisState.renderTailLatencyLensPanel();
 }
 
 function renderJvmGcPanel() { return advancedCorrelationPanels.renderJvmGcPanel(); }
@@ -428,77 +231,27 @@ function renderActiveTab() {
 }
 
 function captureQualityReport() {
-  return analyzeCaptureQuality({
-    raw: state.raw,
-    sockets: state.sockets,
-    sourceName: state.sourceName,
-    command: state.command
-  });
+  return appAnalysisState.captureQualityReport();
 }
 
 function renderCaptureQualityReport() {
-  return renderCaptureQualityReportView(captureQualityReport(), {
-    escapeHtml,
-    formatNumber,
-    numberFormatterWith,
-    icons
-  });
+  return appAnalysisState.renderCaptureQualityReport();
 }
 
 function diagnosticHypotheses() {
-  if (_cachedDiagVersion === state.dataVersion) return _cachedDiagHypotheses;
-  const rows = sortedFilteredSockets();
-  const hypotheses = buildDiagnosticHypotheses({
-    sockets: rows.length ? rows : state.sockets,
-    anomalies: state.anomalies,
-    history: state.history,
-    thresholds: thresholdFor,
-    bdpWindow: {
-      direction: normalizeBdpDirection(state.prefs.bdpDirection),
-      configuredLinkCapacityMbps: configuredLinkCapacityMbps()
-    }
-  }).slice(0, 8);
-  const quality = captureQualityReport();
-  const qualityScore = quality.score || 0;
-  if (qualityScore < 55) {
-    const cap = qualityScore < 35 ? 0.3 : 0.5;
-    for (const h of hypotheses) {
-      if (h.confidenceScore > cap) {
-        h.confidenceScore = cap;
-        h.confidenceCapped = true;
-        h.confidenceCapReason = qualityScore < 35 ? `Capped at ${Math.round(cap * 100)}% - capture quality is ${quality.grade} (${qualityScore}/100)` : `Capped at ${Math.round(cap * 100)}% - capture quality is only ${quality.grade} (${qualityScore}/100). Need stronger evidence.`;
-      }
-    }
-  }
-  _cachedDiagVersion = state.dataVersion;
-  _cachedDiagHypotheses = hypotheses;
-  return hypotheses;
+  return appAnalysisState.diagnosticHypotheses();
 }
 
 function cachedRootCauseMatrix() {
-  if (_cachedMatrixVersion === state.dataVersion && _cachedMatrix) return _cachedMatrix;
-  _cachedMatrixVersion = state.dataVersion;
-  _cachedMatrix = buildRootCauseMatrix(state.sockets);
-  return _cachedMatrix;
+  return appAnalysisState.cachedRootCauseMatrix();
 }
 
 function cachedCwndPhases() {
-  const key = `${state.dataVersion}|${state.selectedId}`;
-  if (_cachedCwndPhasesVersion === key && _cachedCwndPhases) return _cachedCwndPhases;
-  _cachedCwndPhasesVersion = key;
-  _cachedCwndPhases = detectCwndPhases(state.history);
-  return _cachedCwndPhases;
+  return appAnalysisState.cachedCwndPhases();
 }
 
-let _sparklineVersion = -1;
 function lazySparklineIndex() {
-  if (state.sparklineIndex && _sparklineVersion === state.dataVersion) return state.sparklineIndex;
-  if (!hasRealTimestampHistory()) return null;
-  const snapshots = parsedTimestampSnapshots();
-  if (snapshots.length < 3 || snapshots.length > 300) return null; // skip for huge captures
-  _sparklineVersion = state.dataVersion;
-  state.sparklineIndex = buildSparklineIndex(snapshots, socketIdentityKey, metricValue);
-  return state.sparklineIndex;
+  return appAnalysisState.lazySparklineIndex();
 }
 
 const diagnosisAdvisorView = createDiagnosisAdvisorView({

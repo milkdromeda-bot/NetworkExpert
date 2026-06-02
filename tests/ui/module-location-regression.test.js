@@ -5,6 +5,8 @@ import { test } from "node:test";
 const importPageCss = readFileSync(new URL("../../src/styles/import-page.css", import.meta.url), "utf8");
 const analysisTableCss = readFileSync(new URL("../../src/styles/analysis-table.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+const initialState = readFileSync(new URL("../../src/rendering/initial-state.js", import.meta.url), "utf8");
+const ssCommandController = readFileSync(new URL("../../src/rendering/ss-command-controller.js", import.meta.url), "utf8");
 const ingestView = readFileSync(new URL("../../src/views/ingest-view.js", import.meta.url), "utf8");
 const ingestActions = readFileSync(new URL("../../src/events/ingest-actions.js", import.meta.url), "utf8");
 const commandPreferenceEvents = readFileSync(new URL("../../src/events/command-preference-events.js", import.meta.url), "utf8");
@@ -17,7 +19,7 @@ const socketTableRendering = readFileSync(new URL("../../src/views/socket-table-
 test("ss command panel exposes aligned collection parameters", () => {
   assert.match(main, /import \{ buildSsCollectionCommand, commandCoverage, toggleCommandOption \} from "\.\.\/parsing\/ss-command\.js";/);
   assert.match(main, /import \{ validateSsCommandConfig \} from "\.\.\/parsing\/ss-command-validation\.js";/);
-  assert.match(main, /ssCommandConfig:\s*defaultSsCommandConfig\(\)/);
+  assert.match(initialState, /ssCommandConfig:\s*defaultSsCommandConfig\(\)/);
   assert.match(ssCommandConfig, /function defaultSsLogPath\(date = new Date\(\)\)[\s\S]*\/tmp\/networkexpert_ss_\$\{ssCommandTimestamp\(date\)\}\.log/);
   assert.match(main, /function renderSsCommandBuilder\(\)/);
   assert.match(ssCommandView, /id="ssCmdTimestamp"[\s\S]*Timestamp each run/);
@@ -37,7 +39,7 @@ test("ss command panel exposes aligned collection parameters", () => {
   assert.match(ssCommandView, /terminal output plus <code>tee<\/code> can become the bottleneck/);
   assert.match(ssCommandView, /id="ssCmdOutputPath"[\s\S]*id="ssCmdAppend"/);
   assert.match(main, /function syncSsCommandFromBuilder\(\{ updateWarning = true \} = \{\}\)/);
-  assert.match(main, /if \(validation\.valid\) \{[\s\S]*state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
+  assert.match(ssCommandController, /if \(validation\.valid\) \{[\s\S]*state\.command = buildSsCollectionCommand\(commandInput \? commandInput\.value : state\.command, state\.ssCommandConfig\);/);
   assert.match(ingestActions, /toast\("Invalid ss command fields", first\?\.message \|\| "Fix the highlighted fields before copying\.", "danger"\);/);
   assert.match(commandPreferenceEvents, /document\.querySelectorAll\("\[id\^='ssCmd'\]"\)\.forEach\(input => \{/);
   assert.match(commandPreferenceEvents, /input\.addEventListener\(eventName, \(\) => syncSsCommandFromBuilder\(\)\);/);

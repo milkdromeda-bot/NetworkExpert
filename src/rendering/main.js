@@ -76,7 +76,17 @@ import { computeHealthScore } from "../analysis/health-score.js";
 import { createAdvancedCorrelationPanels } from "../correlation/advanced-correlation-panels.js";
 import { createMetricChartEngine } from "../charts/metric-chart-engine.js";
 import { createAppRendering } from "./app-rendering.js";
+import { createAnnotationController } from "./annotation-controller.js";
+import { createChartOverlayRenderer } from "./chart-overlays.js";
+import { createConversationModel } from "./conversation-model.js";
+import { createDerivedCacheController } from "./derived-cache-controller.js";
+import { chartMetricList as historyChartMetricList, createHistoryController } from "./history-controller.js";
+import { createInitialState } from "./initial-state.js";
+import { createIpIntelController } from "./ip-intel-controller.js";
+import { createPreferencesController } from "./preferences-controller.js";
 import { createReportActions } from "../reporting/report-actions.js";
+import { createRuntimeProfile, emptyPreImportFilters as createEmptyPreImportFilters } from "./runtime-profile.js";
+import { createSsCommandController } from "./ss-command-controller.js";
 import { createAppEventBindings } from "../events/app-event-bindings.js";
 import { compressSnapshots, decompressSnapshot, iterateCompressed } from "../analysis/snapshot-compression.js";
 import { sharedBufferAvailable, encodeShared } from "../parsing/shared-buffer.js";
@@ -104,6 +114,7 @@ const APP_VERSION = "1.0.0.0";
 const APP_SPLASH_IMAGE = "./images/ultimateNetworkExpert.png";
 const tableDefaultModel = createTableDefaults({ columns: TABLE_COLUMNS, prefsDefault, getPrefs: () => state?.prefs });
 const { DEFAULT_TABLE_ORDER, defaultTableColumns, defaultTableState, tableDefaults } = tableDefaultModel;
+const preferencesController = createPreferencesController(preferencesDependencies);
 
 function normalizeSsEditorTheme(value) {
   return normalizeSsEditorThemeValue(value, SS_EDITOR_THEMES, DEFAULT_SS_EDITOR_THEME);
@@ -148,137 +159,25 @@ if (initialPrefs.theme === "light") document.documentElement.setAttribute("data-
 if (initialPrefs.density === "compact") document.documentElement.setAttribute("data-density", "compact");
 const showOnboarding = !localStorage.getItem("networkExpertOnboarded");
 
-let state = {
-  raw: "",
-  showEditor: false,
-  analysisSidebarCollapsed: false,
-  breadcrumbMenuOpen: false,
-  command: "ss -HOntepmi --tos --cgroup --inet-sockopt -a -A all",
-  ssCommandConfig: defaultSsCommandConfig(),
-  sourceName: "empty workspace",
-  sockets: [],
-  selectedId: null,
-  activeContextId: null,
-  activeContextReason: "",
-  anomalies: [],
-  alertEvents: [],
-  importStatus: null,
-  pendingFile: null,
-  analysisDirty: true,
-  dataVersion: 0,
-  rawVersion: 0,
-  chartRenderToken: 0,
-  hiddenBdpSeries: new Set(),
-  hiddenChartSeries: new Set(),
-  hiddenJvmSeries: new Set(),
-  jvmGc: { rawLog: "", pauses: [], safepoints: [], correlation: null, clockOffsetMs: 0, pidstat: null, nstat: null, cpuCorrelation: null },
-  jvmTable: { page: 1, pageSize: 20, sortKey: "time", sortDir: "desc" },
-  peerCapture: { raw: "", sockets: [], sourceName: "" },
-  fixLatency: { records: [], correlation: null, threshold: 5, gcWindowMs: 0, showGcZones: true, expandedChart: null, hiddenSeries: new Set(["us", "sy"]), cpuCores: 0, fileStats: [], vmstat: null, nstat: null, playing: false, zoom: { timeline: { start: 0, end: 1 }, scatter: { start: 0, end: 1 }, vmstat: { start: 0, end: 1 }, nstat: { start: 0, end: 1 } } },
-  fixTable: { page: 1, pageSize: 20, sortKey: "score", sortDir: "desc", causeFilter: "", selectedEpoch: null },
-  advisorFindings: [],
-  bandwidthIndex: {},
-  anomalyAlertSince: null,
-  lastAnomalyCount: 0,
-  preImportFilters: { enabled: false, protocol: "", state: "", srcIp: "", dstIp: "", anyPort: "", srcPort: "", dstPort: "" },
-  filterHistory: loadFilterHistory(),
-  tableProfiles: loadTableProfiles(),
-  dashboardProfiles: loadDashboardProfiles(),
-  activeDashboardPreset: dashboardPresetIdOrDefault(initialPrefs.defaultDashboardPreset),
-  serviceAliases: loadServiceAliases(),
-  aliasEditKey: "",
-  aliasEditScope: "source",
-  serviceOverrides: loadServiceOverrides(),
-  serviceOverrideSocketId: "",
-  topologyProfiles: loadTopologyProfiles(),
-  topology: loadTopologyForSource("empty workspace"),
-  topologyEditId: "",
-  topologyDraftMatch: "",
-  alertRules: loadAlertRules(),
-  alertAcks: loadAlertAcks(),
-  annotations: loadAnnotations(),
-  baseline: null,
-  ipIntel: {},
-  ipIntelRunning: false,
-  prefs: initialPrefs,
-  view: "ingest",
-  activeTab: "sockets",
-  chartsTab: "charts",
-  timelineView: "stories",
-  diagnosisView: "matrix",
-  expandedChart: null,
-  onboarding: showOnboarding ? 0 : -1,
-  openStyleMenu: false,
-  openSsEditorThemeMenu: false,
-  editorWordWrap: false,
-  anomalyFilters: { severity: "all", metric: "all", text: "", sort: "priority" },
-  prefsTab: "display",
-  drawer: null,
-  modal: null,
-  gearMenuOpen: false,
-  _undoStack: [],
-  _redoStack: [],
-  statsMetric: null,
-  helpColumn: null,
-  helpMetric: null,
-  ssOptionHelpKey: "-i",
-  showSsOptions: false,
-  showCorrelationSources: false,
-  annotationDraft: buildAnnotationDraft({ sourceName: "empty workspace" }),
-  annotationContext: null,
-  ingestRawExpanded: true,
-  openChartMoveMetric: null,
-  openChartMovePos: null,
-  chartAnnotationMenuContext: null,
-  chartAnnotationMenuPos: null,
-  openMenuPos: null,
-  openMenuId: null,
-  openExportMenu: null,
-  openExportMenuPos: null,
-  openTableSettings: false,
-  openTableSettingsPos: null,
-  tableColumnSearch: "",
-  openDashboardPresetMenu: false,
-  dashboardPresetBeforeOpen: null,
-  openConversationInsightKey: null,
-  openConversationInsightPos: null,
-  conversationSort: { key: "anomalies", dir: "desc" },
-  selectedMapEdgeId: null,
-  mapView: "topology",
-  sankeySort: "risk",
-  sankeySnapshot: null,
-  copiedGuideCommand: "",
-  history: [],
-  chartMetrics: ["tx_bps", "rx_bps", "rtt", "rto", "sendQ", "skmem.d"],
-  correlation: { x: "rtt", y: "sendQ" },
-  chartZoom: { start: 0, end: 1 },
-  chartZoomByMetric: {},
-  activeChartMetric: null,
-  activeChartAction: null,
-  cache: {
-    timestampRawVersion: -1,
-    timestampBlocks: [],
-    snapshotRawVersion: -1,
-    timestampSnapshots: [],
-    filteredKey: "",
-    filteredRows: null,
-    optionKey: "",
-    optionSets: null,
-    anomalyMapKey: "",
-    anomaliesBySocketId: null,
-    socketMapKey: "",
-    socketsById: null,
-    visibleHistoryKey: "",
-    visibleHistoryRows: null,
-    visibleHistoryRowsByKey: new Map(),
-    microburstKey: "",
-    microburstSummary: null,
-    tailLatencyKey: "",
-    tailLatencySummary: null
-  },
-  thresholds: cloneThresholds(),
-  table: loadTableState(initialPrefs.defaultPageSize)
-};
+let state = createInitialState({
+  buildAnnotationDraft,
+  cloneThresholds,
+  dashboardPresetIdOrDefault,
+  defaultSsCommandConfig,
+  initialPrefs,
+  loadAlertAcks,
+  loadAlertRules,
+  loadAnnotations,
+  loadDashboardProfiles,
+  loadFilterHistory,
+  loadServiceAliases,
+  loadServiceOverrides,
+  loadTableProfiles,
+  loadTableState,
+  loadTopologyForSource,
+  loadTopologyProfiles,
+  showOnboarding
+});
 
 applyDefaultDashboardPreset();
 
@@ -309,6 +208,9 @@ const localeFormatting = createLocaleFormatting({
 });
 
 const metricChartEngine = createMetricChartEngine(metricChartDependencies);
+const historyController = createHistoryController(historyDependencies);
+const chartOverlays = createChartOverlayRenderer(chartOverlayDependencies);
+const conversationModel = createConversationModel(conversationModelDependencies);
 
 function metricChartDependencies() {
   return {
@@ -358,9 +260,59 @@ function metricChartDependencies() {
   };
 }
 
+function historyDependencies() {
+  return {
+    state,
+    metricValue,
+    socketsById,
+    buildSocketHistoryFromSnapshots,
+    splitTimestampBlocks,
+    parseTimestampedSnapshots,
+    compressSnapshots,
+    iterateCompressed,
+    socketIdentityKey,
+    detectMicroburstWindow,
+    detectTailLatencyLens,
+    thresholdFor,
+    formatNumber,
+    timeLabel
+  };
+}
+
+function chartOverlayDependencies() {
+  return {
+    annotationDefaultLabel,
+    annotationSocketId,
+    chartBgColor,
+    currentSourceAnnotations,
+    escapeHtml
+  };
+}
+
+function conversationModelDependencies() {
+  return {
+    state,
+    CONVERSATION_SORT_COLLATOR,
+    CONVERSATION_SORT_LABELS,
+    currentApplicationServiceSortKey,
+    escapeHtml,
+    metricValue,
+    riskRank,
+    severityRank,
+    socketBandwidth,
+    socketKey,
+    sortedFilteredSockets
+  };
+}
+
 const appEventBindings = createAppEventBindings(appEventDependencies);
 const advancedCorrelationPanels = createAdvancedCorrelationPanels(advancedCorrelationDependencies);
 const serviceMapPresenter = createServiceMapPresenter(serviceMapPresenterDependencies);
+const annotationController = createAnnotationController(annotationControllerDependencies);
+const ssCommandController = createSsCommandController(ssCommandControllerDependencies);
+const runtimeProfile = createRuntimeProfile(runtimeProfileDependencies);
+const derivedCacheController = createDerivedCacheController(derivedCacheDependencies);
+const ipIntelController = createIpIntelController(ipIntelControllerDependencies);
 
 function advancedCorrelationDependencies() {
   return {
@@ -422,160 +374,158 @@ function serviceMapPresenterDependencies() {
   };
 }
 
+function preferencesDependencies() {
+  return {
+    state,
+    DASHBOARD_PRESETS,
+    TABLE_COLUMNS,
+    clampChartColumns,
+    configuredLinkCapacityMbps,
+    defaultTableState,
+    escapeHtml,
+    loadPrefsRaw,
+    loadTableStateRaw,
+    normalizeBdpDirection,
+    normalizeSsEditorTheme,
+    normalizeTableState,
+    prefsDefault,
+    saveAnnotationsRaw,
+    savePrefsRaw,
+    saveTableStateRaw,
+    tableDefaults
+  };
+}
+
+function annotationControllerDependencies() {
+  return {
+    state,
+    annotationsForContext,
+    buildAnnotationAnchorOptions,
+    buildAnnotationDraft,
+    metricLabel,
+    microburstSummary,
+    render,
+    reportDefaultChartMetrics,
+    selectedSocket,
+    tailLatencyLens,
+    thresholdSeverity,
+    toast,
+    visibleHistory
+  };
+}
+
+function ssCommandControllerDependencies() {
+  return {
+    state,
+    document,
+    SS_OPTION_INTEL,
+    buildSsCollectionCommand,
+    defaultSsLogPath,
+    escapeHtml,
+    icons,
+    parseUiIntervalSeconds,
+    readSsCommandConfigFromDocument,
+    renderSsCommandBuilderView,
+    renderSsOptionChipView,
+    renderSsOptionControlView,
+    renderSsOptionDetailView,
+    selectedSsOptionView,
+    ssOptionIntelView,
+    updateSsCommandValidationInDocument,
+    validateSsCommandConfig
+  };
+}
+
+function runtimeProfileDependencies() {
+  return {
+    state,
+    ACCESS_ROLES,
+    LINUX_PROFILES,
+    UBUNTU_PROFILES
+  };
+}
+
+function derivedCacheDependencies() {
+  return {
+    state,
+    clearVisibleHistoryCache,
+    renderBdpWindowPanel
+  };
+}
+
+function ipIntelControllerDependencies() {
+  return {
+    state,
+    publicPeerIps,
+    render
+  };
+}
+
 function dashboardPresetIdOrDefault(value) {
-  const fallback = DASHBOARD_PRESETS[prefsDefault.defaultDashboardPreset]
-    ? prefsDefault.defaultDashboardPreset
-    : Object.keys(DASHBOARD_PRESETS)[0] || "noc";
-  return DASHBOARD_PRESETS[value] ? value : fallback;
+  return preferencesController.dashboardPresetIdOrDefault(value);
 }
 
 function renderDashboardPresetOptions(selectedId) {
-  const selected = dashboardPresetIdOrDefault(selectedId);
-  return Object.entries(DASHBOARD_PRESETS)
-    .map(([id, preset]) => `<option value="${escapeHtml(id)}" ${id === selected ? "selected" : ""}>${escapeHtml(preset.name)}</option>`)
-    .join("");
+  return preferencesController.renderDashboardPresetOptions(selectedId);
 }
 function clampChartTooltipOpacity(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0.3;
-  return Math.max(0.2, Math.min(1, number));
+  return preferencesController.clampChartTooltipOpacity(value);
 }
 
 function chartTooltipOpacity() {
-  return clampChartTooltipOpacity(state.prefs.chartLayout?.tooltipOpacity);
-}
-
-function clampValue(value, min, max) {
-  return Math.min(Math.max(value, min), Math.max(min, max));
+  return preferencesController.chartTooltipOpacity();
 }
 
 function loadPrefs() {
-  try {
-    const saved = JSON.parse(localStorage.getItem("networkExpertPrefs") || "{}");
-    const prefs = { ...prefsDefault, ...saved, chartLayout: { ...prefsDefault.chartLayout, ...(saved.chartLayout || {}) } };
-    prefs.chartLayout.columns = clampChartColumns(prefs.chartLayout.columns);
-    prefs.chartLayout.tooltipOpacity = clampChartTooltipOpacity(prefs.chartLayout.tooltipOpacity);
-    prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(prefs.defaultDashboardPreset);
-    prefs.ssEditorTheme = normalizeSsEditorTheme(prefs.ssEditorTheme);
-    prefs.bdpDirection = normalizeBdpDirection(prefs.bdpDirection);
-    prefs.configuredLinkCapacityMbps = Number(prefs.configuredLinkCapacityMbps) > 0 ? Number(prefs.configuredLinkCapacityMbps) : "";
-    if (saved.sampling == null || (saved.sampling === 5 && saved.chartResolutionDefault !== "max")) prefs.sampling = 1;
-    prefs.chartResolutionDefault = "max";
-    return prefs;
-  } catch {
-    return { ...prefsDefault };
-  }
+  return preferencesController.loadPrefs();
 }
 
 function savePrefs() {
-  state.prefs.chartLayout.columns = clampChartColumns(state.prefs.chartLayout.columns);
-  state.prefs.chartLayout.tooltipOpacity = chartTooltipOpacity();
-  state.prefs.defaultDashboardPreset = dashboardPresetIdOrDefault(state.prefs.defaultDashboardPreset);
-  state.prefs.ssEditorTheme = normalizeSsEditorTheme(state.prefs.ssEditorTheme);
-  state.prefs.bdpDirection = normalizeBdpDirection(state.prefs.bdpDirection);
-  state.prefs.configuredLinkCapacityMbps = configuredLinkCapacityMbps() || "";
-  savePrefsRaw(state.prefs);
+  preferencesController.savePrefs();
 }
 
 function loadTableState(pageSize = prefsDefault.defaultPageSize) {
-  const defaults = defaultTableState(pageSize);
-  try {
-    return normalizeTableState({ ...defaults, ...loadTableStateRaw() }, TABLE_COLUMNS, defaults);
-  } catch {
-    return normalizeTableState(defaults, TABLE_COLUMNS, defaults);
-  }
+  return preferencesController.loadTableState(pageSize);
 }
 
 function saveTableState() {
-  state.table = saveTableStateRaw(state.table, TABLE_COLUMNS, tableDefaults());
+  preferencesController.saveTableState();
 }
 
 function clearVisibleHistoryCache() {
-  if (!state?.cache) return;
-  state.cache.visibleHistoryKey = "";
-  state.cache.visibleHistoryRows = null;
-  state.cache.visibleHistoryRowsByKey?.clear();
+  preferencesController.clearVisibleHistoryCache();
 }
 
 function saveAnnotations() {
-  state.annotations = saveAnnotationsRaw(state.annotations);
+  preferencesController.saveAnnotations();
 }
 
 function annotationSocketId() {
-  return selectedSocket()?.id || state.selectedId || "";
+  return annotationController.annotationSocketId();
 }
 
 function currentSourceAnnotations(metric = null, socketId = annotationSocketId(), history = visibleHistory()) {
-  return annotationsForContext(state.annotations, {
-    sourceName: state.sourceName,
-    socketId,
-    metric,
-    history,
-    microburst: microburstSummary(),
-    tailLatency: tailLatencyLens()
-  });
+  return annotationController.currentSourceAnnotations(metric, socketId, history);
 }
 
 function annotationAnchorOptions(history = visibleHistory()) {
-  return buildAnnotationAnchorOptions({
-    history,
-    microburst: microburstSummary(),
-    tailLatency: tailLatencyLens()
-  });
+  return annotationController.annotationAnchorOptions(history);
 }
 
 function annotationMetricChoices() {
-  const preferred = ["*", state.prefs.graphMetric, ...state.chartMetrics, ...reportDefaultChartMetrics(8)].filter(Boolean);
-  return [...new Set(preferred)].map(metric => ({
-    value: metric,
-    label: metric === "*" ? "Socket-wide (show on all charts)" : metricLabel(metric)
-  }));
+  return annotationController.annotationMetricChoices();
 }
 
 function annotationKindForChartContext(metric, value) {
-  if (["rtt", "rttvar", "rto"].includes(metric)) return "rtt-peak";
-  if (["skmem.d", "skmem.d_rate"].includes(metric)) return "burst-start";
-  if (["recvQ", "sendQ"].includes(metric)) return "queue-reset";
-  if (["rx_bps", "tx_bps", "delivery_rate", "pacing_rate"].includes(metric) && Number(value) > 0) return "burst-start";
-  return "custom";
+  return annotationController.annotationKindForChartContext(metric, value);
 }
 
 function annotationLabelForChartContext(metric, value) {
-  const severity = thresholdSeverity(metric, Number(value) || 0);
-  if (severity === "danger" || severity === "warn") return `${metricLabel(metric)} spike`;
-  if (["recvQ", "sendQ"].includes(metric)) return `${metricLabel(metric)} marker`;
-  if (["rtt", "rttvar", "rto"].includes(metric)) return `${metricLabel(metric)} peak`;
-  return `${metricLabel(metric)} marker`;
+  return annotationController.annotationLabelForChartContext(metric, value);
 }
 
 function openAnnotationModal(metric = "*", context = null) {
-  const socketId = annotationSocketId();
-  if (!socketId) {
-    toast("No active socket", "Select a socket before adding an annotation.", "warn");
-    return;
-  }
-  const chartContext = context && Number.isFinite(Number(context.epochMs))
-    ? {
-        ...context,
-        metric: context.metric || metric || "*",
-        epochMs: Number(context.epochMs),
-        value: Number.isFinite(Number(context.value)) ? Number(context.value) : null
-      }
-    : null;
-  const draftMetric = chartContext?.metric || metric || "*";
-  const kind = chartContext?.kind || annotationKindForChartContext(draftMetric, chartContext?.value);
-  state.annotationContext = chartContext;
-  state.annotationDraft = {
-    ...buildAnnotationDraft({ sourceName: state.sourceName, socketId, metric: draftMetric, kind }),
-    kind,
-    label: chartContext?.label || annotationLabelForChartContext(draftMetric, chartContext?.value),
-    note: chartContext?.note || "",
-    metric: draftMetric,
-    anchor: chartContext ? "cursor" : "visible-end",
-    epochMs: chartContext?.epochMs ?? null
-  };
-  state.modal = "annotation";
-  render();
+  annotationController.openAnnotationModal(metric, context);
 }
 
 
@@ -597,113 +547,54 @@ function saveCurrentTopology() {
 
 
 function ssOptionIntel(short, long, desc, group) {
-  return ssOptionIntelView(SS_OPTION_INTEL, short, long, desc, group);
+  return ssCommandController.ssOptionIntel(short, long, desc, group);
 }
 
 function selectedSsOption(options, active) {
-  return selectedSsOptionView(options, active, state.ssOptionHelpKey);
+  return ssCommandController.selectedSsOption(options, active);
 }
 
 function renderSsOptionDetail(option) {
-  return renderSsOptionDetailView(option, { escapeHtml, ssOptionIntel });
+  return ssCommandController.renderSsOptionDetail(option);
 }
 
 function renderSsOptionChip(option) {
-  return renderSsOptionChipView(option, { escapeHtml, ssOptionIntel });
+  return ssCommandController.renderSsOptionChip(option);
 }
 
 function renderExportMenu(scope = "analysis") {
-  const open = state.openExportMenu === scope;
-  const pos = open && state.openExportMenuPos
-    ? `style="left:${state.openExportMenuPos.left}px;top:${state.openExportMenuPos.top}px"`
-    : "";
-  return `<span class="export-menu-wrap">
-    <button data-export-menu="${escapeHtml(scope)}" title="Export report or evidence pack">${icons.pack} Export</button>
-    <div class="row-menu export-menu gdrive-menu ${open ? "open" : ""}" ${pos}>
-      <button data-export-action="pdf"><i class="ri-file-pdf-line"></i><span>Executive summary PDF</span><kbd>Ctrl+Shift+P</kbd></button>
-      <button data-export-action="incident-html"><i class="ri-file-code-line"></i><span>Full incident report HTML</span><kbd>Ctrl+Shift+H</kbd></button>
-      <button data-export-action="pack"><i class="ri-folder-zip-line"></i><span>Evidence pack ZIP</span><kbd>Ctrl+Shift+Z</kbd></button>
-      <button data-export-action="jira"><i class="ri-clipboard-line"></i><span>Copy Jira report</span><kbd>Ctrl+Shift+J</kbd></button>
-      ${state.fixLatency.correlation?.results?.length ? `<button data-export-action="fix-csv"><i class="ri-file-excel-line"></i><span>FIX spikes CSV</span><kbd>Ctrl+Shift+F</kbd></button>` : ""}
-    </div>
-  </span>`;
+  return ssCommandController.renderExportMenu(scope);
 }
 function renderSsOptionControl(option, coverage, selectedKey) {
-  return renderSsOptionControlView(option, coverage, selectedKey, { escapeHtml, ssOptionIntel });
+  return ssCommandController.renderSsOptionControl(option, coverage, selectedKey);
 }
 
 function renderSsCommandBuilder() {
-  return renderSsCommandBuilderView({
-    state,
-    parseUiIntervalSeconds,
-    validateSsCommandConfig,
-    escapeHtml,
-    defaultSsLogPath
-  });
+  return ssCommandController.renderSsCommandBuilder();
 }
 
 function readSsCommandConfig() {
-  return readSsCommandConfigFromDocument(document);
+  return ssCommandController.readSsCommandConfig();
 }
 
 function updateSsCommandValidation(validation) {
-  updateSsCommandValidationInDocument(validation, document);
+  ssCommandController.updateSsCommandValidation(validation);
 }
 
 function syncSsCommandFromBuilder({ updateWarning = true } = {}) {
-  const commandInput = document.querySelector("#commandInput");
-  state.ssCommandConfig = readSsCommandConfig();
-  const validation = validateSsCommandConfig(state.ssCommandConfig);
-  updateSsCommandValidation(validation);
-  if (validation.valid) {
-    state.command = buildSsCollectionCommand(commandInput ? commandInput.value : state.command, state.ssCommandConfig);
-    if (commandInput) commandInput.value = state.command;
-  }
-  if (updateWarning) {
-    const interval = parseUiIntervalSeconds(state.ssCommandConfig.intervalSeconds);
-    const risky = Boolean(state.ssCommandConfig.outputPath && state.ssCommandConfig.appendOutput !== false && state.ssCommandConfig.loop && interval <= 0.05);
-    document.querySelector("[data-ss-command-warning]")?.classList.toggle("hidden", !risky);
-    const intervalNode = document.querySelector("[data-ss-warning-interval]");
-    if (intervalNode) intervalNode.textContent = state.ssCommandConfig.intervalSeconds || "1";
-  }
-  return { command: state.command, validation };
+  return ssCommandController.syncSsCommandFromBuilder({ updateWarning });
 }
 
-let _bdpPrecomputeTimer = 0;
 function scheduleBdpPrecompute() {
-  clearTimeout(_bdpPrecomputeTimer);
-  _bdpPrecomputeTimer = setTimeout(() => { try { renderBdpWindowPanel(); } catch {} }, 100);
+  derivedCacheController.scheduleBdpPrecompute();
 }
 
 function resetDerivedCaches({ raw = false } = {}) {
-  state.dataVersion += 1;
-  state._bdpCache = null;
-  state.cache.filteredKey = "";
-  state.cache.filteredRows = null;
-  state.cache.optionKey = "";
-  state.cache.optionSets = null;
-  state.cache.anomalyMapKey = "";
-  state.cache.anomaliesBySocketId = null;
-  state.cache.socketMapKey = "";
-  state.cache.socketsById = null;
-  clearVisibleHistoryCache();
-  state.cache.microburstKey = "";
-  state.cache.microburstSummary = null;
-  state.cache.tailLatencyKey = "";
-  state.cache.tailLatencySummary = null;
-  if (raw) {
-    state.rawVersion += 1;
-    state.cache.timestampRawVersion = -1;
-    state.cache.timestampBlocks = [];
-    state.cache.snapshotRawVersion = -1;
-    state.cache.timestampSnapshots = [];
-  }
+  derivedCacheController.resetDerivedCaches({ raw });
 }
 
 function markAnalysisDirty({ raw = false } = {}) {
-  state.analysisDirty = true;
-  scheduleBdpPrecompute();
-  resetDerivedCaches({ raw });
+  derivedCacheController.markAnalysisDirty({ raw });
 }
 
 function recompute() {
@@ -764,52 +655,19 @@ function pushAnomalyAlerts() {
 }
 
 function scheduleIpIntelEnrichment() {
-  if (state.ipIntelRunning || !state.sockets.length) return;
-  const pending = publicPeerIps(state.sockets)
-    .filter(ip => !state.ipIntel[ip])
-    .slice(0, 12);
-  if (!pending.length) return;
-  state.ipIntelRunning = true;
-  pending.forEach(ip => { state.ipIntel[ip] = { status: "loading" }; });
-  enrichIpIntelQueue(pending).finally(() => {
-    state.ipIntelRunning = false;
-    render();
-  });
+  ipIntelController.scheduleIpIntelEnrichment();
 }
 
 async function enrichIpIntelQueue(ips) {
-  for (const ip of ips) {
-    try {
-      const response = await fetch(`/api/ip-intel?ip=${encodeURIComponent(ip)}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      state.ipIntel[ip] = { status: "done", data: await response.json() };
-    } catch (error) {
-      state.ipIntel[ip] = { status: "error", error: error.message };
-    }
-  }
+  return ipIntelController.enrichIpIntelQueue(ips);
 }
 
 function buildHistory() {
-  const realHistory = buildHistoryFromTimestampedSnapshots();
-  if (realHistory.length >= 1) {
-    state.history = realHistory;
-    return;
-  }
-  const metrics = chartMetricList();
-  const base = socketsById().get(state.selectedId) || state.sockets[0];
-  const syntheticStart = Date.now();
-  state.history = Array.from({ length: state.prefs.graphWindow }, (_, i) => {
-    const wobble = Math.sin(i / 2.7) * 0.16 + Math.cos(i / 4.3) * 0.09;
-    const row = { t: i * state.prefs.sampling, epochMs: syntheticStart + i * state.prefs.sampling * 1000 };
-    for (const metric of metrics) row[metric] = Math.max(0, metricValue(base, metric) * (1 + wobble + (i % 7 === 0 ? 0.18 : 0)));
-    row.tx_bps = metricValue(base, "delivery_rate") || metricValue(base, "pacing_rate") || 0;
-    row.rx_bps = 0;
-    return row;
-  });
+  historyController.buildHistory();
 }
 
 function chartMetricList() {
-  return ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate", "rtt", "rttvar", "rto", "rcv_rtt", "rcv_space", "rcv_ssthresh", "sendQ", "recvQ", "cwnd", "ato", "skmem.r", "skmem.rb", "skmem.t", "skmem.d", "skmem.d_rate", "bytes_sent", "bytes_acked", "bytes_received", "segs_out", "segs_in", "backoff", "retrans"];
+  return historyChartMetricList();
 }
 
 function analysisTabGuide(tabId) {
@@ -836,261 +694,76 @@ function clampChartColumns(columns) {
 
 
 function buildHistoryFromTimestampedSnapshots() {
-  const snapshots = parsedTimestampSnapshots();
-  if (!snapshots.length) return [];
-  const selected = socketsById().get(state.selectedId) || state.sockets[0];
-  if (!selected) return [];
-  return addBandwidthDerivatives(buildSocketHistoryFromSnapshots(snapshots, selected));
+  return historyController.buildHistoryFromTimestampedSnapshots();
 }
 
 function timestampBlocks() {
-  if (state.cache.timestampRawVersion === state.rawVersion) return state.cache.timestampBlocks;
-  const blocks = splitTimestampBlocks(state.raw);
-  state.cache.timestampRawVersion = state.rawVersion;
-  state.cache.timestampBlocks = blocks;
-  return blocks;
+  return historyController.timestampBlocks();
 }
 
 function parsedTimestampSnapshots() {
-  if (state.cache.snapshotRawVersion === state.rawVersion) {
-    if (state.cache.compressedSnapshots) {
-      return [...iterateCompressed(state.cache.compressedSnapshots)];
-    }
-    return state.cache.timestampSnapshots;
-  }
-  const snapshots = parseTimestampedSnapshots(state.raw);
-  state.cache.snapshotRawVersion = state.rawVersion;
-  if (snapshots.length > 20) {
-    state.cache.compressedSnapshots = compressSnapshots(snapshots);
-    state.cache.timestampSnapshots = null;
-  } else {
-    state.cache.compressedSnapshots = null;
-    state.cache.timestampSnapshots = snapshots;
-  }
-  return snapshots;
+  return historyController.parsedTimestampSnapshots();
 }
 
 function buildSocketBandwidthIndex() {
-  const samples = {};
-  for (const block of parsedTimestampSnapshots()) {
-    for (const socket of block.sockets) {
-      const key = socketIdentityKey(socket);
-      const current = {
-        epochMs: block.epochMs,
-        bytes_acked: metricValue(socket, "bytes_acked"),
-        bytes_received: metricValue(socket, "bytes_received"),
-        delivery_rate: metricValue(socket, "delivery_rate"),
-        pacing_rate: metricValue(socket, "pacing_rate")
-      };
-      samples[key] = samples[key] ? [samples[key][1], current] : [null, current];
-    }
-  }
-  return Object.fromEntries(Object.entries(samples).map(([key, [prev, current]]) => {
-    const elapsed = prev ? Math.max(0.001, (current.epochMs - prev.epochMs) / 1000) : 0;
-    const txBytes = prev ? Math.max(0, current.bytes_acked - prev.bytes_acked) : 0;
-    const rxBytes = prev ? Math.max(0, current.bytes_received - prev.bytes_received) : 0;
-    return [key, {
-      tx_bps: elapsed ? (txBytes * 8) / elapsed : (current.delivery_rate || current.pacing_rate || 0),
-      rx_bps: elapsed ? (rxBytes * 8) / elapsed : 0,
-      delivery_rate: current.delivery_rate,
-      pacing_rate: current.pacing_rate
-    }];
-  }));
+  return historyController.buildSocketBandwidthIndex();
 }
 
 function socketBandwidth(socket, metric) {
-  if (!socket) return 0;
-  const indexed = state.bandwidthIndex?.[socketIdentityKey(socket)];
-  if (indexed?.[metric] != null) return indexed[metric];
-  if (metric === "tx_bps") return metricValue(socket, "delivery_rate") || metricValue(socket, "pacing_rate") || 0;
-  return 0;
+  return historyController.socketBandwidth(socket, metric);
 }
 
 function addBandwidthDerivatives(rows) {
-  return rows.map((row, index) => {
-    const prev = rows[index - 1];
-    const elapsed = prev ? Math.max(0.001, (row.epochMs - prev.epochMs) / 1000) : 0;
-    const txBytes = prev ? Math.max(0, (row.bytes_acked || 0) - (prev.bytes_acked || 0)) : 0;
-    const rxBytes = prev ? Math.max(0, (row.bytes_received || 0) - (prev.bytes_received || 0)) : 0;
-    const sameObservedSocket = prev && row.socketPresent !== false && prev.socketPresent !== false;
-    const dropDelta = sameObservedSocket ? Math.max(0, (row["skmem.d"] || 0) - (prev["skmem.d"] || 0)) : 0;
-    return {
-      ...row,
-      tx_bps: elapsed ? (txBytes * 8) / elapsed : 0,
-      rx_bps: elapsed ? (rxBytes * 8) / elapsed : 0,
-      "skmem.d_rate": elapsed ? dropDelta / elapsed : 0
-    };
-  });
+  return historyController.addBandwidthDerivatives(rows);
 }
 
 function hasTimestampedRawData() {
-  return timestampBlocks().length >= 2;
+  return historyController.hasTimestampedRawData();
 }
 
-function dropRateSummary(rows = state.history) {
-  if (!hasTimestampedRawData() || rows.length < 2) return null;
-  let totalDropDelta = 0;
-  let peakDropRate = 0;
-  let intervals = 0;
-  let firstGrowth = null;
-  let lastGrowth = null;
-  for (let i = 1; i < rows.length; i += 1) {
-    const prev = rows[i - 1];
-    const row = rows[i];
-    if (row.socketPresent === false || prev.socketPresent === false) continue;
-    const elapsed = Math.max(0.001, ((row.epochMs || 0) - (prev.epochMs || 0)) / 1000);
-    if (!Number.isFinite(elapsed) || elapsed <= 0) continue;
-    const dropDelta = Math.max(0, Number(row["skmem.d"] || 0) - Number(prev["skmem.d"] || 0));
-    if (!dropDelta) continue;
-    const rate = dropDelta / elapsed;
-    totalDropDelta += dropDelta;
-    peakDropRate = Math.max(peakDropRate, rate);
-    intervals += 1;
-    firstGrowth ??= prev.epochMs;
-    lastGrowth = row.epochMs;
-  }
-  if (!totalDropDelta) return null;
-  const observedSeconds = Math.max(0.001, ((rows[rows.length - 1].epochMs || 0) - (rows[0].epochMs || 0)) / 1000);
-  const avgDropRate = totalDropDelta / observedSeconds;
-  return {
-    totalDropDelta,
-    observedSeconds,
-    avgDropRate,
-    peakDropRate,
-    cadenceSeconds: avgDropRate ? 1 / avgDropRate : Number.POSITIVE_INFINITY,
-    intervals,
-    firstGrowth,
-    lastGrowth
-  };
+function dropRateSummary(rows) {
+  return historyController.dropRateSummary(rows);
 }
 
 function dropRateSeverity(summary) {
-  if (!summary) return "low";
-  if (summary.avgDropRate >= 1 || summary.peakDropRate >= 5 || summary.totalDropDelta >= 100) return "critical";
-  if (summary.avgDropRate >= 0.1 || summary.peakDropRate >= 1 || summary.totalDropDelta >= 10) return "high";
-  return "medium";
+  return historyController.dropRateSeverity(summary);
 }
 
-function microburstSummary(rows = state.history) {
-  const historyRows = rows || [];
-  const key = `${state.selectedId || "none"}|${historyRows.length}|${historyRows[0]?.epochMs || 0}|${historyRows[historyRows.length - 1]?.epochMs || 0}|${state.dataVersion}`;
-  if (rows === state.history && state.cache.microburstKey === key) return state.cache.microburstSummary;
-  const summary = detectMicroburstWindow(historyRows, {
-    recvQ: thresholdFor("recvQ"),
-    skmemR: thresholdFor("skmem.r"),
-    dropRate: thresholdFor("skmem.d_rate")
-  });
-  if (rows === state.history) {
-    state.cache.microburstKey = key;
-    state.cache.microburstSummary = summary;
-  }
-  return summary;
+function microburstSummary(rows) {
+  return historyController.microburstSummary(rows);
 }
 
-function tailLatencyLens(rows = state.history) {
-  const historyRows = rows || [];
-  const key = `${state.selectedId || "none"}|${historyRows.length}|${historyRows[0]?.epochMs || 0}|${historyRows[historyRows.length - 1]?.epochMs || 0}|${state.dataVersion}`;
-  if (rows === state.history && state.cache.tailLatencyKey === key) return state.cache.tailLatencySummary;
-  const summary = detectTailLatencyLens(historyRows, {
-    rtt: thresholdFor("rtt"),
-    rttvar: thresholdFor("rttvar"),
-    rto: thresholdFor("rto"),
-    sendQ: thresholdFor("sendQ"),
-    recvQ: thresholdFor("recvQ"),
-    dropRate: thresholdFor("skmem.d_rate")
-  });
-  if (rows === state.history) {
-    state.cache.tailLatencyKey = key;
-    state.cache.tailLatencySummary = summary;
-  }
-  return summary;
+function tailLatencyLens(rows) {
+  return historyController.tailLatencyLens(rows);
 }
 
 function formatDurationCompact(seconds) {
-  const value = Number(seconds || 0);
-  if (!Number.isFinite(value)) return "unknown duration";
-  if (value < 1) return `${formatNumber(value * 1000)} ms`;
-  if (value < 60) return `${formatNumber(value)} s`;
-  if (value < 3600) return `${formatNumber(value / 60)} min`;
-  return `${formatNumber(value / 3600)} h`;
+  return historyController.formatDurationCompact(seconds);
 }
 
 function formatDropCadence(summary) {
-  if (!summary?.avgDropRate) return "no increasing drop cadence";
-  return `1 drop every ${formatDurationCompact(summary.cadenceSeconds)}`;
+  return historyController.formatDropCadence(summary);
 }
 
 function formatMicroburstWindow(summary) {
-  if (!summary) return "no microburst window";
-  return `${timeLabel(0, summary.startEpochMs)} -> ${timeLabel(0, summary.endEpochMs)} over ${formatDurationCompact(summary.durationSeconds)}`;
+  return historyController.formatMicroburstWindow(summary);
 }
 
 function formatTailLatencyWindow(summary) {
-  if (!summary) return "no tail window";
-  return `${timeLabel(0, summary.startEpochMs)} -> ${timeLabel(0, summary.endEpochMs)} over ${formatDurationCompact(summary.durationSeconds)}`;
+  return historyController.formatTailLatencyWindow(summary);
 }
 
 function chartMicroburstBand(summary, data, pad, w, h, firstTime, lastTime) {
-  if (!summary || !data.length) return "";
-  const startTime = Math.max(firstTime, summary.startEpochMs || firstTime);
-  const endTime = Math.min(lastTime, summary.endEpochMs || lastTime);
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime || endTime < firstTime || startTime > lastTime) return "";
-  const timeSpan = Math.max(1, lastTime - firstTime);
-  const xFromTime = time => data.length > 1 && timeSpan > 1
-    ? pad.l + ((time - firstTime) / timeSpan) * (w - pad.l - pad.r)
-    : pad.l;
-  const left = Math.max(pad.l, Math.min(w - pad.r, xFromTime(startTime)));
-  const right = Math.max(left + 2, Math.min(w - pad.r, xFromTime(endTime)));
-  const labelX = Math.min(Math.max(left + 8, pad.l + 8), Math.max(pad.l + 8, right - 112));
-  return `
-    <rect x="${left}" y="${pad.t}" width="${Math.max(2, right - left)}" height="${h - pad.t - pad.b}" fill="#ffd84d" opacity=".12"/>
-    <line x1="${left}" x2="${left}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffd84d" stroke-width="1.5" stroke-dasharray="5 4" opacity=".9"/>
-    <line x1="${right}" x2="${right}" y1="${pad.t}" y2="${h - pad.b}" stroke="#ffd84d" stroke-width="1.5" stroke-dasharray="5 4" opacity=".9"/>
-    <rect x="${labelX}" y="${pad.t + 8}" width="108" height="22" rx="6" fill="#211804" stroke="#ffd84d"/>
-    <text x="${labelX + 10}" y="${pad.t + 23}" fill="#ffe58c" font-size="11" font-weight="700">MICROBURST</text>
-  `;
+  return chartOverlays.chartMicroburstBand(summary, data, pad, w, h, firstTime, lastTime);
 }
 
 
 function annotationColor(kind = "custom") {
-  return {
-    custom: "#7bdff6",
-    "burst-start": "#ffd84d",
-    failover: "#ff9f43",
-    "queue-reset": "#4cde8a",
-    "rtt-peak": "#ff5c77"
-  }[kind] || "#7bdff6";
+  return chartOverlays.annotationColor(kind);
 }
 
 function chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime) {
-  const annotations = currentSourceAnnotations(metric, annotationSocketId(), data)
-    .filter(item => item.resolvedEpochMs >= firstTime && item.resolvedEpochMs <= lastTime)
-    .slice(0, 6);
-  if (!annotations.length || !data.length) return "";
-  const timeSpan = Math.max(1, lastTime - firstTime);
-  const xFromTime = time => data.length > 1 && timeSpan > 1
-    ? pad.l + ((time - firstTime) / timeSpan) * (w - pad.l - pad.r)
-    : pad.l;
-  return annotations.map((item, index) => {
-    const x = Math.max(pad.l, Math.min(w - pad.r, xFromTime(item.resolvedEpochMs)));
-    const color = annotationColor(item.kind);
-    const label = item.label || annotationDefaultLabel(item.kind);
-    const width = Math.min(176, Math.max(72, label.length * 7 + 20));
-    const boxX = Math.min(Math.max(x + 8, pad.l + 8), Math.max(pad.l + 8, w - pad.r - width - 6));
-    const boxY = pad.t + 10 + (index % 3) * 26;
-    const timeStr = item.resolvedEpochMs ? new Date(item.resolvedEpochMs).toISOString().slice(11, 23) : "";
-    const isLight = chartBgColor() === "#f0f3f7";
-    const lineColor = isLight ? "#1a5fb4" : color;
-    return `
-      <g class="annotation-overlay-item" opacity="${isLight ? 1 : .8}" pointer-events="none">
-        <line x1="${x}" x2="${x}" y1="${pad.t}" y2="${h - pad.b}" stroke="${lineColor}" stroke-width="1.8" stroke-dasharray="6 4"/>
-        <circle cx="${x}" cy="${pad.t + 8}" r="4.5" fill="${lineColor}"/>
-        <rect x="${boxX}" y="${boxY}" width="${width}" height="32" rx="6" fill="${isLight ? "#dce2ea" : "#081019"}" opacity=".7" stroke="${lineColor}"/>
-        <text x="${boxX + 8}" y="${boxY + 13}" fill="${isLight ? "#1a2533" : color}" font-size="10" font-weight="800">${escapeHtml(label)}</text>
-        <text x="${boxX + 8}" y="${boxY + 26}" fill="${isLight ? "#3d4f60" : color}" font-size="9" opacity="0.7">${escapeHtml(timeStr)}</text>
-      </g>
-    `;
-  }).join("");
+  return chartOverlays.chartAnnotationOverlay(metric, data, pad, w, h, firstTime, lastTime);
 }
 function addCollectionAnomalies() {
   const hasTimestamp = hasTimestampedRawData();
@@ -1159,54 +832,47 @@ function processSamples(sockets, limit = 4) {
 }
 
 function emptyPreImportFilters() {
-  return { enabled: false, protocol: "", state: "", srcIp: "", dstIp: "", anyPort: "", srcPort: "", dstPort: "" };
+  return createEmptyPreImportFilters();
 }
 
 function normalizePreImportFilters(filters = state.preImportFilters) {
-  return { ...emptyPreImportFilters(), ...filters };
+  return runtimeProfile.normalizePreImportFilters(filters);
 }
 
 function hasPreImportFilterValue(filters) {
-  const f = normalizePreImportFilters(filters);
-  return [f.protocol, f.state, f.srcIp, f.dstIp, f.anyPort, f.srcPort, f.dstPort].some(Boolean);
+  return runtimeProfile.hasPreImportFilterValue(filters);
 }
 
 function isLxcProfile() {
-  return state.prefs.linuxProfile !== "native";
+  return runtimeProfile.isLxcProfile();
 }
 
 function linuxProfileLabel() {
-  return LINUX_PROFILES[state.prefs.linuxProfile]?.label || LINUX_PROFILES.lxc.label;
+  return runtimeProfile.linuxProfileLabel();
 }
 
 function ubuntuProfileLabel() {
-  return UBUNTU_PROFILES[state.prefs.ubuntuVersion] || UBUNTU_PROFILES["22.04"];
+  return runtimeProfile.ubuntuProfileLabel();
 }
 
 function isAnalystRole() {
-  return state.prefs.accessRole !== "opsRoot";
+  return runtimeProfile.isAnalystRole();
 }
 
 function accessRoleLabel() {
-  return ACCESS_ROLES[state.prefs.accessRole]?.label || ACCESS_ROLES.analyst.label;
+  return runtimeProfile.accessRoleLabel();
 }
 
 function lxcCommand(command) {
-  return `lxc exec <container> -- ${command}`;
+  return runtimeProfile.lxcCommand(command);
 }
 
 function envCommand(command, { host = false } = {}) {
-  if (isAnalystRole()) {
-    return host ? `# Request from ops/root on the LXD host:\n${command}` : command;
-  }
-  if (!isLxcProfile()) return command;
-  return host ? `# Run on the LXD host\n${command}` : lxcCommand(command);
+  return runtimeProfile.envCommand(command, { host });
 }
 
 function commandForPeer(socket) {
-  const host = socket?.peerAddress?.host;
-  const command = host && !["*", "0.0.0.0", "::"].includes(host) ? `ip route get ${host}` : "ip route get <peer-ip>";
-  return envCommand(command, { host: isLxcProfile() && !isAnalystRole() });
+  return runtimeProfile.commandForPeer(socket);
 }
 
 function makeFinding({ id, severity, title, pattern, sockets, confidence, why, next, mitigate, commands }) {
@@ -1486,190 +1152,51 @@ function pagedRows(rows) {
 }
 
 function groupedSockets() {
-  const map = new Map();
-  const anomalyMap = anomaliesBySocketId();
-  for (const socket of sortedFilteredSockets()) {
-    const key = socketKey(socket);
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        socket,
-        count: 0,
-        maxRisk: "low",
-        maxRecvQ: 0,
-        maxSendQ: 0,
-        maxRtt: 0,
-        maxRto: 0,
-        maxDrops: 0,
-        anomalies: 0
-      });
-    }
-    const group = map.get(key);
-    group.count += 1;
-    group.maxRisk = riskRank(socket.risk) > riskRank(group.maxRisk) ? socket.risk : group.maxRisk;
-    group.maxRecvQ = Math.max(group.maxRecvQ, socket.recvQ);
-    group.maxSendQ = Math.max(group.maxSendQ, socket.sendQ);
-    group.maxRtt = Math.max(group.maxRtt, metricValue(socket, "rtt"));
-    group.maxRto = Math.max(group.maxRto, metricValue(socket, "rto"));
-    group.maxDrops = Math.max(group.maxDrops, metricValue(socket, "skmem.d"));
-    group.anomalies += anomalyMap.get(socket.id)?.length || 0;
-  }
-  return [...map.values()].sort((a, b) => riskRank(b.maxRisk) - riskRank(a.maxRisk) || b.anomalies - a.anomalies || b.maxSendQ - a.maxSendQ);
+  return conversationModel.groupedSockets();
 }
 
 function conversationKey(socket) {
-  return `${socket.localAddress.host || socket.local}|${socket.localAddress.port || ""}|${socket.peerAddress.host || socket.peer}|${socket.peerAddress.port || ""}|${socket.family}`;
+  return conversationModel.conversationKey(socket);
 }
 
 function anomaliesBySocketId() {
-  const key = `${state.dataVersion}|${state.anomalies.length}`;
-  if (state.cache.anomalyMapKey === key && state.cache.anomaliesBySocketId) return state.cache.anomaliesBySocketId;
-  const map = new Map();
-  for (const anomaly of state.anomalies) {
-    if (!anomaly.socketId) continue;
-    if (!map.has(anomaly.socketId)) map.set(anomaly.socketId, []);
-    map.get(anomaly.socketId).push(anomaly);
-  }
-  state.cache.anomalyMapKey = key;
-  state.cache.anomaliesBySocketId = map;
-  return map;
+  return conversationModel.anomaliesBySocketId();
 }
 
 function socketsById() {
-  const key = `${state.dataVersion}|${state.sockets.length}`;
-  if (state.cache.socketMapKey === key && state.cache.socketsById) return state.cache.socketsById;
-  const map = new Map(state.sockets.map(socket => [socket.id, socket]));
-  state.cache.socketMapKey = key;
-  state.cache.socketsById = map;
-  return map;
+  return conversationModel.socketsById();
 }
 
 function buildConversations() {
-  const map = new Map();
-  const anomalyMap = anomaliesBySocketId();
-  for (const socket of sortedFilteredSockets()) {
-    const key = conversationKey(socket);
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        socket,
-        local: socket.local,
-        peer: socket.peer,
-        family: socket.family,
-        states: new Set(),
-        processes: new Set(),
-        application: currentApplicationServiceSortKey(socket),
-        count: 0,
-        maxRisk: "low",
-        anomalies: 0,
-        recvQ: 0,
-        sendQ: 0,
-        txBps: 0,
-        rxBps: 0,
-        maxRtt: 0,
-        maxRto: 0,
-        drops: 0,
-        anomalyItems: []
-      });
-    }
-    const conv = map.get(key);
-    const socketAnomalies = anomalyMap.get(socket.id) || [];
-    conv.count += 1;
-    conv.states.add(socket.state);
-    if (socket.details.process?.name) conv.processes.add(socket.details.process.name);
-    conv.maxRisk = riskRank(socket.risk) > riskRank(conv.maxRisk) ? socket.risk : conv.maxRisk;
-    conv.anomalies += socketAnomalies.length;
-    conv.anomalyItems.push(...socketAnomalies);
-    conv.recvQ += socket.recvQ;
-    conv.sendQ += socket.sendQ;
-    conv.txBps += socketBandwidth(socket, "tx_bps");
-    conv.rxBps += socketBandwidth(socket, "rx_bps");
-    conv.maxRtt = Math.max(conv.maxRtt, metricValue(socket, "rtt"));
-    conv.maxRto = Math.max(conv.maxRto, metricValue(socket, "rto"));
-    conv.drops += metricValue(socket, "skmem.d");
-  }
-  return sortConversations([...map.values()]);
+  return conversationModel.buildConversations();
 }
 
-const CONVERSATION_TEXT_SORTS = new Set(["flow", "proto", "process"]);
-
 function conversationDefaultSortDir(key) {
-  return CONVERSATION_TEXT_SORTS.has(key) ? "asc" : "desc";
+  return conversationModel.conversationDefaultSortDir(key);
 }
 
 function conversationSortText(conv, key) {
-  if (key === "flow") return `${conv.local} ${conv.peer}`;
-  if (key === "proto") return `${conv.family} ${[...conv.states].join(" ")} ${conv.application || ""}`;
-  if (key === "process") return [...conv.processes].join(", ") || "-";
-  return "";
+  return conversationModel.conversationSortText(conv, key);
 }
 
 function conversationSortValue(conv, key) {
-  if (CONVERSATION_TEXT_SORTS.has(key)) return conversationSortText(conv, key);
-  if (key === "risk") return riskRank(conv.maxRisk);
-  if (key === "sockets") return conv.count;
-  if (key === "anomalies") return conv.anomalies;
-  if (key === "tx") return conv.txBps;
-  if (key === "rx") return conv.rxBps;
-  if (key === "sendQ") return conv.sendQ;
-  if (key === "recvQ") return conv.recvQ;
-  if (key === "rtt") return conv.maxRtt;
-  if (key === "rto") return conv.maxRto;
-  if (key === "drops") return conv.drops;
-  return 0;
+  return conversationModel.conversationSortValue(conv, key);
 }
 
 function compareConversationFallback(a, b) {
-  return riskRank(b.maxRisk) - riskRank(a.maxRisk) ||
-    b.anomalies - a.anomalies ||
-    b.drops - a.drops ||
-    b.sendQ - a.sendQ ||
-    b.txBps - a.txBps ||
-    CONVERSATION_SORT_COLLATOR.compare(String(a.key), String(b.key));
+  return conversationModel.compareConversationFallback(a, b);
 }
 
 function sortConversations(conversations) {
-  const sort = state.conversationSort || { key: "anomalies", dir: "desc" };
-  const key = CONVERSATION_SORT_LABELS[sort.key] ? sort.key : "anomalies";
-  const factor = sort.dir === "asc" ? 1 : -1;
-  return conversations.map((conv, index) => ({ conv, index })).sort((a, b) => {
-    const av = conversationSortValue(a.conv, key);
-    const bv = conversationSortValue(b.conv, key);
-    let result = 0;
-    if (typeof av === "number" && typeof bv === "number") {
-      result = av - bv;
-    } else {
-      result = CONVERSATION_SORT_COLLATOR.compare(String(av), String(bv));
-    }
-    return result * factor || compareConversationFallback(a.conv, b.conv) || a.index - b.index;
-  }).map(item => item.conv);
+  return conversationModel.sortConversations(conversations);
 }
 
 function renderConversationSortHeader(key, label) {
-  const sort = state.conversationSort || { key: "anomalies", dir: "desc" };
-  const active = sort.key === key;
-  const direction = active ? (sort.dir === "asc" ? "ASC" : "DESC") : "";
-  const title = `Sort conversations by ${label}${active ? ` (${direction})` : ""}`;
-  return `<th><button class="th-sort conversation-sort ${active ? "active" : ""}" data-conversation-sort="${escapeHtml(key)}" title="${escapeHtml(title)}">${escapeHtml(label)}${direction ? ` <span>${direction}</span>` : ""}</button></th>`;
+  return conversationModel.renderConversationSortHeader(key, label);
 }
 
 function conversationAnomalySummary(conv) {
-  const items = conv.anomalyItems || [];
-  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
-  const byMetric = new Map();
-  const byTitle = new Map();
-  for (const item of items) {
-    counts[item.severity] = (counts[item.severity] || 0) + 1;
-    const metric = item.metric || "socket";
-    byMetric.set(metric, (byMetric.get(metric) || 0) + 1);
-    const key = `${item.severity}|${item.title}|${metric}`;
-    if (!byTitle.has(key)) byTitle.set(key, { ...item, count: 0 });
-    byTitle.get(key).count += 1;
-  }
-  const dominantSeverity = ["critical", "high", "medium", "low"].find(severity => counts[severity]) || "low";
-  const topMetric = [...byMetric.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "rtt";
-  const topItems = [...byTitle.values()].sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || b.count - a.count || a.title.localeCompare(b.title)).slice(0, 4);
-  return { counts, dominantSeverity, topMetric, topItems, metrics: [...byMetric.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) };
+  return conversationModel.conversationAnomalySummary(conv);
 }
 
 function buildExpertInformation() {
