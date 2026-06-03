@@ -46,8 +46,9 @@ test("buildJiraReport renders hypotheses anomalies sockets and validation comman
 });
 
 test("main delegates Jira rendering to the extracted reporting module", () => {
-  const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
-  assert.match(main, /import \{ buildJiraReport as buildJiraReportModel \} from "\.\/jira-report\.js";/);
-  assert.match(main, /function jiraReportDependencies\(\)/);
-  assert.match(main, /return buildJiraReportModel\(jiraReportDependencies\(\)\);/);
+  const main = readFileSync(new URL("../../src/rendering/main-runtime.js", import.meta.url), "utf8");
+  const reportDataActions = readFileSync(new URL("../../src/reporting/report-data-actions.js", import.meta.url), "utf8");
+  assert.match(main, /import \{ buildJiraReport as buildJiraReportModel \} from "\.\.\/reporting\/jira-report\.js";/);
+  assert.match(reportDataActions, /function jiraReportDependencies\(\)/);
+  assert.match(reportDataActions, /return buildJiraReportModel\(jiraReportDependencies\(\)\);/);
 });

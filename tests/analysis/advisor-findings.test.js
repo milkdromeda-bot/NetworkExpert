@@ -67,10 +67,12 @@ test("advisor findings module detects Send-Q pressure", () => {
 });
 
 test("main delegates advisor logic to the extracted model", () => {
-  const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../../src/rendering/main-runtime.js", import.meta.url), "utf8");
+  const controller = readFileSync(new URL("../../src/rendering/controllers/analysis-runtime-controller.js", import.meta.url), "utf8");
 
-  assert.match(main, /import \{ buildAdvisorFindings as buildAdvisorFindingsModel \} from "\.\/advisor-findings\.js";/);
-  assert.match(main, /function advisorFindingDependencies\(\)/);
-  assert.match(main, /return buildAdvisorFindingsModel\(advisorFindingDependencies\(\)\);/);
+  assert.match(main, /"buildAdvisorFindings"/);
+  assert.match(controller, /import \{ buildAdvisorFindings as buildAdvisorFindingsModel \} from "\.\.\/\.\.\/analysis\/advisor-findings\.js";/);
+  assert.match(controller, /function buildAdvisorFindings\(\)/);
+  assert.match(controller, /return buildAdvisorFindingsModel\(\{/);
   assert.doesNotMatch(main, /id:\s*"slow-peer-or-egress"[\s\S]*id:\s*"local-slow-consumer"[\s\S]*function severityVisible/);
 });

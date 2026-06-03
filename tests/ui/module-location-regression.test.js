@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 const importPageCss = readFileSync(new URL("../../src/styles/import-page.css", import.meta.url), "utf8");
 const analysisTableCss = readFileSync(new URL("../../src/styles/analysis-table.css", import.meta.url), "utf8");
-const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+const main = readFileSync(new URL("../../src/rendering/main-runtime.js", import.meta.url), "utf8");
 const initialState = readFileSync(new URL("../../src/rendering/initial-state.js", import.meta.url), "utf8");
 const ssCommandController = readFileSync(new URL("../../src/rendering/ss-command-controller.js", import.meta.url), "utf8");
 const ingestView = readFileSync(new URL("../../src/views/ingest-view.js", import.meta.url), "utf8");

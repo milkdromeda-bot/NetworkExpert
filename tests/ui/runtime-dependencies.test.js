@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+const main = readFileSync(new URL("../../src/rendering/main-runtime.js", import.meta.url), "utf8");
 const advanced = readFileSync(new URL("../../src/correlation/advanced-correlation-panels.js", import.meta.url), "utf8");
 const fixDrawing = readFileSync(new URL("../../src/correlation/fix-chart-drawing.js", import.meta.url), "utf8");
 const fixHeatmapDrawing = readFileSync(new URL("../../src/correlation/fix-heatmap-drawing.js", import.meta.url), "utf8");
@@ -16,6 +16,7 @@ const reportChartActions = readFileSync(new URL("../../src/reporting/report-char
 const reportDataActions = readFileSync(new URL("../../src/reporting/report-data-actions.js", import.meta.url), "utf8");
 const reportExportActions = readFileSync(new URL("../../src/reporting/report-export-actions.js", import.meta.url), "utf8");
 const appEvents = readFileSync(new URL("../../src/events/app-event-bindings.js", import.meta.url), "utf8");
+const eventDependencies = readFileSync(new URL("../../src/rendering/dependencies/event-dependencies.js", import.meta.url), "utf8");
 const chartEvents = readFileSync(new URL("../../src/events/chart-event-bindings.js", import.meta.url), "utf8");
 const actionEvents = readFileSync(new URL("../../src/events/action-button-events.js", import.meta.url), "utf8");
 
@@ -48,7 +49,8 @@ test("chart draw functions accept injectable runtime dependencies", () => {
 });
 
 test("JVM chart draw functions accept injectable runtime dependencies", () => {
-  assert.match(main, /function drawJvmCharts\(\.\.\.args\) \{ return appRendering\.drawJvmCharts\(\.\.\.args\); \}/);
+  assert.match(main, /const appRenderingFacade = Object\.fromEntries/);
+  assert.match(main, /"drawJvmCharts"/);
   assert.match(appRendering, /function drawJvmCharts\(deps\) \{ return advancedCorrelationPanels\.drawJvmCharts\(deps\); \}/);
   assert.match(jvmChartDrawing, /function jvmDrawDependencies\(\)\s*\{/);
   assert.match(jvmChartDrawing, /function drawJvmCharts\(deps = jvmDrawDependencies\(\)\)/);
@@ -59,7 +61,8 @@ test("JVM chart draw functions accept injectable runtime dependencies", () => {
 });
 
 test("FIX chart draw functions accept injectable runtime dependencies", () => {
-  assert.match(main, /function drawFixCharts\(\.\.\.args\) \{ return appRendering\.drawFixCharts\(\.\.\.args\); \}/);
+  assert.match(main, /const appRenderingFacade = Object\.fromEntries/);
+  assert.match(main, /"drawFixCharts"/);
   assert.match(appRendering, /function drawFixCharts\(deps\) \{ return advancedCorrelationPanels\.drawFixCharts\(deps\); \}/);
   assert.match(fixDrawing, /function fixDrawDependencies\(\)\s*\{/);
   assert.match(fixDrawing, /function drawFixCharts\(deps = fixDrawDependencies\(\)\)/);
@@ -81,16 +84,24 @@ test("chart draw dependencies isolate DOM and mutable app state", () => {
 });
 
 test("bindEvents is split into dependency-injected chart binders", () => {
-  assert.match(main, /function appEventDependencies\(\)\s*\{/);
-  assert.match(main, /function sourceFileEventDependencies\(\)\s*\{/);
-  assert.match(main, /function serviceConfigActionDependencies\(\)\s*\{/);
-  assert.match(main, /function tableInteractionDependencies\(\)\s*\{/);
-  assert.match(main, /function socketInteractionDependencies\(\)\s*\{/);
-  assert.match(main, /function layoutProfileActionDependencies\(\)\s*\{/);
-  assert.match(main, /function bindEvents\(deps = appEventDependencies\(\)\)/);
-  assert.match(main, /function bindChartMinimapEvents\(deps = appEventDependencies\(\)\)/);
-  assert.match(main, /function bindChartChromeEvents\(deps = appEventDependencies\(\)\)/);
-  assert.match(main, /function bindChartSeriesEvents\(deps = appEventDependencies\(\)\)/);
+  assert.match(main, /createFactoryFacade\(\(\) => dependencyFactories/);
+  assert.match(main, /"appEventDependencies"/);
+  assert.match(main, /"sourceFileEventDependencies"/);
+  assert.match(main, /"serviceConfigActionDependencies"/);
+  assert.match(main, /"tableInteractionDependencies"/);
+  assert.match(main, /"socketInteractionDependencies"/);
+  assert.match(main, /"layoutProfileActionDependencies"/);
+  assert.match(main, /createMethodFacade\(\(\) => appEventBindings/);
+  assert.match(main, /"bindEvents"/);
+  assert.match(main, /"bindChartMinimapEvents"/);
+  assert.match(main, /"bindChartChromeEvents"/);
+  assert.match(main, /"bindChartSeriesEvents"/);
+  assert.match(eventDependencies, /appEventDependencies\(\)\s*\{/);
+  assert.match(eventDependencies, /sourceFileEventDependencies\(\)\s*\{/);
+  assert.match(eventDependencies, /serviceConfigActionDependencies\(\)\s*\{/);
+  assert.match(eventDependencies, /tableInteractionDependencies\(\)\s*\{/);
+  assert.match(eventDependencies, /socketInteractionDependencies\(\)\s*\{/);
+  assert.match(eventDependencies, /layoutProfileActionDependencies\(\)\s*\{/);
   assert.match(appEvents, /bindSourceFileEvents\(sourceFileEventDependencies\(\)\);/);
   assert.match(actionEvents, /handleServiceConfigAction\(action, event, serviceConfigActionDependencies\(\)\)/);
   assert.match(appEvents, /bindTableInteractionEvents\(tableInteractionDependencies\(\)\);/);
@@ -103,7 +114,7 @@ test("bindEvents is split into dependency-injected chart binders", () => {
 
 test("large rendering and report actions stay behind small dependency factories", () => {
   assert.match(main, /const appRendering = createAppRendering\(appRenderingDependencies\);/);
-  assert.match(main, /function appRenderingDependencies\(\)\s*\{/);
+  assert.match(main, /"appRenderingDependencies"/);
   assert.match(appRendering, /export function createAppRendering\(getDeps\)/);
   assert.match(appRendering, /function renderChartsPage\(\.\.\.args\) \{ return chartsPageRendering\.renderChartsPage\(\.\.\.args\); \}/);
   assert.match(chartsPageRendering, /function renderChartsPage\(\)/);
@@ -111,7 +122,7 @@ test("large rendering and report actions stay behind small dependency factories"
   assert.match(socketTableRendering, /function renderSocketTable\(\)/);
 
   assert.match(main, /const reportActions = createReportActions\(reportActionDependencies\);/);
-  assert.match(main, /function reportActionDependencies\(\)\s*\{/);
+  assert.match(main, /"reportActionDependencies"/);
   assert.match(reportActions, /export function createReportActions\(getDeps\)/);
   assert.match(reportActions, /createReportActionRuntime\(getDeps\)/);
   assert.match(reportChartActions, /function captureIncidentReportCharts\(limit = 5\)/);
@@ -121,10 +132,9 @@ test("large rendering and report actions stay behind small dependency factories"
 });
 
 test("event dependency factory keeps render callback executable", () => {
-  const appDeps = functionBlock("appEventDependencies");
   const chromeBinder = functionBlock("bindChartChromeEvents", chartEvents);
-  assert.match(appDeps, /\r?\n\s*render,\r?\n/);
-  assert.doesNotMatch(appDeps, /render:\s*renderView\s*=\s*render/);
+  assert.match(eventDependencies, /appEventDependencies\(\)\s*\{[\s\S]*"render"/);
+  assert.doesNotMatch(eventDependencies, /render:\s*renderView\s*=\s*render/);
   assert.match(chromeBinder, /render:\s*renderView/);
   assert.match(chromeBinder, /renderView\(\);/);
 });

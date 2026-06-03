@@ -61,7 +61,7 @@ test("printable incident report renders the current workspace frame", () => {
 });
 
 test("main delegates printable incident report rendering to the extracted module", () => {
-  const main = readFileSync(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../../src/rendering/main-runtime.js", import.meta.url), "utf8");
   const report = readFileSync(new URL("../../src/reporting/printable-incident-report.js", import.meta.url), "utf8");
   const reportActions = readFileSync(new URL("../../src/reporting/report-data-actions.js", import.meta.url), "utf8");
 

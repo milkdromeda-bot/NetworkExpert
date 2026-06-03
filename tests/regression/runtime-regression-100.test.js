@@ -139,13 +139,13 @@ const cases = [
     assert.match(source, /export const INGEST_RAW_EAGER_LIMIT = 200000;/);
   }],
   ["main imports the eager raw import limit instead of relying on a global", async () => {
-    const source = await readFile(new URL("../../src/rendering/main.js", import.meta.url), "utf8");
+    const source = await readFile(new URL("../../src/rendering/main-runtime.js", import.meta.url), "utf8");
     assert.match(source, /INGEST_RAW_EAGER_LIMIT/);
-    assert.match(source, /from "\.\/expert-config\.js"/);
+    assert.match(source, /from "\.\.\/config\/expert-config\.js"/);
   }],
   ["main entry remains cache busted to the repaired asset version", async () => {
     const html = await readFile(new URL("../../index.html", import.meta.url), "utf8");
-    assert.match(html, /src="\.\/src\/main\.js\?v=20260511-3"/);
+    assert.match(html, /src="\.\/src\/rendering\/main\.js\?v=20260511-3"/);
   }],
   ["package check covers extracted view modules", async () => {
     const pkg = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
