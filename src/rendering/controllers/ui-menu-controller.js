@@ -82,6 +82,8 @@ export function createUiMenuController(getDeps) {
     if (state.openMenuId || state.openMenuPos) {
       state.openMenuId = null;
       state.openMenuPos = null;
+      const openMenu = options.document?.querySelector?.(".row-menu.open") || (typeof document !== "undefined" ? document.querySelector(".row-menu.open") : null);
+      if (openMenu) openMenu.classList.remove("open");
       changed = true;
     }
     if (state.openChartMoveMetric || state.openChartMovePos) {

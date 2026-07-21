@@ -6,6 +6,10 @@ export function bindAppClickHandlers(getDeps) {
     if (actionMenu) {
       event.stopPropagation();
       const id = actionMenu.dataset.actionMenu;
+      // Close any previously open menu
+      const prevOpen = document.querySelector(".row-menu.open");
+      if (prevOpen) prevOpen.classList.remove("open");
+
       if (state.openMenuId === id) {
         state.openMenuId = null;
         state.openMenuPos = null;
@@ -18,8 +22,14 @@ export function bindAppClickHandlers(getDeps) {
         const top = spaceBelow > menuHeight + 8 ? rect.top : Math.max(8, rect.bottom - menuHeight);
         state.openMenuId = id;
         state.openMenuPos = { left: Math.round(left), top: Math.round(top) };
+        // Open the menu via DOM directly instead of full re-render
+        const menu = actionMenu.parentElement?.querySelector(".row-menu");
+        if (menu) {
+          menu.classList.add("open");
+          menu.style.left = `${state.openMenuPos.left}px`;
+          menu.style.top = `${state.openMenuPos.top}px`;
+        }
       }
-      render();
       return;
     }
     const target = event.target.closest("[data-view]");
