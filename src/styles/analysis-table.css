@@ -858,7 +858,7 @@ tr.selected { background: #101a27; }
 .endpoint-cell strong {
   overflow: hidden;
   color: var(--text);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -866,7 +866,7 @@ tr.selected { background: #101a27; }
 .endpoint-cell em {
   overflow: hidden;
   color: var(--cyan);
-  font-size: var(--font-size-sm);
+  font-size: 9px;
   font-style: normal;
   font-weight: 800;
   text-overflow: ellipsis;

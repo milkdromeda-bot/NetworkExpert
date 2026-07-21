@@ -5,7 +5,7 @@ const SYMPTOMS = [
   { id: "persist", label: "persist timer", test: (s) => String(s.details?.timer?.name || "").toLowerCase() === "persist" },
   { id: "high-recvQ", label: "Recv-Q > 128KB", test: (s) => Number(s.recvQ || 0) > 131072 },
   { id: "high-sendQ", label: "Send-Q > 256KB", test: (s) => Number(s.sendQ || 0) > 262144 },
-  { id: "drops", label: "socket drops", test: (s) => metricValue(s, "skmem.d") > 0 },
+  { id: "drops", label: "socket drops", test: (s) => metricValue(s, "skmem.d") > 0, cumulative: true, valueOf: (s) => metricValue(s, "skmem.d") },
   { id: "backoff", label: "backoff ≥ 2", test: (s) => metricValue(s, "backoff") >= 2 },
   { id: "rwnd-limited", label: "rwnd_limited > 50%", test: (s) => metricValue(s, "rwnd_limited_pct") >= 50 }
 ];
@@ -33,6 +33,8 @@ function formatTime(epochMs) {
 
 function detectGroupEvents(snapshots) {
   const events = [];
+  // Track cumulative symptom state to avoid repeating per snapshot
+  const cumulativeState = new Map(); // key: `${type}|${groupKey}|${symptomId}` -> { onsetEpoch, firstValue, lastValue, lastEpoch }
 
   for (let i = 1; i < snapshots.length; i++) {
     const prev = snapshots[i - 1];
@@ -55,7 +57,24 @@ function detectGroupEvents(snapshots) {
         const affected = sockets.filter(s => symptom.test(s));
         if (affected.length < 2) continue;
 
-        // Check it's new (wasn't present in previous snapshot for majority)
+        const cKey = `process-wide|${proc}|${symptom.id}`;
+
+        if (symptom.cumulative) {
+          const totalValue = affected.reduce((sum, s) => sum + (symptom.valueOf(s) || 0), 0);
+          const existing = cumulativeState.get(cKey);
+          if (!existing) {
+            // First detection — record onset
+            cumulativeState.set(cKey, { onsetEpoch: epochMs, firstValue: totalValue, lastValue: totalValue, lastEpoch: epochMs, socketCount: affected.length, totalSockets: sockets.length });
+          } else {
+            // Update with latest value
+            existing.lastValue = totalValue;
+            existing.lastEpoch = epochMs;
+            existing.socketCount = Math.max(existing.socketCount, affected.length);
+          }
+          continue;
+        }
+
+        // Non-cumulative: use onset check as before
         const prevSockets = prev.sockets.filter(s => processKey(s) === proc);
         const prevAffected = prevSockets.filter(s => symptom.test(s));
         const isOnset = affected.length > prevAffected.length * 1.5 || (prevAffected.length === 0 && affected.length >= 2);
@@ -91,6 +110,21 @@ function detectGroupEvents(snapshots) {
       for (const symptom of SYMPTOMS) {
         const affected = sockets.filter(s => symptom.test(s));
         if (affected.length < 2) continue;
+
+        const cKey = `peer-wide|${peer}|${symptom.id}`;
+
+        if (symptom.cumulative) {
+          const totalValue = affected.reduce((sum, s) => sum + (symptom.valueOf(s) || 0), 0);
+          const existing = cumulativeState.get(cKey);
+          if (!existing) {
+            cumulativeState.set(cKey, { onsetEpoch: epochMs, firstValue: totalValue, lastValue: totalValue, lastEpoch: epochMs, socketCount: affected.length, totalSockets: sockets.length, peer });
+          } else {
+            existing.lastValue = totalValue;
+            existing.lastEpoch = epochMs;
+            existing.socketCount = Math.max(existing.socketCount, affected.length);
+          }
+          continue;
+        }
 
         const prevSockets = prev.sockets.filter(s => peerHost(s) === peer);
         const prevAffected = prevSockets.filter(s => symptom.test(s));
@@ -130,6 +164,21 @@ function detectGroupEvents(snapshots) {
         const affected = sockets.filter(s => symptom.test(s));
         if (affected.length < 2) continue;
 
+        const cKey = `container-wide|${cg}|${symptom.id}`;
+
+        if (symptom.cumulative) {
+          const totalValue = affected.reduce((sum, s) => sum + (symptom.valueOf(s) || 0), 0);
+          const existing = cumulativeState.get(cKey);
+          if (!existing) {
+            cumulativeState.set(cKey, { onsetEpoch: epochMs, firstValue: totalValue, lastValue: totalValue, lastEpoch: epochMs, socketCount: affected.length, totalSockets: sockets.length, processes: [...uniqueProcesses].slice(0, 5) });
+          } else {
+            existing.lastValue = totalValue;
+            existing.lastEpoch = epochMs;
+            existing.socketCount = Math.max(existing.socketCount, affected.length);
+          }
+          continue;
+        }
+
         const prevSockets = prev.sockets.filter(s => cgroupKey(s) === cg);
         const prevAffected = prevSockets.filter(s => symptom.test(s));
         const isOnset = affected.length > prevAffected.length * 1.5 || (prevAffected.length === 0 && affected.length >= 2);
@@ -151,10 +200,46 @@ function detectGroupEvents(snapshots) {
     }
   }
 
+  // Convert consolidated cumulative symptoms into events (onset + final if value grew)
+  for (const [cKey, state] of cumulativeState) {
+    const [type, groupKey, symptomId] = cKey.split("|");
+    const symptom = SYMPTOMS.find(s => s.id === symptomId);
+    if (!symptom) continue;
+    const ratio = state.socketCount / (state.totalSockets || 1);
+
+    const baseEvent = {
+      type,
+      groupKey,
+      symptomId,
+      symptomLabel: symptom.label,
+      epochMs: state.onsetEpoch,
+      socketCount: state.socketCount,
+      ratio,
+      cumulative: true,
+      firstValue: state.firstValue,
+      lastValue: state.lastValue,
+      onsetEpoch: state.onsetEpoch,
+      lastEpoch: state.lastEpoch
+    };
+
+    if (type === "process-wide") {
+      baseEvent.totalProcessSockets = state.totalSockets;
+      baseEvent.peers = [];
+    } else if (type === "peer-wide") {
+      baseEvent.totalPeerSockets = state.totalSockets;
+      baseEvent.processes = [];
+    } else if (type === "container-wide") {
+      baseEvent.totalContainerSockets = state.totalSockets;
+      baseEvent.processes = state.processes || [];
+    }
+
+    events.push(baseEvent);
+  }
+
   // Deduplicate: keep highest ratio per group+symptom+epoch
   const deduped = new Map();
   for (const e of events) {
-    const key = `${e.type}|${e.groupKey}|${e.symptomId}|${e.epochMs}`;
+    const key = e.cumulative ? `${e.type}|${e.groupKey}|${e.symptomId}|cumulative` : `${e.type}|${e.groupKey}|${e.symptomId}|${e.epochMs}`;
     const existing = deduped.get(key);
     if (!existing || e.ratio > existing.ratio) deduped.set(key, e);
   }
@@ -164,6 +249,46 @@ function detectGroupEvents(snapshots) {
 
 function buildGroupNarrative(event) {
   const time = formatTime(event.epochMs);
+
+  if (event.cumulative) {
+    const onsetTime = formatTime(event.onsetEpoch);
+    const lastTime = formatTime(event.lastEpoch);
+    const grew = event.lastValue > event.firstValue;
+    const pct = Math.round(event.ratio * 100);
+
+    if (event.type === "process-wide") {
+      const progression = grew
+        ? `${event.firstValue} → ${event.lastValue} total drops (${onsetTime} → ${lastTime})`
+        : `${event.lastValue} total drops since ${onsetTime}`;
+      return {
+        title: `Process-wide symptom: ${event.groupKey}`,
+        line: `${event.socketCount}/${event.totalProcessSockets} sockets (${pct}%) show ${event.symptomLabel}: ${progression}`,
+        conclusion: `→ Persistent ${event.symptomLabel} on ${event.groupKey} — kernel dropped packets; check receiver application health and socket buffer configuration.`
+      };
+    }
+    if (event.type === "container-wide") {
+      const progression = grew
+        ? `${event.firstValue} → ${event.lastValue} total drops (${onsetTime} → ${lastTime})`
+        : `${event.lastValue} total drops since ${onsetTime}`;
+      return {
+        title: `Container-wide symptom: ${event.groupKey}`,
+        line: `${event.socketCount}/${event.totalContainerSockets} sockets (${pct}%) show ${event.symptomLabel}: ${progression}`,
+        conclusion: `→ Persistent ${event.symptomLabel} in container ${event.groupKey} — suspect host/NIC resource contention or container memory limits.`
+      };
+    }
+    // peer-wide cumulative
+    const progression = grew
+      ? `${event.firstValue} → ${event.lastValue} total drops (${onsetTime} → ${lastTime})`
+      : `${event.lastValue} total drops since ${onsetTime}`;
+    return {
+      title: `Peer-wide symptom: ${event.groupKey}`,
+      line: `${event.socketCount}/${event.totalPeerSockets} sockets (${pct}%) to peer ${event.groupKey} show ${event.symptomLabel}: ${progression}`,
+      conclusion: event.ratio >= 0.8
+        ? `→ Persistent drops toward ${event.groupKey} — kernel dropped ${event.lastValue} packet(s). Investigate peer-side or receiver buffer exhaustion.`
+        : `→ Partial peer correlation on ${event.groupKey} — ${event.socketCount} connections showing ${event.lastValue} total drops. Check if peer is overloaded.`
+    };
+  }
+
   if (event.type === "process-wide") {
     const pct = Math.round(event.ratio * 100);
     return {

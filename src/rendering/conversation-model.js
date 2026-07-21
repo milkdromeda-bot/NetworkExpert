@@ -84,8 +84,8 @@ export function createConversationModel(getDeps) {
           count: 0,
           maxRisk: "low",
           anomalies: 0,
-          recvQ: 0,
           sendQ: 0,
+          recvQ: 0,
           txBps: 0,
           rxBps: 0,
           maxRtt: 0,
@@ -102,8 +102,8 @@ export function createConversationModel(getDeps) {
       conv.maxRisk = riskRank(socket.risk) > riskRank(conv.maxRisk) ? socket.risk : conv.maxRisk;
       conv.anomalies += socketAnomalies.length;
       conv.anomalyItems.push(...socketAnomalies);
-      conv.recvQ += socket.recvQ;
-      conv.sendQ += socket.sendQ;
+      conv.sendQ = Math.max(conv.sendQ, socket.sendQ);
+      conv.recvQ = Math.max(conv.recvQ, socket.recvQ);
       conv.txBps += socketBandwidth(socket, "tx_bps");
       conv.rxBps += socketBandwidth(socket, "rx_bps");
       conv.maxRtt = Math.max(conv.maxRtt, metricValue(socket, "rtt"));

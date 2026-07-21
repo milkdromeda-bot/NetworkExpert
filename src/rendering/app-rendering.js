@@ -358,7 +358,8 @@ const conversationRendering = createConversationRendering({
   conversationAnomalySummary,
   metricLabel,
   ipIntelSummary,
-  ipIntelDetail
+  ipIntelDetail,
+  currentAliasForEndpoint
 });
 
 function renderGroupedSockets(...args) { return conversationRendering.renderGroupedSockets(...args); }

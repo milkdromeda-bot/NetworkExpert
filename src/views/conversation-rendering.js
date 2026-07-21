@@ -18,7 +18,8 @@ export function createConversationRendering(ctx) {
     conversationAnomalySummary,
     metricLabel,
     ipIntelSummary,
-    ipIntelDetail
+    ipIntelDetail,
+    currentAliasForEndpoint
   } = ctx;
 
 function renderGroupedSockets() {
@@ -63,10 +64,10 @@ function renderConversations() {
     ${renderGridControls(conversations.length)}
     ${topPager}
     <div class="table-wrap"><table>
-      <thead><tr>${renderConversationSortHeader("risk", "Risk")}${renderConversationSortHeader("flow", "Flow")}${renderConversationSortHeader("proto", "Proto/state")}${renderConversationSortHeader("process", "Process")}${renderConversationSortHeader("sockets", "Sockets")}${renderConversationSortHeader("anomalies", "Anomalies")}${renderConversationSortHeader("tx", "TX")}${renderConversationSortHeader("rx", "RX")}${renderConversationSortHeader("sendQ", "Send-Q")}${renderConversationSortHeader("recvQ", "Recv-Q")}${renderConversationSortHeader("rtt", "RTT")}${renderConversationSortHeader("rto", "RTO")}${renderConversationSortHeader("drops", "Drops")}</tr></thead>
+      <thead><tr>${renderConversationSortHeader("risk", "Risk")}${renderConversationSortHeader("flow", "Flow")}${renderConversationSortHeader("proto", "Proto/state")}${renderConversationSortHeader("process", "Process")}${renderConversationSortHeader("sockets", "Sockets")}${renderConversationSortHeader("anomalies", "Anomalies")}${renderConversationSortHeader("tx", "TX")}${renderConversationSortHeader("rx", "RX")}${renderConversationSortHeader("sendQ", "Max Send-Q")}${renderConversationSortHeader("recvQ", "Max Recv-Q")}${renderConversationSortHeader("rtt", "RTT")}${renderConversationSortHeader("rto", "RTO")}${renderConversationSortHeader("drops", "Drops")}</tr></thead>
       <tbody>${page.rows.map(c => `<tr data-socket="${escapeHtml(c.socket.id)}" class="${c.socket.id === state.selectedId ? "selected" : ""}">
         <td><span class="risk ${c.maxRisk}">${c.maxRisk}</span></td>
-        <td><div class="flow-cell"><strong>${escapeHtml(c.local)}</strong><span>${icons.arrowRight}</span>${renderPeerEndpoint(c.peer)}</div></td>
+        <td><div class="flow-cell"><strong>${renderFlowEndpoint(c.local)}</strong><span>${icons.arrowRight}</span>${renderPeerEndpoint(c.peer)}</div></td>
         <td><span class="badge ${c.family.includes("udp") ? "udp" : "tcp"}">${escapeHtml(c.family)}</span> ${[...c.states].map(stateName => `<span class="badge ${stateName === "LISTEN" ? "listen" : ""}">${escapeHtml(stateName)}</span>`).join(" ")} ${renderApplicationServiceChip(c.socket, "compact")}</td>
         <td>${escapeHtml([...c.processes].slice(0, 3).join(", ") || "-")}</td>
         <td>${formatNumber(c.count)}</td>
@@ -150,13 +151,23 @@ function positionConversationInsight(button) {
   state.openConversationInsightPos = { left: Math.round(left), top: Math.round(top) };
 }
 
+function renderFlowEndpoint(endpoint) {
+  const alias = currentAliasForEndpoint ? currentAliasForEndpoint(endpoint) : null;
+  if (!alias?.label) return escapeHtml(endpoint);
+  return `<span class="endpoint-cell" title="${escapeHtml(endpoint)}"><strong title="${escapeHtml(alias.label)}">${escapeHtml(alias.label)}</strong>${alias.role ? `<em title="${escapeHtml(alias.role)}">${escapeHtml(alias.role)}</em>` : ""}<small>${escapeHtml(endpoint)}</small></span>`;
+}
+
 function renderPeerEndpoint(endpoint) {
   const address = parseEndpointAddress(endpoint);
   const intel = state.ipIntel[address.host];
   const summary = ipIntelSummary(intel);
   const detail = ipIntelDetail(intel);
+  const alias = currentAliasForEndpoint ? currentAliasForEndpoint(endpoint) : null;
+  const labelHtml = alias?.label
+    ? `<span class="endpoint-cell" title="${escapeHtml(endpoint)}"><strong title="${escapeHtml(alias.label)}">${escapeHtml(alias.label)}</strong>${alias.role ? `<em title="${escapeHtml(alias.role)}">${escapeHtml(alias.role)}</em>` : ""}<small>${escapeHtml(endpoint)}</small></span>`
+    : `<strong>${escapeHtml(endpoint)}</strong>`;
   return `<div class="peer-cell">
-    <strong>${escapeHtml(endpoint)}</strong>
+    ${labelHtml}
     ${summary ? `<small class="ip-intel" title="${escapeHtml(detail || summary)}"><i class="ri-building-4-line"></i> ${escapeHtml(summary)}</small>` : ""}
     ${intel?.status === "loading" ? `<small class="ip-intel loading"><i class="ri-loader-4-line"></i> enriching public IP...</small>` : ""}
   </div>`;

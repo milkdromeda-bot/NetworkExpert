@@ -83,8 +83,8 @@ function renderEndpointCell(endpoint, extra = "") {
   const alias = currentAliasForEndpoint(endpoint);
   if (!alias?.label) return `<span>${escapeHtml(endpoint)}</span>${extra}`;
   return `<div class="endpoint-cell" title="${escapeHtml(endpoint)}">
-    <strong>${escapeHtml(alias.label)}</strong>
-    ${alias.role ? `<em>${escapeHtml(alias.role)}</em>` : ""}
+    <strong title="${escapeHtml(alias.label)}">${escapeHtml(alias.label)}</strong>
+    ${alias.role ? `<em title="${escapeHtml(alias.role)}">${escapeHtml(alias.role)}</em>` : ""}
     <small>${escapeHtml(endpoint)}</small>
     ${extra}
   </div>`;
