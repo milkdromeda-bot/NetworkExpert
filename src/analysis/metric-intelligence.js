@@ -44,7 +44,7 @@ export function metricInterpretation(metric) {
     "skmem.r": "Kernel receive memory currently allocated to this socket. High values show receive-side pressure or burst absorption.",
     "skmem.rb": "Receive buffer limit. Compare skmem.r against this value to see whether receive memory is near its budget.",
     "skmem.t": "Kernel transmit memory currently allocated to this socket. High values show outbound buffering or drain pressure.",
-    "skmem.d": "Socket memory drops. Any increase is loss/pressure evidence, especially if it grows over time.",
+    "skmem.d": "Socket memory drops (cumulative counter). A static value is often historical and not actionable. Focus on rate of change (skmem.d_rate) and correlation with Recv-Q/skmem.r pressure to confirm active loss.",
     "skmem.d_rate": "Rate at which socket memory drops are increasing. This separates old static counters from current loss/pressure.",
     pacing_rate: "Kernel TCP pacing allowance. Collapse after a healthy value suggests congestion-control backoff or app-limited behavior.",
     delivery_rate: "Kernel estimate of delivered bandwidth. Compare with pacing and queues to separate path limit from application limit.",

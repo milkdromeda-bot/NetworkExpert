@@ -21,8 +21,8 @@ test("riskForSocket returns high for very high RTT", () => {
 test("riskForSocket returns high for high RTO", () => {
   assert.equal(riskForSocket(socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rto:1500 cwnd:21")), "high");
 });
-test("riskForSocket returns critical for large drops", () => {
-  assert.equal(riskForSocket(socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d50)")), "critical");
+test("riskForSocket returns medium for static drops in single snapshot", () => {
+  assert.equal(riskForSocket(socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d50)")), "medium");
 });
 test("riskForSocket returns critical for backoff > 2", () => {
   assert.equal(riskForSocket(socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 backoff:3")), "critical");
@@ -119,11 +119,11 @@ test("analyzeSocket detects recvQ above danger as critical", () => {
   const recvQFinding = findings.find(f => f.metric === "recvQ");
   assert.equal(recvQFinding.severity, "critical");
 });
-test("analyzeSocket detects single drop as high", () => {
+test("analyzeSocket detects single drop as low without context", () => {
   const socket = socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d5)");
   const findings = analyzeSocket(socket);
   const dropFinding = findings.find(f => f.metric === "skmem.d");
-  assert.equal(dropFinding.severity, "high");
+  assert.equal(dropFinding.severity, "low");
 });
 test("analyzeSocket detects timer retrans=1 as medium", () => {
   const socket = socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 timer:(on,200ms,1)");
@@ -149,7 +149,7 @@ test("analyzeAll returns empty for clean sockets", () => {
 test("analyzeAll sorts critical before high", () => {
   const sockets = withStableSocketIds(parseSs([
     "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:200/10",
-    "ESTAB 0 0 10.0.0.3:1000 10.0.0.4:443 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d50)"
+    "ESTAB 0 2000000 10.0.0.3:1000 10.0.0.4:443"
   ].join("\n")));
   sockets.forEach(s => { s.details.process = { name: "t", pid: 1, fd: 1 }; });
   const anomalies = analyzeAll(sockets);
@@ -278,16 +278,16 @@ for (const { recvQ, hasAnomaly } of recvQCases) {
   });
 }
 
-// Generated regression: drop count thresholds
+// Generated regression: drop count thresholds (single snapshot, no correlation)
 const dropCases = [
   { drops: 0, hasAnomaly: false },
-  { drops: 1, severity: "high" },
-  { drops: 5, severity: "high" },
-  { drops: 10, severity: "high" },
-  { drops: 11, severity: "critical" },
-  { drops: 50, severity: "critical" },
-  { drops: 100, severity: "critical" },
-  { drops: 1000, severity: "critical" }
+  { drops: 1, severity: "low" },
+  { drops: 5, severity: "low" },
+  { drops: 10, severity: "low" },
+  { drops: 11, severity: "medium" },
+  { drops: 50, severity: "medium" },
+  { drops: 100, severity: "medium" },
+  { drops: 1000, severity: "high" }
 ];
 for (const { drops, hasAnomaly, severity } of dropCases) {
   test(`analyzeSocket drops=${drops} ${hasAnomaly === false ? "no anomaly" : severity}`, () => {

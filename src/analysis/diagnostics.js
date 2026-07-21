@@ -351,9 +351,11 @@ export function buildDiagnosticHypotheses({
       id: "socket-memory-pressure",
       title: "Socket memory pressure or receive-path drops",
       category: "kernel",
-      severity: drops.some(({ metrics }) => metrics.drops >= dropDanger) || growth.total >= dropDanger ? "critical" : "high",
-      confidence: growth.total ? "high" : "medium",
-      summary: "skmem.d or drop-rate evidence means packets/data were dropped before normal socket consumption completed.",
+      severity: growth.total >= dropDanger ? "critical" : growth.total > 0 ? "high" : drops.some(({ metrics }) => metrics.drops >= dropDanger) ? "medium" : "low",
+      confidence: growth.total > 0 ? "high" : "low",
+      summary: growth.total > 0
+        ? "Active drop growth detected: skmem.d counter is increasing, confirming current receive-path pressure."
+        : "Static skmem.d counter present but not growing in observed window. May be historical — collect more snapshots or correlate with interface counters to confirm.",
       sockets: affected,
       evidence: [
         `${affected.length} socket(s) show socket drop evidence.`,

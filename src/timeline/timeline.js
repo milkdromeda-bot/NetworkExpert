@@ -98,7 +98,9 @@ export function aggregateTimestampedSockets(raw = "") {
           : [socket.state],
         firstSeenMs: previous?.firstSeenMs ?? block.epochMs,
         lastSeenMs: block.epochMs,
-        snapshotCount: (previous?.snapshotCount || 0) + 1
+        snapshotCount: (previous?.snapshotCount || 0) + 1,
+        _dropFirst: previous?._dropFirst ?? (socket.details?.skmem?.d || 0),
+        _dropDelta: Math.max(0, (socket.details?.skmem?.d || 0) - (previous?._dropFirst ?? (socket.details?.skmem?.d || 0)))
       });
     }
   }

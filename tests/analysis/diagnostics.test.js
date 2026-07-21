@@ -284,7 +284,9 @@ test("diagnostics detects socket memory pressure from skmem drops", () => {
 
   const pressure = byId(hypotheses, "socket-memory-pressure");
 
-  assert.equal(pressure.severity, "critical");
+  // Static drops (no growth history), d >= fallback danger (10) → medium severity, low confidence
+  assert.equal(pressure.severity, "medium");
+  assert.equal(pressure.confidence, "low");
   assert.match(pressure.counterEvidence.join(" "), /does not prove NIC ring/i);
   assert.equal(pressure.commands.some(command => command.includes("softnet_stat")), true);
 });

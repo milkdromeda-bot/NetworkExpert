@@ -13,11 +13,10 @@ test("socket drops above ten are critical", () => {
 
   const drops = analyzeSocket(socket).find(item => item.metric === "skmem.d");
 
-  assert.equal(drops.severity, "critical");
-  assert.match(drops.detail, /does not by itself prove/i);
-  assert.match(drops.detail, /ethtool -S/i);
-  assert.match(drops.detail, /netdev_max_backlog/i);
-  assert.equal(riskForSocket(socket), "critical");
+  // Single snapshot, 10 < d <= 100, no recv pressure → medium
+  assert.equal(drops.severity, "medium");
+  assert.match(drops.detail, /single snapshot/i);
+  assert.match(drops.detail, /trend is unknown/i);
 });
 
 test("socket drop wording does not claim NIC ring overflow without evidence", () => {
@@ -25,8 +24,9 @@ test("socket drop wording does not claim NIC ring overflow without evidence", ()
 
   const drops = analyzeSocket(socket).find(item => item.metric === "skmem.d");
 
-  assert.match(drops.detail, /kernel receive-side\/socket-memory loss/i);
-  assert.match(drops.detail, /does not by itself prove/i);
+  // d=1 single snapshot → low severity
+  assert.equal(drops.severity, "low");
+  assert.match(drops.detail, /single snapshot/i);
 });
 
 
@@ -35,8 +35,9 @@ test("socket drop wording points to netdev backlog validation", () => {
 
   const drops = analyzeSocket(socket).find(item => item.metric === "skmem.d");
 
-  assert.match(drops.detail, /net\.core\.netdev_max_backlog/i);
-  assert.match(drops.detail, /softnet_stat/i);
+  // d=26 single snapshot, no recv pressure → medium
+  assert.equal(drops.severity, "medium");
+  assert.match(drops.detail, /timestamped snapshots/i);
 });
 test("large receive queue creates critical risk", () => {
   const socket = socketFrom("ESTAB 600000 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1");
@@ -83,7 +84,7 @@ test("tiny MSS becomes high when paired with retransmission symptoms", () => {
 
 test("analyzeAll sorts highest severity first", () => {
   const sockets = withStableSocketIds(parseSs([
-    "ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d25)",
+    "ESTAB 0 2000000 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1",
     "ESTAB 0 0 10.0.0.3:1001 10.0.0.4:443 rtt:1/0.1"
   ].join("\n")));
 

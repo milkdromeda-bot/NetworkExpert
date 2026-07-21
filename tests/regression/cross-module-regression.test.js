@@ -22,9 +22,9 @@ test("regression: clean socket with process has no anomalies", () => {
   const socket = socketFrom('ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:5/0.5 cwnd:21 users:(("app",pid=1,fd=1))');
   assert.equal(analyzeSocket(socket).length, 0);
 });
-test("regression: drops + high RTT yields critical risk", () => {
+test("regression: drops + high RTT yields high risk", () => {
   const socket = socketFrom("ESTAB 0 0 10.0.0.1:1000 10.0.0.2:443 rtt:400/50 skmem:(r0,rb100,t0,tb100,f0,w0,o0,bl0,d20)");
-  assert.equal(riskForSocket(socket), "critical");
+  assert.equal(riskForSocket(socket), "high");
 });
 
 // Cross-module: parser + timeline

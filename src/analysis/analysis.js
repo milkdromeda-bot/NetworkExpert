@@ -12,6 +12,14 @@ export function riskForSocket(socket) {
   return anomalies.reduce((max, item) => scores[item.severity] > scores[max] ? item.severity : max, "low");
 }
 
+function formatObservationWindow(socket) {
+  if (!socket.firstSeenMs || !socket.lastSeenMs) return "unknown";
+  const durationMs = socket.lastSeenMs - socket.firstSeenMs;
+  if (durationMs < 60000) return `${Math.round(durationMs / 1000)}s`;
+  if (durationMs < 3600000) return `${Math.round(durationMs / 60000)}min`;
+  return `${(durationMs / 3600000).toFixed(1)}h`;
+}
+
 /** @param {import('./types.js').Socket} socket @returns {import('./types.js').Anomaly[]} */
 export function analyzeSocket(socket) {
   const a = [];
@@ -30,12 +38,29 @@ export function analyzeSocket(socket) {
   if (socket.recvQ > 131072) addAnomaly(a, socket, socket.recvQ > 524288 ? "critical" : "high", "Large Recv-Q", `Recv-Q ${socket.recvQ} bytes: the application or kernel is not consuming fast enough.`, "recvQ");
   if ((m.d || 0) > 0) {
     const isMultiSnapshot = socket.snapshotCount > 1;
-    const dropSeverity = m.d > 10
-      ? "critical"
-      : isMultiSnapshot && m.d <= 10
-        ? "medium"
-        : "high";
-    addAnomaly(a, socket, dropSeverity, "Socket drops", `${m.d} packet(s) dropped before demultiplexing.${isMultiSnapshot && m.d <= 10 ? " Counter is low and stable across snapshots — likely historical rather than active pressure." : " This is kernel receive-side/socket-memory loss; it can be caused by burst absorption, socket buffer pressure, softirq/CPU backlog, or NIC/qdisc drops, but it does not by itself prove the network-card ring buffer overflowed. Confirm with ethtool -S, ip -s link, /proc/net/softnet_stat, and net.core.netdev_max_backlog."}`, "skmem.d");
+    const bytesSent = Number(v.bytes_sent || 0);
+    const segsOut = Number(v.segs_out || 0);
+    const hasRecvPressure = socket.recvQ > 131072 || (m.rb && m.r && m.r / m.rb > 0.6);
+    const dropRatio = segsOut > 0 ? m.d / segsOut : (bytesSent > 0 ? m.d / (bytesSent / 1400) : 1);
+
+    let dropSeverity;
+    let dropDetail;
+
+    if (isMultiSnapshot && socket._dropDelta > 0) {
+      // Active drops: counter grew during observation
+      dropSeverity = hasRecvPressure || socket._dropDelta > 100 ? "critical" : socket._dropDelta > 10 ? "high" : "medium";
+      dropDetail = `${m.d} total drops (+${socket._dropDelta} during observation). Active loss detected — counter is growing.${hasRecvPressure ? " Recv-Q or receive buffer pressure corroborates kernel-side saturation." : " Correlate with Recv-Q, skmem.r, and interface drop counters."}`;
+    } else if (isMultiSnapshot) {
+      // Static counter over multiple snapshots — historical noise
+      dropSeverity = dropRatio > 0.001 ? "medium" : "low";
+      dropDetail = `${m.d} drops (static across ${socket.snapshotCount} snapshots). Counter did not increase during the ${formatObservationWindow(socket)} observation window — likely historical, not current pressure.${dropRatio > 0.001 ? ` Drop-to-segment ratio (${(dropRatio * 100).toFixed(4)}%) is non-trivial; review history.` : ""}`;
+    } else {
+      // Single snapshot: cannot determine trend, use ratio heuristic
+      dropSeverity = m.d > 1000 && hasRecvPressure ? "critical" : m.d > 100 ? "high" : m.d > 10 ? "medium" : "low";
+      dropDetail = `${m.d} drops observed in single snapshot. Without multi-snapshot context, trend is unknown.${hasRecvPressure ? " Recv-Q/buffer pressure is present, raising confidence of active issue." : " Collect timestamped snapshots to determine if counter is growing."}`;
+    }
+
+    addAnomaly(a, socket, dropSeverity, "Socket drops", dropDetail, "skmem.d");
   }
   if (m.rb && m.r && m.r / m.rb > 0.8) addAnomaly(a, socket, "high", "Receive buffer pressure", `r=${m.r}, rb=${m.rb}; more than 80% of the receive buffer is used.`, "skmem.r");
   if (m.tb && (m.t + (m.w || 0)) / m.tb > 0.8) addAnomaly(a, socket, "high", "Send buffer pressure", `t+w=${(m.t || 0) + (m.w || 0)}, tb=${m.tb}; transmit socket memory is close to the cap.`, "skmem.t");

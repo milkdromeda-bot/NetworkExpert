@@ -93,14 +93,18 @@ export function buildAdvisorFindings(deps) {
   }
 
   if (drops.length && !dropRate) {
+    const hasMultiSnapshot = drops.some(socket => socket.snapshotCount > 1);
+    const hasCorrelation = drops.some(socket => socket.recvQ > 131072 || (socket.details.skmem.rb && (socket.details.skmem.r || 0) / socket.details.skmem.rb > 0.6));
+    const maxDrops = Math.max(...drops.map(socket => metricValue(socket, "skmem.d")));
+    const staticSeverity = hasCorrelation ? "high" : maxDrops >= thresholdFor("skmem.d").danger ? "medium" : "low";
     findings.push(makeFinding({
       id: "socket-drops",
-      severity: drops.some(socket => metricValue(socket, "skmem.d") >= thresholdFor("skmem.d").danger) ? "critical" : "high",
+      severity: hasMultiSnapshot ? staticSeverity : (maxDrops >= thresholdFor("skmem.d").danger ? "high" : "medium"),
       title: "Socket memory drops detected",
       pattern: "skmem.d is non-zero: packets/data were dropped before demultiplexing in the kernel receive path.",
       sockets: drops,
       confidence: "High",
-      why: "Drops are not just latency: they are loss. skmem.d can be compatible with NIC/qdisc/ring pressure or a too-small netdev_max_backlog, but it does not prove ring-buffer overflow by itself. The important question is whether the counter is static historical noise or increasing over time; if it grows with Recv-Q/skmem.r, softnet backlog, or interface drops, the receiver path is overloaded.",
+      why: "A static skmem.d counter is common on long-running sockets and does not prove active loss. The key question is rate of change: is the counter growing during the observation window? Without timestamped snapshots showing growth, these may be historical drops from past events. Severity is elevated only when correlated with Recv-Q pressure, receive buffer saturation, or confirmed drop-rate growth.",
       next: ["Chart skmem.d over time", "Correlate with Recv-Q and skmem.r", "Check netdev_max_backlog, softnet drops/time_squeeze, and NIC driver counters before concluding ring-buffer overflow"],
       mitigate: ["Reduce burst rate or add backpressure", "Fix CPU/softirq pressure", "If softnet drops increase and netdev_max_backlog is 1000, test net.core.netdev_max_backlog=10000 under change control", "Increase buffers only with memory guardrails", "Investigate packet drops before blaming the application protocol"],
       commands: [envCommand("ss -tinpm"), envCommand("ip -s link show", { host: true }), envCommand("ethtool -S <iface> | egrep -i 'rx.*drop|rx.*miss|no.?buffer|timeout|fifo|overrun'", { host: true }), envCommand("nstat -az | egrep 'Rcv|Drop|Prune|Collapse|Listen'", { host: true }), envCommand("cat /proc/net/softnet_stat", { host: true }), envCommand("sysctl net.core.netdev_max_backlog net.core.rmem_max net.ipv4.tcp_rmem"), envCommand("sudo sysctl -w net.core.netdev_max_backlog=10000", { host: true })]
