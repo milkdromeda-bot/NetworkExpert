@@ -87,6 +87,8 @@ export function aggregateTimestampedSockets(raw = "") {
       const previous = byKey.get(key);
       byKey.set(key, {
         ...socket,
+        sendQ: Math.max(Number(socket.sendQ || 0), previous?.sendQ || 0),
+        recvQ: Math.max(Number(socket.recvQ || 0), previous?.recvQ || 0),
         details: {
           ...socket.details,
           process: socket.details?.process || previous?.details?.process || null
