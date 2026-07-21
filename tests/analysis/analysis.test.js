@@ -36,7 +36,7 @@ test("socket drop wording points to netdev backlog validation", () => {
   const drops = analyzeSocket(socket).find(item => item.metric === "skmem.d");
 
   assert.match(drops.detail, /net\.core\.netdev_max_backlog/i);
-  assert.match(drops.detail, /1000/i);
+  assert.match(drops.detail, /softnet_stat/i);
 });
 test("large receive queue creates critical risk", () => {
   const socket = socketFrom("ESTAB 600000 0 10.0.0.1:1000 10.0.0.2:443 rtt:1/0.1");
