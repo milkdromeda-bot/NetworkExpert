@@ -406,6 +406,14 @@
   right: 0;
   transform: translateY(4px);
 }
+.chart-stats-trigger {
+  border-color: rgba(57, 214, 214, .45);
+  color: #7ee8e8;
+}
+.chart-stats-card { width: auto !important; min-width: 160px; padding: 10px 14px !important; }
+.chart-stats-table { border-collapse: collapse; width: 100%; }
+.chart-stats-table th { text-align: left; font-size: 10px; font-weight: 600; color: var(--muted); padding: 3px 8px 3px 0; text-transform: uppercase; letter-spacing: 0.3px; }
+.chart-stats-table td { text-align: right; font-family: var(--mono); font-size: var(--font-size-sm); color: var(--text); padding: 3px 0; white-space: nowrap; }
 .chart-field:nth-child(n+4) .field-info:hover .field-info-card,
 .chart-field:nth-child(n+4) .field-info:focus .field-info-card,
 .chart-field:nth-child(n+4) .field-info:focus-within .field-info-card,

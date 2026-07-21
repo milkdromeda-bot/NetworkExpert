@@ -144,6 +144,7 @@ const chartsPageRendering = createChartsPageRendering({
   formatMicroburstWindow,
   formatMetricValue,
   metricLabel,
+  visibleHistory,
   renderMetricsStatsTable,
   renderChartMetricTooltip,
   renderChartMoveMenu,

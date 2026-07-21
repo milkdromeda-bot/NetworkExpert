@@ -18,11 +18,25 @@ export function createChartsPageRendering(ctx) {
     formatMicroburstWindow,
     formatMetricValue,
     metricLabel,
+    visibleHistory,
     renderMetricsStatsTable,
     renderChartMetricTooltip,
     renderChartMoveMenu,
     renderMetricChartLegend
   } = ctx;
+
+function renderChartStatsTooltip(metric) {
+  const history = visibleHistory();
+  const values = history.map(row => Number(row?.[metric])).filter(v => Number.isFinite(v) && v !== 0);
+  if (!values.length) return "";
+  const sorted = [...values].sort((a, b) => a - b);
+  const pctl = (arr, p) => { const i = p * (arr.length - 1); const lo = Math.floor(i); const hi = Math.ceil(i); return lo === hi ? arr[lo] : arr[lo] * (hi - i) + arr[hi] * (i - lo); };
+  const p25 = pctl(sorted, 0.25);
+  const med = pctl(sorted, 0.5);
+  const p75 = pctl(sorted, 0.75);
+  const max = sorted[sorted.length - 1];
+  return `<span class="field-info chart-stats-trigger" tabindex="0" aria-label="${escapeHtml(metricLabel(metric))} statistics"><i class="ri-bar-chart-box-line"></i><span class="field-info-card chart-stats-card" role="tooltip"><span class="tooltip-kicker">Distribution (non-zero samples: ${values.length})</span><table class="chart-stats-table"><tr><th>P25</th><td>${escapeHtml(formatMetricValue(metric, p25))}</td></tr><tr><th>Median</th><td>${escapeHtml(formatMetricValue(metric, med))}</td></tr><tr><th>P75</th><td>${escapeHtml(formatMetricValue(metric, p75))}</td></tr><tr><th>Max</th><td>${escapeHtml(formatMetricValue(metric, max))}</td></tr></table></span></span>`;
+}
 
 function renderChartsPage() {
   const metrics = chartMetricList();
@@ -55,6 +69,7 @@ function renderChartsPage() {
           <div class="panel-title chart-title-wrap">
             <span>${escapeHtml(metricLabel(m))}</span>
             ${renderChartMetricTooltip(m)}
+            ${renderChartStatsTooltip(m)}
           </div>
           <div class="col-tools chart-card-tools">
             <button class="mini" data-action="expandChart" data-metric="${m}" title="${state.expandedChart === m ? "Collapse" : "Expand"}"><i class="${state.expandedChart === m ? "ri-collapse-diagonal-line" : "ri-expand-diagonal-line"}"></i></button>
