@@ -142,7 +142,7 @@ export function createCoreDependencyFactories(get) {
     },
 
     focusViewDependencies() {
-      return pick(get, ["chartMetricList", "escapeHtml", "icons", "metricLabel", "socketsById", "state", "visibleHistory"]);
+      return pick(get, ["chartMetricList", "currentAliasForEndpoint", "escapeHtml", "formatMetricValue", "icons", "metricLabel", "percentile", "socketsById", "state", "visibleHistory"]);
     },
 
     importFlowDependencies() {

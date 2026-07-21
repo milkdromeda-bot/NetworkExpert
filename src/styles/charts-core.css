@@ -958,6 +958,15 @@
 .focus-panel .panel-head { position: sticky; top: 0; z-index: 2; background: var(--surface); }
 .focus-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
 .focus-chart-card { position: relative; border-bottom: 1px solid var(--border); }
-.focus-chart-label { display: none; }
+.focus-chart-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 4px; gap: 12px; }
+.focus-chart-label { font-size: var(--font-size-sm); font-weight: 700; color: var(--text); white-space: nowrap; }
+.focus-metric-key { font-family: var(--mono); font-size: 9px; font-weight: 400; color: var(--muted); background: var(--panel-2); padding: 1px 5px; border-radius: var(--radius-sm); margin-left: 6px; }
+.focus-quartile-table { border-collapse: collapse; font-size: 9px; font-family: var(--mono); color: var(--soft); flex-shrink: 0; }
+.focus-quartile-table th { padding: 1px 8px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+.focus-quartile-table td { padding: 2px 8px; text-align: right; white-space: nowrap; }
+.focus-panel .panel-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.focus-panel .panel-title strong { color: var(--text); font-weight: 900; font-size: var(--font-size-sm); }
+.focus-panel .panel-title em { color: var(--cyan); font-style: normal; font-weight: 800; font-size: 9px; }
+.focus-panel .panel-title small { color: var(--muted); font-family: var(--mono); font-size: var(--font-size-xs); }
 .focus-chart { width: 100%; height: 140px; display: block; }
 .focus-chart > text[transform] { display: none; }
