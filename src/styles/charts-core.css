@@ -960,10 +960,11 @@
 .focus-chart-card { position: relative; border-bottom: 1px solid var(--border); }
 .focus-chart-label { font-size: var(--font-size-sm); font-weight: 700; color: var(--text); white-space: nowrap; padding: 6px 12px 2px; }
 .focus-metric-key { font-family: var(--mono); font-size: 9px; font-weight: 400; color: var(--muted); background: var(--panel-2); padding: 1px 5px; border-radius: var(--radius-sm); margin-left: 6px; }
-.focus-chart-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0; }
-.focus-quartile-table { border-collapse: collapse; font-size: 9px; font-family: var(--mono); color: var(--soft); flex-shrink: 0; margin-right: 8px; }
-.focus-quartile-table th { padding: 2px 6px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.focus-quartile-table td { padding: 2px 6px; text-align: right; white-space: nowrap; }
+.focus-chart-row { display: grid; grid-template-columns: 1fr 150px; align-items: stretch; }
+.focus-quartile-table { font-size: 9px; font-family: var(--mono); color: var(--soft); background: var(--panel); border-left: 1px solid var(--border); display: flex; align-items: center; justify-content: center; padding: 4px 0; }
+.focus-quartile-table table { border-collapse: collapse; }
+.focus-quartile-table th { padding: 2px 5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; font-size: 8px; white-space: nowrap; }
+.focus-quartile-table td { padding: 2px 5px; text-align: right; white-space: nowrap; }
 .focus-panel .panel-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .focus-panel .panel-title strong { color: var(--text); font-weight: 900; font-size: var(--font-size-sm); }
 .focus-panel .panel-title em { color: var(--cyan); font-style: normal; font-weight: 800; font-size: 9px; }

@@ -19,11 +19,13 @@ export function createFocusViewController(getDeps) {
   function renderQuartileTable(metric, history) {
     const { escapeHtml, formatMetricValue } = current();
     const q = computeQuartiles(history, metric);
-    if (!q) return "";
-    return `<table class="focus-quartile-table">
-      <thead><tr><th>P25</th><th>Median</th><th>P75</th><th>Max</th></tr></thead>
-      <tbody><tr><td>${escapeHtml(formatMetricValue(metric, q.p25))}</td><td>${escapeHtml(formatMetricValue(metric, q.median))}</td><td>${escapeHtml(formatMetricValue(metric, q.p75))}</td><td>${escapeHtml(formatMetricValue(metric, q.max))}</td></tr></tbody>
-    </table>`;
+    if (!q) return `<div class="focus-quartile-table"></div>`;
+    return `<div class="focus-quartile-table"><table>
+      <tr><th>P25</th><td>${escapeHtml(formatMetricValue(metric, q.p25))}</td></tr>
+      <tr><th>MED</th><td>${escapeHtml(formatMetricValue(metric, q.median))}</td></tr>
+      <tr><th>P75</th><td>${escapeHtml(formatMetricValue(metric, q.p75))}</td></tr>
+      <tr><th>MAX</th><td>${escapeHtml(formatMetricValue(metric, q.max))}</td></tr>
+    </table></div>`;
   }
 
   function renderFocusView() {
