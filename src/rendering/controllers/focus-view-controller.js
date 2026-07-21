@@ -63,11 +63,11 @@ export function createFocusViewController(getDeps) {
     <div class="panel-body">
       <div class="focus-grid">
         ${activeMetrics.map(metric => `<div class="focus-chart-card chart-card" data-chart-card="${metric}">
-          <div class="focus-chart-header">
-            <div class="focus-chart-label">${escapeHtml(metricLabel(metric))} <code class="focus-metric-key">${escapeHtml(metric)}</code></div>
+          <div class="focus-chart-label">${escapeHtml(metricLabel(metric))} <code class="focus-metric-key">${escapeHtml(metric)}</code></div>
+          <div class="focus-chart-row">
+            <svg class="chart small-chart focus-chart" data-mini-chart="${metric}" tabindex="0" role="img" aria-label="${escapeHtml(metricLabel(metric))}"></svg>
             ${renderQuartileTable(metric, history)}
           </div>
-          <svg class="chart small-chart focus-chart" data-mini-chart="${metric}" tabindex="0" role="img" aria-label="${escapeHtml(metricLabel(metric))}"></svg>
         </div>`).join("")}
       </div>
     </div>
