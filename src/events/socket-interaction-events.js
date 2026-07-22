@@ -149,7 +149,7 @@ export function bindSocketInteractionEvents(deps) {
     }
     if (action === "details") {
       state.activeTab = "sockets";
-      state.drawer = "details";
+      state.drawer = state.drawer === "details" ? null : "details";
       toast("Conversation context selected", `${socket.local} -> ${socket.peer}.`);
     }
     if (action === "anomalies") {
@@ -179,7 +179,7 @@ export function bindSocketInteractionEvents(deps) {
       toast("Focus mode", `All metrics for ${socket.local} → ${socket.peer}`);
     }
     if (action === "details") {
-      state.drawer = "details";
+      state.drawer = state.drawer === "details" ? null : "details";
     }
     if (action === "filter-src") {
       state.table.filters.srcIp = socket.localAddress.host;

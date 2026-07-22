@@ -110,7 +110,7 @@ export function bindContextGuideEvents(deps = {}) {
     const action = event.currentTarget.dataset.mapEdgeAction;
     focusSocket(socket.id, "Chosen from map link");
     if (action === "details") {
-      state.drawer = "details";
+      state.drawer = state.drawer === "details" ? null : "details";
     }
     if (action === "chart") {
       state.view = "charts";

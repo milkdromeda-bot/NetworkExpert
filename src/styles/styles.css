@@ -1445,7 +1445,10 @@ textarea { min-height: 170px; resize: vertical; line-height: 1.45; font-family: 
   background: var(--panel);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
 }
-.drawer main { padding: var(--space-4); overflow: auto; }
+.drawer main { padding: var(--space-4); overflow: auto; flex: 1; }
+.drawer-sticky-close { position: sticky; bottom: 0; padding: 8px 16px; background: var(--surface); border-top: 1px solid var(--border); text-align: center; flex-shrink: 0; }
+.drawer-sticky-close button { font-size: 11px; padding: 6px 18px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.drawer-sticky-close button:hover { background: rgba(255,60,80,0.15); border-color: rgba(255,60,80,0.4); }
 .modal-backdrop {
   position: fixed;
   inset: 0;

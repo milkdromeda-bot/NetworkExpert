@@ -106,6 +106,7 @@ function renderDrawer() {
   return html`<aside class="drawer ${state.drawer ? "open" : ""} ${state.drawer === "thresholds" || state.drawer === "tableSettings" ? "wide" : ""}">
     <header><div class="drawer-title"><strong>${title}</strong>${headerAction}</div><button class="icon" data-action="closeDrawer">${icons.x}</button></header>
     <main>${body}</main>
+    <footer class="drawer-sticky-close"><button data-action="closeDrawer">${icons.x} Close</button></footer>
   </aside>`;
 }
 

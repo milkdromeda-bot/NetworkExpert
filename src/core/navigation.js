@@ -35,7 +35,7 @@ export function applyContextAction(state, action, socket, { chartMetrics = [], s
   state.openConversationInsightPos = null;
 
   if (action === "details") {
-    state.drawer = "details";
+    state.drawer = state.drawer === "details" ? null : "details";
   }
 
   if (action === "charts") {
