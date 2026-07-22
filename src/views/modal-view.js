@@ -90,7 +90,7 @@ export function createModalView(context) {
       <section class="service-alias-editor">
         <div class="field-card">
           <strong>Endpoint identity</strong>
-          <p class="hint">Scope: ${escapeHtml(state.sourceName || "workspace")}. Labels are local to this recording unless global is explicitly enabled.</p>
+          <p class="hint">Labels are global by default and persist across recordings. Uncheck to restrict to this recording only.</p>
           <label>Endpoint<input id="aliasEndpoint" list="aliasEndpointOptions" placeholder="10.0.0.5:9100" value="${escapeHtml(selectedEndpoint)}" /></label>
           ${renderDatalist("aliasEndpointOptions", endpoints)}
           <label>Business name<input id="aliasLabel" placeholder="FIX stream - Aggregator A" value="${escapeHtml(alias.label)}" /></label>
@@ -105,7 +105,7 @@ export function createModalView(context) {
         <div class="field-card">
           <strong>Unlabelled endpoints</strong>
           <div class="alias-suggestions">
-            ${suggestions.length ? suggestions.map(endpoint => `<button data-alias-pick="${escapeHtml(endpoint)}" data-alias-scope="source"><span>${escapeHtml(endpoint)}</span><small>add local label</small></button>`).join("") : `<p class="hint">Every visible endpoint already has a label for this recording.</p>`}
+            ${suggestions.length ? suggestions.map(endpoint => `<button data-alias-pick="${escapeHtml(endpoint)}" data-alias-scope="global"><span>${escapeHtml(endpoint)}</span><small>add global label</small></button>`).join("") : `<p class="hint">Every visible endpoint already has a label.</p>`}
           </div>
         </div>
       </section>

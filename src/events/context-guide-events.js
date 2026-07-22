@@ -66,7 +66,7 @@ export function bindContextGuideEvents(deps = {}) {
   }));
   const openMapAliasEditor = target => {
     state.aliasEditKey = target.dataset.mapAlias;
-    state.aliasEditScope = "source";
+    state.aliasEditScope = "global";
     state.modal = "serviceAliases";
     render();
   };

@@ -75,7 +75,7 @@ export function createInitialState({
     activeDashboardPreset: dashboardPresetIdOrDefault(initialPrefs.defaultDashboardPreset),
     serviceAliases: loadServiceAliases(),
     aliasEditKey: "",
-    aliasEditScope: "source",
+    aliasEditScope: "global",
     serviceOverrides: loadServiceOverrides(),
     serviceOverrideSocketId: "",
     topologyProfiles: loadTopologyProfiles(),
