@@ -979,3 +979,6 @@
 .focus-panel .panel-title small { color: var(--muted); font-family: var(--mono); font-size: var(--font-size-xs); }
 .focus-chart { width: 100%; height: 140px; display: block; }
 .focus-chart > text[transform] { display: none; }
+.focus-socket-picker { font-size: 11px; height: 26px; padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); color: var(--text); max-width: 280px; cursor: pointer; }
+.focus-socket-picker:focus { border-color: var(--cyan); outline: none; }
+.focus-separator { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }

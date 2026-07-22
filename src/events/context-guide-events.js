@@ -15,6 +15,7 @@ export function bindContextGuideEvents(deps = {}) {
     emptyPreImportFilters,
     toast,
     socketsById,
+    sortedFilteredSockets,
     focusSocket,
     renderKeepingModalPosition,
     hideAppServiceTooltip,
@@ -207,4 +208,22 @@ export function bindContextGuideEvents(deps = {}) {
     state.chartAnnotationMenuPos = null;
     if (context) openAnnotationModal(context.metric, context);
   }));
+  // Focus socket picker
+  document.querySelector("[data-focus-socket-select]")?.addEventListener("change", event => {
+    const socketId = event.target.value;
+    if (socketId) focusSocket(socketId, "Chosen from focus picker");
+    render();
+  });
+  document.querySelector("[data-focus-prev]")?.addEventListener("click", event => {
+    event.stopPropagation();
+    const sockets = sortedFilteredSockets();
+    const idx = sockets.findIndex(s => s.id === state.selectedId);
+    if (idx > 0) { focusSocket(sockets[idx - 1].id, "Focus prev"); render(); }
+  });
+  document.querySelector("[data-focus-next]")?.addEventListener("click", event => {
+    event.stopPropagation();
+    const sockets = sortedFilteredSockets();
+    const idx = sockets.findIndex(s => s.id === state.selectedId);
+    if (idx >= 0 && idx < sockets.length - 1) { focusSocket(sockets[idx + 1].id, "Focus next"); render(); }
+  });
 }

@@ -12,6 +12,8 @@ export function createFocusViewController(getDeps) {
       p25: percentile(sorted, 0.25),
       median: percentile(sorted, 0.5),
       p75: percentile(sorted, 0.75),
+      p99: percentile(sorted, 0.99),
+      p999: percentile(sorted, 0.999),
       max: sorted[sorted.length - 1]
     };
   }
@@ -24,12 +26,14 @@ export function createFocusViewController(getDeps) {
       <tr><th>P25</th><td>${escapeHtml(formatMetricValue(metric, q.p25))}</td></tr>
       <tr><th>MED</th><td>${escapeHtml(formatMetricValue(metric, q.median))}</td></tr>
       <tr><th>P75</th><td>${escapeHtml(formatMetricValue(metric, q.p75))}</td></tr>
+      <tr><th>P99</th><td>${escapeHtml(formatMetricValue(metric, q.p99))}</td></tr>
+      <tr><th>P99.9</th><td>${escapeHtml(formatMetricValue(metric, q.p999))}</td></tr>
       <tr><th>MAX</th><td>${escapeHtml(formatMetricValue(metric, q.max))}</td></tr>
     </table></div>`;
   }
 
   function renderFocusView() {
-    const { chartMetricList, currentAliasForEndpoint, escapeHtml, icons, metricLabel, socketsById, state, visibleHistory } = current();
+    const { chartMetricList, currentAliasForEndpoint, escapeHtml, icons, metricLabel, socketsById, sortedFilteredSockets, state, visibleHistory } = current();
     const selected = socketsById().get(state.selectedId);
     if (!selected) return `<section class="panel"><div class="panel-body"><p class="empty">Select a socket from the table to enter focus mode.</p></div></section>`;
     const history = visibleHistory();
@@ -51,10 +55,26 @@ export function createFocusViewController(getDeps) {
       ? `<strong title="${escapeHtml(selected.peer)}">${escapeHtml(peerAlias.label)}</strong>${peerAlias.role ? ` <em>${escapeHtml(peerAlias.role)}</em>` : ""} <small>${escapeHtml(selected.peer)}</small>`
       : escapeHtml(selected.peer);
 
+    // Socket picker
+    const allSockets = sortedFilteredSockets ? sortedFilteredSockets() : [...socketsById().values()];
+    const socketIndex = allSockets.findIndex(s => s.id === state.selectedId);
+    const hasPrev = socketIndex > 0;
+    const hasNext = socketIndex < allSockets.length - 1;
+    const socketOptions = allSockets.map(s => {
+      const la = currentAliasForEndpoint ? currentAliasForEndpoint(s.local) : null;
+      const pa = currentAliasForEndpoint ? currentAliasForEndpoint(s.peer) : null;
+      const label = (la?.label || s.local) + " → " + (pa?.label || s.peer);
+      return `<option value="${escapeHtml(s.id)}" ${s.id === state.selectedId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }).join("");
+
     return `<section class="panel focus-panel">
     <div class="panel-head">
       <div class="panel-title"><i class="ri-focus-3-line"></i> Focus - ${localDisplay} -> ${peerDisplay}</div>
       <div class="col-tools">
+        <button class="mini" data-focus-prev title="Previous socket" ${hasPrev ? "" : "disabled"}>${icons.arrowLeft}</button>
+        <select class="focus-socket-picker" data-focus-socket-select title="Switch socket">${socketOptions}</select>
+        <button class="mini" data-focus-next title="Next socket" ${hasNext ? "" : "disabled"}>${icons.arrowRight}</button>
+        <span class="focus-separator"></span>
         <button class="mini" data-chart-zoom="zoomIn" title="Zoom in">${icons.zoomIn}</button>
         <button class="mini" data-chart-zoom="zoomOut" title="Zoom out">${icons.zoomOut}</button>
         <button class="mini" data-chart-zoom="resetZoom" title="Reset zoom">${icons.reset}</button>
