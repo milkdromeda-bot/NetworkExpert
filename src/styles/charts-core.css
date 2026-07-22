@@ -982,3 +982,6 @@
 .focus-socket-picker { font-size: 11px; height: 26px; padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); color: var(--text); max-width: 280px; cursor: pointer; }
 .focus-socket-picker:focus { border-color: var(--cyan); outline: none; }
 .focus-separator { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.focus-group { border-bottom: 1px solid var(--border); }
+.focus-group:last-child { border-bottom: none; }
+.focus-group-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 10px 12px 2px; background: var(--panel-2); border-bottom: 1px solid var(--border); }

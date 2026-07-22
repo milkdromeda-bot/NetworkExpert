@@ -1,6 +1,28 @@
 export function createFocusViewController(getDeps) {
   const current = () => getDeps();
 
+  const METRIC_GROUPS = [
+    { id: "latency", label: "Latency", metrics: ["rtt", "rttvar", "rcv_rtt", "rto", "ato"] },
+    { id: "throughput", label: "Throughput", metrics: ["tx_bps", "rx_bps", "delivery_rate", "pacing_rate"] },
+    { id: "queuing", label: "Queuing & Buffers", metrics: ["sendQ", "recvQ", "cwnd", "rcv_space", "rcv_ssthresh", "skmem.rb", "skmem.t"] },
+    { id: "counters", label: "Counters", metrics: ["bytes_sent", "bytes_acked", "bytes_received", "segs_out", "segs_in", "skmem.d"] }
+  ];
+
+  function groupedMetrics(activeMetrics) {
+    const grouped = [];
+    const placed = new Set();
+    for (const group of METRIC_GROUPS) {
+      const members = group.metrics.filter(m => activeMetrics.includes(m));
+      if (members.length) {
+        grouped.push({ label: group.label, metrics: members });
+        members.forEach(m => placed.add(m));
+      }
+    }
+    const remaining = activeMetrics.filter(m => !placed.has(m));
+    if (remaining.length) grouped.push({ label: "Other", metrics: remaining });
+    return grouped;
+  }
+
   function computeQuartiles(history, metric) {
     const { percentile } = current();
     const values = history
@@ -84,12 +106,15 @@ export function createFocusViewController(getDeps) {
     </div>
     <div class="panel-body">
       <div class="focus-grid">
-        ${activeMetrics.map(metric => `<div class="focus-chart-card chart-card" data-chart-card="${metric}">
+        ${groupedMetrics(activeMetrics).map(group => `<div class="focus-group">
+          <div class="focus-group-label">${escapeHtml(group.label)}</div>
+          ${group.metrics.map(metric => `<div class="focus-chart-card chart-card" data-chart-card="${metric}">
           <div class="focus-chart-label">${escapeHtml(metricLabel(metric))} <code class="focus-metric-key">${escapeHtml(metric)}</code></div>
           <div class="focus-chart-row">
             <svg class="chart small-chart focus-chart" data-mini-chart="${metric}" tabindex="0" role="img" aria-label="${escapeHtml(metricLabel(metric))}"></svg>
             ${renderQuartileTable(metric, history)}
           </div>
+        </div>`).join("")}
         </div>`).join("")}
       </div>
     </div>
